@@ -1,0 +1,139 @@
+# Testing godi
+
+How the godi test framework is structured and how to run it. Go keeps tests
+beside the code they exercise (no dedicated `tests/` tree), so this document
+lives at the module root rather than in a test directory.
+
+> Status: **framework scaffold**. The conformance suite currently runs against an
+> in-test stub provider so the harness is green today. M1 replaces the stub with
+> the two real providers and ports the 116 specification cases — see
+> [Architecture alignment](#architecture-alignment).
+
+## Setup
+
+The Go toolchain is pinned project-wide by [mise](https://mise.jdx.dev) via
+`mise.toml` (`go = "1.26.2"`). With mise activated in your shell, `go` resolves
+to the pinned version automatically:
+
+```bash
+mise install          # install the pinned Go toolchain
+go version            # → go1.26.2
+```
+
+No third-party dependencies are required: the suite uses the standard library
+only (no testify), keeping the library's dependency surface minimal.
+
+> The architecture targets **Go 1.27** (`ARCHITECTURE-SPINE` Stack table), which
+> is pre-GA (~2026-08). When it ships, bump `mise.toml` **and** the `go`
+> directive in `go.mod` to 1.27 — that unblocks the `provider.Get[T]()`
+> generic-method API noted in the spine's Open Items.
+
+## Running tests
+
+```bash
+make test          # all tests, race detector + coverage profile
+make test-short    # fast pass, no race detector
+make conformance   # dual-provider conformance suite (verbose)
+make golden        # regenerate testdata/*.golden fixtures
+make cover         # HTML coverage report (coverage.html)
+make check         # CI parity: go vet + race/coverage test run
+make help          # list all targets
+```
+
+Equivalent raw commands:
+
+```bash
+go test ./...                # plain run
+go test -race ./...          # with the race detector
+go test -cover ./...         # with coverage summary
+go test ./... -update-golden # rewrite golden fixtures (review the diff!)
+```
+
+## Architecture overview
+
+```text
+internal/testutil/      stdlib-only test helpers (importable across the module)
+  assert.go             ergonomic assertions over a TB seam: Equal, Nil, Panics, …
+  factory.go            functional-options data factory: Build / BuildFrom
+  golden.go             golden-file comparator with the -update-golden flag
+  testdata/             committed golden fixtures
+conformance/            ported .NET DI specification suite (the test framework's core)
+  harness.go            Provider contract, ProviderFactory seam, RunSuite, AssertEquivalent
+  spec_sample_test.go   in-test stub provider + dual-provider sample suite
+  (M1) spec_test.go     the 116 ported specification cases
+  (M1) fakes/           the 52 ported fakes
+  (M1) codegen/         pre-generated container + its tests (Path γ sensitive scenarios)
+```
+
+- **Assertions** are tiny stdlib wrappers, not testify. They take a `TB`
+  interface (the subset of `testing.TB` used), so failure behavior is itself unit
+  tested via a fake `TB`.
+- **Data factories** use the functional-options pattern (`Build(opts...)`) — the
+  idiomatic Go alternative to faker-style fixture builders with overrides.
+- **Golden files** back the generator's code-emission tests: `Golden(t, name,
+  got)` compares emitted bytes against `testdata/<name>.golden`; `-update-golden`
+  rewrites them.
+- **Conformance harness** is the heart of the framework. A single suite, written
+  once against the `Provider` contract, is parameterized over a `ProviderFactory`
+  (the Go equivalent of dotnet's `abstract CreateServiceProvider`) and run against
+  every provider. `AssertEquivalent` is the cross-provider differential-equivalence
+  check: both providers, built from the same registration, must yield identical
+  results.
+
+## Best practices
+
+- **Table-driven subtests.** Express specification cases as `[]SpecCase` and let
+  `RunSuite` drive them as nested `t.Run` subtests (provider/case).
+- **Clean up with `t.Cleanup`.** `RunSuite` closes each built provider via
+  `t.Cleanup`; follow the same pattern for any resource a case opens.
+- **One registration source, two providers.** Never hand-fork the runtime and
+  codegen registrations (AD-14). Both factories build from the same source; the
+  codegen output is the generator's deterministic transform of it.
+- **Resolve by `reflect.Type`.** Use `reflect.TypeFor[T]()` for type keys — it
+  matches the Provider's Tier B `reflect.Type` dispatch (AD-13).
+- **Mind the nil-interface footgun.** A nil interface value must not read as a
+  present service (AD-5); `testutil.Nil` treats typed-nil as nil for exactly this.
+- **Assert behavior, not implementation.** Spec cases touch only the `Provider`
+  contract so both providers are held to identical, observable behavior.
+
+## CI integration
+
+`.github/workflows/test.yml` runs on push/PR:
+
+1. `jdx/mise-action` provisions the toolchain from `mise.toml` (CI uses the same
+   pinned Go as local).
+2. `go vet ./...`
+3. `go test -race -covermode=atomic -coverprofile=coverage.out ./...` — covers the
+   conformance dual-provider suite and golden tests (per the spine's Deferred CI
+   note), with the race detector as the quality gate.
+4. Coverage is uploaded as a build artifact.
+
+godi is a library: there is no deploy step. Release = a semver tag; consumers run
+`go generate` as a build step once `cmd/godi-gen` lands.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install` then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
+| `go.work lists go 1.23.1, but ... requires go >= 1.26` | The parent `go.work` predates godi's go directive. Raise the `go` line in `/mnt/disk0/project/auth/go.work` to `1.26` (siblings stay valid). |
+| `cannot find toolchain ... go1.27` / download fails | Go 1.27 is not GA yet. Keep `go.mod`/`mise.toml` at 1.26 until it ships (~2026-08). |
+| `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
+| golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |
+
+## Architecture alignment
+
+The harness encodes the spine's testing invariants — see
+`_bmad-output/planning-artifacts/architecture/architecture-godi-2026-06-26/ARCHITECTURE-SPINE.md`:
+
+| Invariant | Where it shows up |
+| --- | --- |
+| **AD-14** dual provider, one registration source | `ProviderFactory` × 2, `RunSuite` |
+| **AD-15** cross-provider differential equivalence | `AssertEquivalent` |
+| **AD-16** pinned Provider method set + unmet-lookup semantics | `Provider` interface in `harness.go` |
+| **AD-17** nil key routes to unkeyed; AnyKey semantics | `GetKeyedService` contract + sample case |
+
+**Acceptance target** (`_bmad-output/specs/spec-godi/`): 116 specification cases +
+52 fakes. M1 replacement points are documented inline in `conformance/harness.go`:
+alias `Provider`/`Scope` to `godi.Provider`/`godi.Scope`, wire the two real
+factories (runtime oracle + codegen), and port the 116 cases into `spec_test.go`.

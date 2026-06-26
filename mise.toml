@@ -1,0 +1,12 @@
+# Project-level toolchain pinning, managed by mise.
+#
+# Why mise: the architecture targets Go 1.27 (ARCHITECTURE-SPINE Stack table),
+# but 1.27 is not yet GA (~2026-08). mise pins the project to an installed,
+# runnable toolchain today and gives a single place to bump the version for the
+# whole team + CI once 1.27 ships.
+#
+# Bump obligation: when Go 1.27 reaches GA, raise this to "1.27" AND the `go`
+# directive in go.mod — that unblocks the `provider.Get[T]()` generic-method API
+# noted as deferred in ARCHITECTURE-SPINE Open Items.
+[tools]
+go = "1.26.2"

@@ -1,0 +1,5 @@
+# Element types to materialise IRepository[T] for (one per line).
+# This is the codegen "single source of truth" — the Go stand-in for dotnet's
+# single open-generic registration. Add a line here, re-run `go run ./wiring/gen`.
+User
+Order
