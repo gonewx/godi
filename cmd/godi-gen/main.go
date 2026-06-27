@@ -135,6 +135,16 @@ type registration struct {
 func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 	regs := collectRegistrations(pkg)
 
+	// NFR2: a package with zero recognized DSL markers must be rejected — emitting
+	// an empty container (exit 0) would silently hand the user a container missing
+	// every service. The common cause (markers written in an unrecognized form) is
+	// surfaced separately as collectRegistrations stderr warnings.
+	if len(regs) == 0 {
+		return nil, fmt.Errorf("no godi DSL registrations recognized in package %q: "+
+			"expected at least one godi.AddSingleton[I, Impl] or godi.AddSingletonFactory[I] "+
+			"marker imported from %q with explicit type arguments", pkg.PkgPath, godiPkgPath)
+	}
+
 	// Pass 1: index every service's type(s) -> its service Name, so a
 	// constructor parameter type can be resolved to the dependency it names. Both
 	// the service interface (I) and the implementation (Impl, and *Impl) are
@@ -161,6 +171,16 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		}
 
 		if rg.form == "B" {
+			// Form B names the service after its interface's short name; a non-named
+			// type argument (*Foo, []Foo) would yield an illegal field name like
+			// f_*pkg.Foo and a non-compilable container. Require a valid identifier.
+			if !token.IsIdentifier(s.Name) {
+				genErrs = append(genErrs, fmt.Sprintf(
+					"form-B service: type argument %s is not a named type — "+
+						"AddSingletonFactory[I] requires I to be a named interface "+
+						"(would emit illegal field name f_%s)", s.GoType, s.Name))
+				continue
+			}
 			// Form B escape hatch (D-2): inline the factory expression verbatim;
 			// no New{Impl} discovery, no dependency reading.
 			s.FactoryExpr = renderExpr(pkg.Fset, rg.factory)
@@ -204,6 +224,17 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			continue
 		}
 
+		// Validate the result shape before trusting CtorErr: New{Impl} must return
+		// exactly (Impl) or (Impl, error). Any other shape — (T, *CustomError),
+		// (T1, T2, error), zero results — would make the emitted single/comma-err
+		// assignment mismatch the real arity and produce a non-compilable container,
+		// so reject it at gen time with a clear message (AD-8) instead.
+		if resErr := validateCtorResults(sig); resErr != nil {
+			genErrs = append(genErrs, fmt.Sprintf(
+				"form-A service %q: New%s %v", s.Name, implName, resErr))
+			continue
+		}
+
 		s.Ctor = implPkg.Name() + ".New" + implName
 		imports.addPackage(implPkg)
 		s.Deps = constructorDeps(sig, depIndex)
@@ -236,18 +267,34 @@ func collectRegistrations(pkg *packages.Package) []registration {
 			if !ok {
 				return true
 			}
+			// A call whose bare callee name is AddSingleton / AddSingletonFactory is
+			// a SUSPECTED marker. It is accepted only when it is a generic
+			// instantiation of a selector that resolves to the godi package. If it
+			// looks like a marker but fails any check (type inference dropped [I], a
+			// dot-import, or a vanity/forked import path), warn instead of silently
+			// dropping it — a dropped registration yields an incomplete container.
+			suspected := isDSLName(calleeName(call))
+
 			funcIdent := dslCallee(call)
 			if funcIdent == nil {
+				warnUnrecognized(pkg, call, suspected,
+					"not a recognized generic marker call (a type argument [I] may have "+
+						"been inferred away, or godi is dot-imported)")
 				return true
 			}
 			// Confirm the callee is the godi package's marker, not a same-named
 			// function elsewhere.
 			fn, ok := pkg.TypesInfo.Uses[funcIdent].(*types.Func)
 			if !ok || fn.Pkg() == nil || fn.Pkg().Path() != godiPkgPath {
+				warnUnrecognized(pkg, call, suspected, fmt.Sprintf(
+					"callee does not resolve to the godi package %q (vanity import, fork, or replace?)",
+					godiPkgPath))
 				return true
 			}
 			inst, ok := pkg.TypesInfo.Instances[funcIdent]
 			if !ok {
+				warnUnrecognized(pkg, call, suspected,
+					"no generic instantiation recorded by the type checker")
 				return true
 			}
 			ta := inst.TypeArgs
@@ -308,6 +355,46 @@ func dslCallee(call *ast.CallExpr) *ast.Ident {
 	return nil
 }
 
+// calleeName returns the bare function name a call invokes, unwrapping a generic
+// instantiation (foo[T] / foo[T1, T2]) and a package selector (pkg.foo) or a bare
+// identifier (a dot-imported foo). It is empty when the callee is not a plain
+// function name. Used to flag a SUSPECTED DSL marker even when dslCallee declines
+// it, so warnUnrecognized can report it instead of dropping it silently.
+func calleeName(call *ast.CallExpr) string {
+	fun := call.Fun
+	switch f := fun.(type) {
+	case *ast.IndexExpr:
+		fun = f.X
+	case *ast.IndexListExpr:
+		fun = f.X
+	}
+	switch f := fun.(type) {
+	case *ast.SelectorExpr:
+		return f.Sel.Name
+	case *ast.Ident:
+		return f.Name
+	}
+	return ""
+}
+
+// isDSLName reports whether name is one of godi's DSL marker function names.
+func isDSLName(name string) bool {
+	return name == "AddSingleton" || name == "AddSingletonFactory"
+}
+
+// warnUnrecognized emits a build-time warning to stderr when a call that looks
+// like a godi DSL marker was not recognized as one (NFR2's "no silent drop").
+// It is a warning, not an error: a same-named call from another package is a
+// legitimate non-match. Static analysis only — no user code runs (AD-7).
+func warnUnrecognized(pkg *packages.Package, call *ast.CallExpr, suspected bool, reason string) {
+	if !suspected {
+		return
+	}
+	fmt.Fprintf(os.Stderr,
+		"godi-gen: warning: %s: suspected DSL call %s(...) not recognized as a godi marker (%s); registration skipped\n",
+		pkg.Fset.Position(call.Pos()), calleeName(call), reason)
+}
+
 // serviceName is the f_<Name> field name and dependency key for a registration.
 // Form A names the service after its implementation (FakeService, Consumer);
 // form B has no implementation, so it names the service after its interface.
@@ -322,8 +409,12 @@ func serviceName(rg registration) string {
 
 // constructorDeps reads a constructor's parameters left to right and maps each
 // to the service Name it injects (AD-8). A parameter type not matching any
-// registered service falls back to its short type name, so plan.Validate reports
-// it as a missing dependency rather than the generator silently dropping it.
+// registered service falls back to its FULLY-QUALIFIED type key (not its short
+// name), so plan.Validate reports it as a missing dependency by an unambiguous
+// name. Falling back to the short name risked a false match: an unregistered
+// pkgB.Config would collide with a registered service named "Config"
+// (pkgA.Config) in Validate's by-name lookup and silently inject the wrong
+// instance instead of reporting the missing dependency.
 func constructorDeps(sig *types.Signature, depIndex map[string]string) []string {
 	params := sig.Params()
 	if params.Len() == 0 {
@@ -336,9 +427,34 @@ func constructorDeps(sig *types.Signature, depIndex map[string]string) []string 
 			deps = append(deps, name)
 			continue
 		}
-		deps = append(deps, shortTypeName(pt))
+		// Unresolved: use the fully-qualified key so Validate cannot confuse it
+		// with a same-short-named registered service.
+		deps = append(deps, typeKey(pt))
 	}
 	return deps
+}
+
+// validateCtorResults checks that a New{Impl} constructor returns exactly one
+// value, or a value plus a trailing builtin error — the only two shapes the emit
+// step can wire (AD-8). Any other arity/shape would emit a single/comma-err
+// assignment that mismatches the real return count and fails to compile, so it
+// is a gen-time error rather than a broken container.
+func validateCtorResults(sig *types.Signature) error {
+	res := sig.Results()
+	switch res.Len() {
+	case 1:
+		return nil
+	case 2:
+		if !isErrorType(res.At(1).Type()) {
+			return fmt.Errorf("returns (%s, %s); a two-result constructor's second "+
+				"result must be error (allowed shapes: (T) or (T, error))",
+				shortTypeName(res.At(0).Type()), shortTypeName(res.At(1).Type()))
+		}
+		return nil
+	default:
+		return fmt.Errorf("returns %d values; a constructor must return (T) or (T, error)",
+			res.Len())
+	}
 }
 
 // hasTrailingError reports whether the constructor's last result is the builtin

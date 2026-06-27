@@ -149,7 +149,12 @@ func emitProviderAssertion(buf *bytes.Buffer) {
 func emitNewRoot(buf *bytes.Buffer, singletons []plan.Service) {
 	needsErr := false
 	for _, s := range singletons {
-		if s.CtorErr {
+		// A form-B service is inlined verbatim through the FactoryExpr branch below
+		// and never assigns `err`, so it must not by itself trigger the `var err
+		// error` declaration — otherwise the emitted NewRoot would declare err and
+		// never use it (`err declared and not used`). Only a form-A error ctor needs
+		// the err variable.
+		if s.CtorErr && s.FactoryExpr == "" {
 			needsErr = true
 			break
 		}

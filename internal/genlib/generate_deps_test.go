@@ -134,9 +134,15 @@ func TestGenerateDeps_FormADepsGolden(t *testing.T) {
 
 // TestGenerateDeps_FormBInlineGolden covers the form-B escape hatch (D-2): the
 // factory expression is inlined as `r.f_X = (factoryExpr)(r)`, byte-stable via a
-// golden. FactoryExpr is the AST source text the static analyzer (Task 3) reads
-// from the AddSingletonFactory call; here it is supplied directly to pin the
-// emit shape.
+// golden. FactoryExpr here is supplied directly as ALREADY-PACKAGE-QUALIFIED
+// source text (svc.IWidget / svc.NewWidget) to pin genlib's emit shape for a
+// well-formed input.
+//
+// NOTE: this is a genlib-LAYER unit test of emit only. It does NOT exercise the
+// real cmd/godi-gen, which currently inlines the factory expression WITHOUT
+// package-qualifying registration-package-local identifiers (a deferred form-B
+// limitation; see deferred-work.md). So this passing golden must not be read as
+// evidence that form-B codegen is end-to-end compilable.
 func TestGenerateDeps_FormBInlineGolden(t *testing.T) {
 	reg := plan.NewRegistry()
 	reg.Imports = []string{"example.com/svc"}

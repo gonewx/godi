@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 
@@ -184,8 +185,16 @@ func AddSingleton[T any](b *Builder, factory func(godi.Provider) T) *Builder {
 // runtime side of "bad graph is rejected at Build" (AD-3). Full graph validation
 // is Epic 5; this story only needs the error channel to exist and propagate.
 func (b *Builder) Build() (provider godi.Provider, err error) {
+	// Copy the factory map so the built root is decoupled from the Builder: a
+	// post-Build AddSingleton (or building twice) must not retroactively change a
+	// root's registered set. Aliasing b.factories would let a later registration
+	// make IsService report true for a never-materialized type and have GetService
+	// lazily build it — breaking the "after Build, GetService is a pure cache hit"
+	// invariant this method documents.
+	factories := make(map[reflect.Type]func(godi.Provider) any, len(b.factories))
+	maps.Copy(factories, b.factories)
 	r := &root{
-		factories:  b.factories,
+		factories:  factories,
 		singletons: make(map[reflect.Type]any, len(b.factories)),
 	}
 	defer func() {

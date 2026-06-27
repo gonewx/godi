@@ -20,6 +20,10 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -47,9 +51,19 @@ func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
 func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
 	src, err := generate("testdata/deps", "codegen")
 	testutil.NoError(t, err)
+	code := string(src)
 
-	testutil.True(t, strings.Contains(string(src), "func NewRoot() (*Root, error)"),
-		"generator must emit an error-propagating NewRoot when a discovered ctor returns error")
+	// The (*Root, error) signature alone is a tautology under D-1 (NewRoot is
+	// unconditionally (*Root, error)); assert the actual comma-err WIRING that
+	// proves hasTrailingError read CtorErr from NewConsumer's (*Consumer, error).
+	testutil.True(t, strings.Contains(code, "r.f_Consumer, err = depsfix.NewConsumer(r.f_FakeService)"),
+		"a discovered trailing-error ctor must emit comma-err assignment form")
+	testutil.True(t, strings.Contains(code, "return nil, err"),
+		"a trailing-error ctor must propagate the error up from NewRoot")
+	// Negative guard: the no-error sibling must use single-assignment form, proving
+	// CtorErr is detected per-service, not emitted unconditionally.
+	testutil.True(t, strings.Contains(code, "r.f_FakeService = depsfix.NewFakeService()"),
+		"a no-error ctor must emit single-assignment form, not comma-err")
 }
 
 // TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint covers 2.1-GEN-003 (AC2).
@@ -84,13 +98,54 @@ func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
 // TestGenerator_FormB_InlinesFactoryExpression covers 2.1-GEN-005 (AC1).
 //
 // Form B is the fallback: the generator statically reads the factory argument
-// expression and inlines it into NewRoot as `r.f_I = (factoryExpr)(r)` (D-2),
-// rather than discovering a New{Impl}.
+// expression and inlines it into NewRoot as `r.f_I = (factoryExpr)(r)` (D-2).
+//
+// KNOWN LIMITATION (deferred — see deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂"):
+// the generator inlines the factory expression VERBATIM without package-qualifying
+// identifiers from the registration package. For this fixture the factory body
+// references formbfix-local names (IWidget, NewWidget), so the inlined text is NOT
+// compilable inside the emitted `codegen` package. This test therefore pins the
+// EXACT (currently non-compilable) inline output to catch silent regressions and
+// deliberately does NOT assert the product compiles. The earlier
+// strings.Contains("r.f_") && strings.Contains("(r)") assertion was a tautology
+// that masked this gap; full form-B codegen (AST package-qualification +
+// dependency extraction) is a deferred follow-up.
 func TestGenerator_FormB_InlinesFactoryExpression(t *testing.T) {
 	src, err := generate("testdata/formb", "codegen")
 	testutil.NoError(t, err)
 
 	code := string(src)
-	testutil.True(t, strings.Contains(code, "r.f_") && strings.Contains(code, "(r)"),
-		"form-B factory expression must be inlined into NewRoot as (factoryExpr)(r) (D-2)")
+	testutil.True(t, strings.Contains(code,
+		"r.f_IWidget = (func(p godi.Provider) IWidget { return NewWidget() })(r)"),
+		"form-B factory expression must be inlined verbatim as (factoryExpr)(r) (D-2); the "+
+			"inlined identifiers are unqualified — a known deferred limitation (see deferred-work.md)")
+}
+
+// TestGenerator_NoNewImpl_ExitsNonZero covers AC2/NFR2 at the PROCESS boundary.
+//
+// generate() returns (nil, err) on a missing-New{Impl} graph, but the NFR2 hard
+// gate also requires the BINARY to exit non-zero with zero bytes on stdout —
+// behavior owned by main()'s os.Exit(1), which no in-process test asserts. Run
+// the real CLI as a subprocess to guard the exit code and empty stdout (the
+// story previously verified this only by a manual `echo $?`).
+func TestGenerator_NoNewImpl_ExitsNonZero(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess (go run) test in -short mode")
+	}
+	cmd := exec.Command("go", "run", ".", "-pkg", "codegen", "testdata/nonewimpl")
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+
+	var exitErr *exec.ExitError
+	testutil.True(t, errors.As(runErr, &exitErr) && exitErr.ExitCode() != 0,
+		"godi-gen must exit non-zero on a missing-New{Impl} graph (AC2/NFR2)")
+	testutil.True(t, stdout.Len() == 0,
+		"a rejected graph must emit zero bytes on stdout (NFR2)")
+	testutil.True(t, strings.Contains(stderr.String(), "AddSingletonFactory") ||
+		strings.Contains(stderr.String(), "form B") ||
+		strings.Contains(stderr.String(), "形态 B"),
+		"the rejection must hint form B on stderr")
 }
