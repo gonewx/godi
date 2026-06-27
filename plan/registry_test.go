@@ -135,6 +135,39 @@ func TestValidate_EmptyGraph_ReturnsNil(t *testing.T) {
 	testutil.True(t, len(errs) == 0, "empty graph must be legal")
 }
 
+// --- 1.4-PLAN-007 (AC2, P0 — review finding) ----------------------------------
+
+// TestValidate_DuplicateServiceName_ReturnsError: registering two services with
+// the same name is a structural error — Validate must report it. Without this
+// check, emitRootStruct would produce duplicate struct fields that fail to compile.
+func TestValidate_DuplicateServiceName_ReturnsError(t *testing.T) {
+	reg := plan.NewRegistry()
+	reg.Service(plan.Service{
+		Name:     "Logger",
+		GoType:   "*logger.Logger",
+		Ctor:     "logger.NewLogger",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "Logger",
+		GoType:   "*logger.OtherLogger",
+		Ctor:     "logger.NewOtherLogger",
+		Lifetime: plan.Singleton,
+	})
+
+	errs := reg.Validate()
+	testutil.True(t, len(errs) > 0, "duplicate service name must produce validation errors")
+
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "duplicate") && strings.Contains(e.Error(), "Logger") {
+			found = true
+			break
+		}
+	}
+	testutil.True(t, found, "error must describe the duplicate service name")
+}
+
 // --- 1.4-PLAN-006 (AC2/AC4, P1) -----------------------------------------------
 
 // TestRegistry_ChainableRegistration: the Service() method returns *Registry for
