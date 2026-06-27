@@ -24,9 +24,8 @@ jobs:
         run: go version
 
       # Quality gate: sources must be gofmt-clean. Module-aware — checks only the
-      # main module's package dirs via `go list`, which (like `go vet/test ./...`)
-      # skips the nested, non-deliverable poc/* modules. Cheap, offline, no
-      # forward dependency.
+      # main module's package dirs via `go list` (like `go vet/test ./...`).
+      # Cheap, offline, no forward dependency.
       - name: Format check (gofmt)
         run: |
           dirs="$(go list -f '{{.Dir}}' ./...)"

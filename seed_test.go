@@ -1,15 +1,15 @@
-// ATDD red-phase scaffold for Story 1.1 (AC1) — Structural Seed package
-// existence. Activation (Story 1.1 Task 2): once the placeholder packages
-// exist, delete the `//go:build atdd_redphase` line to enable. Until then it
-// stays out of the default build so `make check` stays green (R3).
+// ATDD test for Story 1.1 (AC1) — Structural Seed package existence.
+// Activated in Story 1.1 Task 2 (the placeholder packages exist; the original
+// //go:build atdd_redphase red-phase guard was removed). Now part of the
+// default build.
 package godi_test
 
 import (
 	"testing"
 
 	// Structural Seed (ARCHITECTURE-SPINE): every library package must exist
-	// and be importable. A missing package fails THIS file's compile under
-	// `-tags atdd_redphase`, pinpointing which placeholder is absent.
+	// and be importable. A missing package fails THIS file's compile,
+	// pinpointing which placeholder is absent.
 	_ "github.com/gonewx/godi/activator"
 	_ "github.com/gonewx/godi/conformance/codegen"
 	_ "github.com/gonewx/godi/conformance/fakes"

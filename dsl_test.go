@@ -1,10 +1,8 @@
-// ATDD red-phase scaffold for Story 1.1 (AC1) — DSL marker seed contract.
+// ATDD test for Story 1.1 (AC1) — DSL marker seed contract.
 //
-// Activation (Story 1.1 Task 2): once godi.Registry and godi.AddSingleton
-// exist, DELETE the `//go:build atdd_redphase` line above (and the blank line
-// after it) to enable this test, then drive it red -> green. Until then the
-// build tag keeps it out of the default build so `make check` stays green
-// (regression risk R3).
+// Activated in Story 1.1 Task 2 (godi.Registry + godi.AddSingleton exist; the
+// original //go:build atdd_redphase red-phase guard was removed and the test
+// driven red -> green). Now part of the default build.
 package godi
 
 import (

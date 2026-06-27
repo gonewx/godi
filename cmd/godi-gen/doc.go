@@ -19,7 +19,11 @@
 //     implementation types without executing the DSL.
 //   - types.Implements: testing a concrete implementation type against the
 //     io.Closer interface decides Disposable-ness statically at generation time
-//     (AD-11) — no hand-filled Disposable flag and no runtime reflection.
+//     (AD-11) — no hand-filled Disposable flag and no runtime reflection. NOTE:
+//     this Story 1.1 spike exercises only Info.Instances; types.Implements
+//     feasibility is carried from the architecture's stdlib precedent (go/types
+//     TestImplements), not proven by a test here. Story 1.4 adds the first real
+//     Disposable-detection assertion on the go/types path.
 //
 // Story 1.4 replaces the throwaway spike emitter with the real layered generator
 // (go/packages load -> plan.Validate -> genlib emit). The spike artifact is

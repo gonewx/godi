@@ -1,13 +1,12 @@
-// ATDD red-phase scaffold for Story 1.1 (AC2) — the AD-7 integration spike,
-// the core de-risking gate (AR11). Implemented as a self-verifying test per
-// the story Dev Notes: it proves the go/packages + go/types path can read a
-// generic DSL call's type arguments WITHOUT executing user registration code,
-// then emits a compilable minimal container to a temp dir.
+// ATDD test for Story 1.1 (AC2) — the AD-7 integration spike, the core
+// de-risking gate (AR11). Implemented as a self-verifying test per the story
+// Dev Notes: it proves the go/packages + go/types path can read a generic DSL
+// call's type arguments WITHOUT executing user registration code, then emits a
+// compilable minimal container to a temp dir.
 //
-// Activation (Story 1.1 Task 3): create cmd/godi-gen/main.go (package main
-// stub), keep the testdata fixture, add golang.org/x/tools v0.47.0 to go.mod,
-// then DELETE the `//go:build atdd_redphase` line. The test compiles once
-// those exist and stays RED until emitMinimalContainer is implemented.
+// Activated in Story 1.1 Task 3 (main.go stub + testdata fixture +
+// golang.org/x/tools v0.47.0 in go.mod; the original //go:build atdd_redphase
+// red-phase guard was removed and emitMinimalContainer implemented).
 //
 // Regression risk R1: this test emits ONLY to t.TempDir() and is NOT wired to
 // `//go:generate`, so the CI Generate gate stays a clean no-op.

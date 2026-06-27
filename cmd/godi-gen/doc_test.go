@@ -1,6 +1,6 @@
-// ATDD red-phase scaffold for Story 1.1 (AC3) — spike conclusion archival.
-// Activation (Story 1.1 Task 4): once cmd/godi-gen/doc.go records the AD-7
-// conclusion, delete the `//go:build atdd_redphase` line to enable.
+// ATDD test for Story 1.1 (AC3) — spike conclusion archival.
+// Activated in Story 1.1 Task 4 (cmd/godi-gen/doc.go records the AD-7
+// conclusion; the original //go:build atdd_redphase red-phase guard was removed).
 package main
 
 import (

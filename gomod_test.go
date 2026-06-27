@@ -1,6 +1,6 @@
-// ATDD red-phase scaffold for Story 1.1 (AC1) — go.mod dependency facts.
-// Activation (Story 1.1 Task 1): once `golang.org/x/tools v0.47.0` is added to
-// go.mod, delete the `//go:build atdd_redphase` line to enable.
+// ATDD test for Story 1.1 (AC1) — go.mod dependency facts.
+// Activated in Story 1.1 Task 1 (golang.org/x/tools v0.47.0 added to go.mod;
+// the original //go:build atdd_redphase red-phase guard was removed).
 package godi_test
 
 import (
