@@ -1,26 +1,6 @@
-//go:build atdd_redphase
-
-// ATDD scaffold for Story 1.5 — codegen container: regeneration-comparison
+// Conformance tests for Story 1.5 — codegen container: regeneration-comparison
 // guard (AD-14 deterministic output), behavior smoke tests, and dependency
 // direction self-check (AD-2).
-//
-// Red cause: codegen.Root / codegen.NewRoot undefined (doc.go placeholder) +
-// genlib.Generate does not produce a Provider-implementing container +
-// plan.Registry has no Imports field → compilation failure.
-//
-// Activation (TDD red → green):
-//  1. Implement Tasks 1–3 (fakes, emit evolution, pre-generate container).
-//  2. Delete the //go:build line above and the blank line after it.
-//  3. GOWORK=off go test -race ./conformance/codegen/... → green.
-//
-// See _bmad-output/test-artifacts/atdd-checklist-1-5-conformance-dual-provider.md.
-//
-// API CONTRACT THIS SCAFFOLD ASSUMES:
-//
-//	genlib.Generate(reg *plan.Registry, pkgName string) ([]byte, error)
-//	plan.Registry.Imports []string   (D3: service-package import paths)
-//	codegen.Root          (exported struct, implements godi.Provider)
-//	codegen.NewRoot() *Root
 package codegen_test
 
 import (

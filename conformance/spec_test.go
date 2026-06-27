@@ -1,29 +1,8 @@
-//go:build atdd_redphase
-
-// ATDD scaffold for Story 1.5 — conformance suite: dual-provider single-service
-// spec cases + cross-provider differential equivalence (AD-14 / AD-15).
-//
-// This file replaces the throwaway stub-based spec_sample_test.go once activated.
-// Red cause: fakes.IFakeService / fakes.NewFakeService / codegen.NewRoot are
-// undefined (packages are doc.go placeholders) → compilation failure.
-//
-// Activation (TDD red → green):
-//  1. Implement Tasks 1–4 (fakes, emit evolution, codegen container, wiring).
-//  2. Delete spec_sample_test.go (stub code) and contract_alias_test.go (stub proofs).
-//  3. Delete the //go:build line above and the blank line after it.
-//  4. Rename this file to spec_test.go.
-//  5. GOWORK=off go test -race ./conformance/... → green.
-//
-// See _bmad-output/test-artifacts/atdd-checklist-1-5-conformance-dual-provider.md.
-//
-// API CONTRACT THIS SCAFFOLD ASSUMES:
-//
-//	runtime.NewBuilder() *Builder
-//	runtime.AddSingleton[T](b, func(godi.Provider) T) *Builder
-//	(*Builder).Build() godi.Provider
-//	codegen.NewRoot() *Root   (implements godi.Provider)
-//	fakes.IFakeService        (interface with seal method)
-//	fakes.NewFakeService() *FakeService
+// Conformance specification suite for Story 1.5: dual-provider single-service
+// spec cases + cross-provider differential equivalence (AD-14 / AD-15). Both
+// factories build from the same logical registration (singleton IFakeService
+// constructed by NewFakeService); divergence in observable behavior is a
+// regression in the architecture's equivalence guarantee.
 package conformance
 
 import (

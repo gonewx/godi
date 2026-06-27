@@ -7,15 +7,12 @@
 // source — the reflect-free runtime provider (the semantic oracle) and the
 // codegen provider — asserting identical observable results.
 //
-// SCAFFOLD STATUS — godi.Provider / godi.Scope now exist (Story 1.2), and the
-// harness Provider / Scope below are type aliases onto them: the suite holds
-// every provider to one source of truth (AD-14 / AD-16), no local copy of the
-// contract. The runtime and codegen providers do not exist yet — this file
-// defines the harness *contract* and *runner*, and spec_sample_test.go proves
-// the pattern runs green against an in-test stub. Still to do:
-//   - register the two real ProviderFactory values (runtime, codegen) built from
-//     a single shared registration source;
-//   - port the 116 cases into spec_test.go and feed them to RunSuite.
+// Status (Story 1.5): the Walking Skeleton's single-service slice is wired —
+// spec_test.go registers the two real ProviderFactory values (runtime, codegen)
+// built from one logical registration source (singleton IFakeService) and
+// runs the dual-provider spec + cross-provider differential equivalence. The
+// 116 Spec / 52 Fakes corpus migrates incrementally per Epic 2–4, feeding the
+// existing RunSuite / AssertEquivalent unchanged.
 package conformance
 
 import (

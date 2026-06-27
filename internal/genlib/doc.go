@@ -1,9 +1,13 @@
 // Package genlib emits generated container code from a validated plan. It is
-// internal: only cmd/godi-gen consumes it (AD-2). The sole code-emission path is
-// genlib.Generate(reg, pkgName), which runs reg.Validate() before emitting.
+// internal: only cmd/godi-gen consumes it (AD-2). The sole code-emission path
+// is genlib.Generate(reg, pkgName), which runs reg.Validate() before emitting.
 //
-// Current state (Story 1.4): Generate emits a minimal self-contained container
-// (Root struct, accessors, Close) for single-service singletons. Fields are
-// typed as any; real typed fields land with go/types integration (Story 2.1).
-// The full godi.Provider implementation is wired in Story 1.5 (conformance).
+// Current state (Story 1.5): Generate emits a full godi.Provider implementation
+// — typed singleton fields on Root (AD-1), eager NewRoot wiring, the six-method
+// AD-16 contract, and a delegating scope (AD-12). reflect.Type is the dispatch
+// key only (Tier B, AD-13); construction is the direct Ctor call (no reflect.New).
+//
+// Inputs (GoType / Ctor / Imports) are stringly-typed this epoch (D3 caveat);
+// Story 2.1 replaces them with go/types facts (AD-7), but the emit shape stays
+// the same — the conformance suite's regeneration-comparison guard pins it.
 package genlib

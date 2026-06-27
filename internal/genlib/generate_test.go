@@ -23,12 +23,7 @@
 package genlib_test
 
 import (
-	"go/ast"
 	"go/format"
-	"go/importer"
-	"go/parser"
-	"go/token"
-	"go/types"
 	"os"
 	"os/exec"
 	"strings"
@@ -133,26 +128,14 @@ func TestGenerate_EmptyGraph_ProducesLegalCode(t *testing.T) {
 	testutil.NoError(t, fmtErr)
 }
 
-// --- 1.4-GEN-006 (AC1/AC4, P1) ------------------------------------------------
-
-// TestGenerate_LegalGraph_TypeCheckable: the generated code passes go/types
-// type-checking — semantic correctness beyond format.Source syntax check. This
-// double-verifies AC1's "compilable" requirement. Uses importer.Default() to
-// resolve imports (godi, reflect). If the dev chooses a minimal container that
-// does not import external packages, importer.Default() suffices trivially.
-func TestGenerate_LegalGraph_TypeCheckable(t *testing.T) {
-	reg := singleServiceRegistry()
-	src, err := genlib.Generate(reg, "container")
-	testutil.NoError(t, err)
-
-	fset := token.NewFileSet()
-	f, parseErr := parser.ParseFile(fset, "container_gen.go", src, parser.AllErrors)
-	testutil.NoError(t, parseErr)
-
-	conf := types.Config{Importer: importer.Default()}
-	_, typErr := conf.Check("container", fset, []*ast.File{f}, nil)
-	testutil.NoError(t, typErr)
-}
+// 1.4-GEN-006 (type-check via importer.Default) removed in Story 1.5: emit now
+// imports github.com/gonewx/godi + service packages, which the gc importer
+// cannot resolve for same-module paths. The compilability guarantee is now
+// covered far more strongly by the committed conformance/codegen/container_gen.go
+// (a genlib.Generate output) being built and tested by the real toolchain
+// through `GOWORK=off go test ./conformance/...` (D4). format.Source inside
+// Generate retains the syntactic check; the conformance build retains the
+// semantic check.
 
 // --- 1.4-GEN-007 (AC3, P0) ----------------------------------------------------
 

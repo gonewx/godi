@@ -44,6 +44,18 @@ type Service struct {
 // Registry accumulates Service registrations and exposes them for
 // validation and code generation.
 type Registry struct {
+	// Imports lists the third-party / project-local import paths the emitted
+	// container needs (service packages whose types appear in field decls,
+	// constructor calls, or accessor signatures). The codegen pipeline always
+	// emits "reflect" and "github.com/gonewx/godi" on its own; Imports carries
+	// only the user-supplied service packages. Order is preserved and
+	// duplicates deduped at emit time.
+	//
+	// D3 caveat (AD-7): stringly-typed import paths are an emit input, not the
+	// canonical type-fact source. Story 2.1's go/types integration derives
+	// them from Info.Instances and writes here.
+	Imports []string
+
 	services []Service
 	byName   map[string]Service
 }
