@@ -172,6 +172,7 @@ func emitWiringBlock(buf *bytes.Buffer, services []plan.Service, recv string, re
 			fmt.Fprintf(buf, "\t%s.f_%s = (%s)(%s)\n", recv, s.Name, s.FactoryExpr, recv)
 			continue
 		}
+		emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
 		args := depArgsForCtx(s.Deps, recv, reg)
 		if s.CtorErr {
 			fmt.Fprintf(buf, "\t%s.f_%s, err = %s(%s)\n", recv, s.Name, s.Ctor, args)
@@ -203,6 +204,9 @@ func depExpr(dep, recv string, reg *plan.Registry) string {
 	if !ok {
 		return recv + ".f_" + dep
 	}
+	if s.Lifetime == plan.Transient && s.CtorErr {
+		return "dep_" + dep
+	}
 	switch recv {
 	case "r":
 		if s.Lifetime == plan.Transient {
@@ -222,19 +226,38 @@ func depExpr(dep, recv string, reg *plan.Registry) string {
 	return recv + ".f_" + dep
 }
 
+// emitErrTransientDeps pre-emits temp variables for transient dependencies whose
+// constructors return error. The temp var is named dep_{Name} and error is handled
+// via errAction (e.g. "return nil, err" or "panic(err)").
+func emitErrTransientDeps(buf *bytes.Buffer, deps []string, recv string, reg *plan.Registry, errAction string) {
+	for _, d := range deps {
+		s, ok := reg.Lookup(d)
+		if !ok || s.Lifetime != plan.Transient || !s.CtorErr {
+			continue
+		}
+		fmt.Fprintf(buf, "\tdep_%s, err := %s.New%s()\n", d, recv, d)
+		fmt.Fprintf(buf, "\tif err != nil {\n")
+		fmt.Fprintf(buf, "\t\t%s\n", errAction)
+		fmt.Fprintf(buf, "\t}\n")
+	}
+}
+
 func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, typeName string, reg *plan.Registry) {
 	for _, s := range transients {
-		args := depArgsForCtx(s.Deps, recv, reg)
 		if s.FactoryExpr != "" {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, s.Name, s.GoType)
 			fmt.Fprintf(buf, "\treturn (%s)(%s)\n", s.FactoryExpr, recv)
 			fmt.Fprintf(buf, "}\n\n")
 		} else if s.CtorErr {
 			fmt.Fprintf(buf, "func (%s %s) New%s() (%s, error) {\n", recv, typeName, s.Name, s.GoType)
+			emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
+			args := depArgsForCtx(s.Deps, recv, reg)
 			fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
 			fmt.Fprintf(buf, "}\n\n")
 		} else {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, s.Name, s.GoType)
+			emitErrTransientDeps(buf, s.Deps, recv, reg, "panic(err)")
+			args := depArgsForCtx(s.Deps, recv, reg)
 			fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
 			fmt.Fprintf(buf, "}\n\n")
 		}
@@ -258,7 +281,15 @@ func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients [
 		}
 		for _, s := range transients {
 			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
-			fmt.Fprintf(buf, "\t\treturn r.New%s()\n", s.Name)
+			if s.CtorErr {
+				fmt.Fprintf(buf, "\t\tv, err := r.New%s()\n", s.Name)
+				fmt.Fprintf(buf, "\t\tif err != nil {\n")
+				fmt.Fprintf(buf, "\t\t\tpanic(err)\n")
+				fmt.Fprintf(buf, "\t\t}\n")
+				fmt.Fprintf(buf, "\t\treturn v\n")
+			} else {
+				fmt.Fprintf(buf, "\t\treturn r.New%s()\n", s.Name)
+			}
 		}
 		fmt.Fprintf(buf, "\t}\n")
 	}
@@ -333,16 +364,23 @@ func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.R
 		fmt.Fprintf(buf, "\treturn &scope{root: r}\n")
 	} else {
 		fmt.Fprintf(buf, "\ts := &scope{root: r}\n")
+		needsErr := false
+		for _, svc := range scopedWiring {
+			if svc.CtorErr && svc.FactoryExpr == "" {
+				needsErr = true
+				break
+			}
+		}
+		if needsErr {
+			fmt.Fprintf(buf, "\tvar err error\n")
+		}
 		for _, svc := range scopedWiring {
 			if svc.FactoryExpr != "" {
 				fmt.Fprintf(buf, "\ts.f_%s = (%s)(s)\n", svc.Name, svc.FactoryExpr)
 			} else {
+				emitErrTransientDeps(buf, svc.Deps, "s", reg, "panic(err)")
 				args := depArgsForCreateScope(svc.Deps, reg)
 				if svc.CtorErr {
-					// Scoped constructors with errors in CreateScope — propagation via panic
-					// since CreateScope returns godi.Scope (no error). This aligns with the
-					// codegen eager model where all errors surface at construction time.
-					fmt.Fprintf(buf, "\tvar err error\n")
 					fmt.Fprintf(buf, "\ts.f_%s, err = %s(%s)\n", svc.Name, svc.Ctor, args)
 					fmt.Fprintf(buf, "\tif err != nil {\n")
 					fmt.Fprintf(buf, "\t\tpanic(err)\n")
@@ -374,7 +412,11 @@ func depArgsForCreateScope(deps []string, reg *plan.Registry) string {
 		case plan.Scoped:
 			parts[i] = "s.f_" + d
 		case plan.Transient:
-			parts[i] = "s.New" + d + "()"
+			if s.CtorErr {
+				parts[i] = "dep_" + d
+			} else {
+				parts[i] = "s.New" + d + "()"
+			}
 		default:
 			parts[i] = "s.root.f_" + d
 		}
@@ -448,7 +490,15 @@ func emitScopeGetService(buf *bytes.Buffer, singletons, scoped, transients []pla
 		}
 		for _, svc := range transients {
 			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", svc.GoType)
-			fmt.Fprintf(buf, "\t\treturn s.New%s()\n", svc.Name)
+			if svc.CtorErr {
+				fmt.Fprintf(buf, "\t\tv, err := s.New%s()\n", svc.Name)
+				fmt.Fprintf(buf, "\t\tif err != nil {\n")
+				fmt.Fprintf(buf, "\t\t\tpanic(err)\n")
+				fmt.Fprintf(buf, "\t\t}\n")
+				fmt.Fprintf(buf, "\t\treturn v\n")
+			} else {
+				fmt.Fprintf(buf, "\t\treturn s.New%s()\n", svc.Name)
+			}
 		}
 		fmt.Fprintf(buf, "\t}\n")
 	}
@@ -489,13 +539,23 @@ func emitScopeGetKeyedServices(buf *bytes.Buffer) {
 func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry) {
 	fmt.Fprintf(buf, "func (s *scope) CreateScope() godi.Scope {\n")
 	fmt.Fprintf(buf, "\tns := &scope{root: s.root}\n")
+	needsErr := false
+	for _, svc := range scopedWiring {
+		if svc.CtorErr && svc.FactoryExpr == "" {
+			needsErr = true
+			break
+		}
+	}
+	if needsErr {
+		fmt.Fprintf(buf, "\tvar err error\n")
+	}
 	for _, svc := range scopedWiring {
 		if svc.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\tns.f_%s = (%s)(ns)\n", svc.Name, svc.FactoryExpr)
 		} else {
+			emitErrTransientDeps(buf, svc.Deps, "ns", reg, "panic(err)")
 			args := depArgsForNestedScope(svc.Deps, reg)
 			if svc.CtorErr {
-				fmt.Fprintf(buf, "\tvar err error\n")
 				fmt.Fprintf(buf, "\tns.f_%s, err = %s(%s)\n", svc.Name, svc.Ctor, args)
 				fmt.Fprintf(buf, "\tif err != nil {\n")
 				fmt.Fprintf(buf, "\t\tpanic(err)\n")
@@ -526,7 +586,11 @@ func depArgsForNestedScope(deps []string, reg *plan.Registry) string {
 		case plan.Scoped:
 			parts[i] = "ns.f_" + d
 		case plan.Transient:
-			parts[i] = "ns.New" + d + "()"
+			if s.CtorErr {
+				parts[i] = "dep_" + d
+			} else {
+				parts[i] = "ns.New" + d + "()"
+			}
 		default:
 			parts[i] = "ns.root.f_" + d
 		}
