@@ -24,6 +24,9 @@ func register() {
 	var r godi.Registry
 	godi.AddSingleton[fakes.IFakeService, fakes.FakeService](&r)
 	godi.AddSingleton[fakes.IFakeConsumer, fakes.FakeConsumer](&r)
+	godi.AddScoped[fakes.IFakeScopedService, fakes.FakeScopedService](&r)
+	godi.AddTransient[fakes.IFakeTransientService, fakes.FakeTransientService](&r)
+	godi.AddTransient[fakes.IFakeTransientWithScopedDep, fakes.FakeTransientWithScopedDep](&r)
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

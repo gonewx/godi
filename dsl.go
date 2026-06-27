@@ -37,3 +37,31 @@ func AddSingleton[I any, Impl any](r *Registry) *Registry { return r }
 func AddSingletonFactory[I any](r *Registry, factory func(Provider) I) *Registry {
 	return r
 }
+
+// AddScoped records a scoped mapping from interface I to implementation Impl
+// (form A). It is a PURE static marker (AD-7): the generator reads the [I, Impl]
+// type arguments via go/types at generation time and never executes this
+// function. Scoped instances are cached per scope — same within a scope, distinct
+// across scopes (AD-1: lifetime = instance storage location = Scope field).
+func AddScoped[I any, Impl any](r *Registry) *Registry { return r }
+
+// AddScopedFactory records a scoped service of interface I built by factory
+// (form B — AD-8 escape hatch). Like AddScoped it is a PURE static marker (AD-7).
+// Naming (D-6): Go forbids generic-function overloading; the distinct name
+// AddScopedFactory is what the generator dispatches on.
+func AddScopedFactory[I any](r *Registry, factory func(Provider) I) *Registry {
+	return r
+}
+
+// AddTransient records a transient mapping from interface I to implementation
+// Impl (form A). It is a PURE static marker (AD-7). Transient instances are
+// never cached — each resolution creates a new instance (AD-14: transient = New*()
+// method, no caching).
+func AddTransient[I any, Impl any](r *Registry) *Registry { return r }
+
+// AddTransientFactory records a transient service of interface I built by factory
+// (form B — AD-8 escape hatch). Like AddTransient it is a PURE static marker
+// (AD-7). Naming (D-6): distinct name for generator dispatch.
+func AddTransientFactory[I any](r *Registry, factory func(Provider) I) *Registry {
+	return r
+}

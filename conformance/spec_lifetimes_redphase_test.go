@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.2 (AC1/AC2/AC3) — conformance suite:
 // dual-provider lifetime spec cases + cross-provider differential equivalence.
 //
@@ -26,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/gonewx/godi"
+	"github.com/gonewx/godi/conformance/codegen"
 	"github.com/gonewx/godi/conformance/fakes"
 	"github.com/gonewx/godi/internal/testutil"
 	"github.com/gonewx/godi/runtime"
@@ -64,21 +63,16 @@ var rtFactoryLifetimes = ProviderFactory{
 }
 
 // cgFactoryLifetimes builds the codegen provider from the regenerated
-// container_gen.go (after Task 5 adds scoped/transient registrations to
-// conformance/codegen/registration.go + go generate).
-//
-// NOTE: this factory references codegen.NewRoot() which will fail until
-// the generated container is updated with scoped/transient support.
-// var cgFactoryLifetimes = ProviderFactory{
-//     Name: "codegen",
-//     Build: func(t *testing.T) Provider {
-//         t.Helper()
-//         root, err := codegen.NewRoot()
-//         testutil.NoError(t, err)
-//         return root
-//     },
-// }
-// Uncomment the above when codegen container is regenerated with lifetime support.
+// container_gen.go with scoped/transient registrations.
+var cgFactoryLifetimes = ProviderFactory{
+	Name: "codegen",
+	Build: func(t *testing.T) Provider {
+		t.Helper()
+		root, err := codegen.NewRoot()
+		testutil.NoError(t, err)
+		return root
+	},
+}
 
 // lifetimeSpecCases extends the spec suite with scoped/transient resolution
 // assertions. Each case is run against BOTH providers (Task 5). Pointer
@@ -193,7 +187,7 @@ var lifetimeSpecCases = []SpecCase{
 
 			testutil.True(t, t1 != t2,
 				"two transients must be different instances")
-			testutil.Equal(t, t1.ScopedDep(), t2.ScopedDep(),
+			testutil.True(t, t1.ScopedDep() == t2.ScopedDep(),
 				"AC2: both transients must share the SAME scoped dependency (root scope)")
 		},
 	},
@@ -208,10 +202,10 @@ func TestConformanceLifetimes_RuntimeProvider(t *testing.T) {
 }
 
 // TestConformanceLifetimes_CodegenProvider: run the lifetime spec cases against
-// the codegen provider. Uncomment cgFactoryLifetimes when ready.
-// func TestConformanceLifetimes_CodegenProvider(t *testing.T) {
-//     RunSuite(t, cgFactoryLifetimes, lifetimeSpecCases)
-// }
+// the codegen provider.
+func TestConformanceLifetimes_CodegenProvider(t *testing.T) {
+	RunSuite(t, cgFactoryLifetimes, lifetimeSpecCases)
+}
 
 // --- 2.2-SPEC-008 (AC3, P0) — Differential Equivalence ---------------------
 
@@ -221,23 +215,23 @@ func TestConformanceLifetimes_RuntimeProvider(t *testing.T) {
 // — never pointer identity across providers (R4).
 func TestConformanceLifetimes_DifferentialEquivalence(t *testing.T) {
 	// IsService must agree for all three lifetimes across both providers.
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) bool {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) bool {
 		return p.IsService(reflect.TypeFor[fakes.IFakeScopedService]())
 	})
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) bool {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) bool {
 		return p.IsService(reflect.TypeFor[fakes.IFakeTransientService]())
 	})
 
 	// Dynamic type name equivalence for resolved services.
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) string {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) string {
 		return dynTypeName(p.GetService(reflect.TypeFor[fakes.IFakeScopedService]()))
 	})
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) string {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) string {
 		return dynTypeName(p.GetService(reflect.TypeFor[fakes.IFakeTransientService]()))
 	})
 
 	// Scoped same/not-same conclusion as provider-stable observable.
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) bool {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) bool {
 		st := reflect.TypeFor[fakes.IFakeScopedService]()
 		rootScoped := p.GetService(st)
 		scope := p.CreateScope()
@@ -247,14 +241,10 @@ func TestConformanceLifetimes_DifferentialEquivalence(t *testing.T) {
 	})
 
 	// Transient same/not-same conclusion.
-	AssertEquivalent(t, rtFactoryLifetimes, rtFactoryLifetimes, func(p Provider) bool {
+	AssertEquivalent(t, rtFactoryLifetimes, cgFactoryLifetimes, func(p Provider) bool {
 		tt := reflect.TypeFor[fakes.IFakeTransientService]()
 		t1 := p.GetService(tt)
 		t2 := p.GetService(tt)
 		return t1 != t2 // must be true (different instances)
 	})
-
-	// NOTE: when cgFactoryLifetimes is ready, replace the second rtFactoryLifetimes
-	// with cgFactoryLifetimes in all AssertEquivalent calls above to get true
-	// cross-provider equivalence.
 }

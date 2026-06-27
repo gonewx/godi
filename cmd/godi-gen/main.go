@@ -120,11 +120,12 @@ func loadPackage(dir string) (*packages.Package, error) {
 // passes (index service types, then discover constructors), so the raw type
 // facts are captured here first in deterministic source order.
 type registration struct {
-	form     string     // "A" (AddSingleton[I,Impl]) or "B" (AddSingletonFactory[I])
-	pos      token.Pos  // marker position — sorted on for determinism (deferred 1.1)
-	iType    types.Type // service type (first type argument)
-	implType types.Type // form A only: implementation type (second type argument)
-	factory  ast.Expr   // form B only: the factory argument expression
+	form     string        // "A" (AddSingleton[I,Impl]) or "B" (AddSingletonFactory[I])
+	lifetime plan.Lifetime // derived from marker name: AddScoped*→Scoped, etc.
+	pos      token.Pos     // marker position — sorted on for determinism (deferred 1.1)
+	iType    types.Type    // service type (first type argument)
+	implType types.Type    // form A only: implementation type (second type argument)
+	factory  ast.Expr      // form B only: the factory argument expression
 }
 
 // buildRegistry turns the package's DSL markers into a validated-input
@@ -141,8 +142,9 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 	// surfaced separately as collectRegistrations stderr warnings.
 	if len(regs) == 0 {
 		return nil, fmt.Errorf("no godi DSL registrations recognized in package %q: "+
-			"expected at least one godi.AddSingleton[I, Impl] or godi.AddSingletonFactory[I] "+
-			"marker imported from %q with explicit type arguments", pkg.PkgPath, godiPkgPath)
+			"expected at least one godi.Add{Singleton,Scoped,Transient}[I, Impl] or "+
+			"godi.Add{Singleton,Scoped,Transient}Factory[I] marker imported from %q "+
+			"with explicit type arguments", pkg.PkgPath, godiPkgPath)
 	}
 
 	// Pass 1: index every service's type(s) -> its service Name, so a
@@ -167,7 +169,7 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		s := plan.Service{
 			Name:     serviceName(rg),
 			GoType:   renderType(rg.iType, imports),
-			Lifetime: plan.Singleton,
+			Lifetime: rg.lifetime,
 		}
 
 		if rg.form == "B" {
@@ -177,7 +179,7 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			if !token.IsIdentifier(s.Name) {
 				genErrs = append(genErrs, fmt.Sprintf(
 					"form-B service: type argument %s is not a named type — "+
-						"AddSingletonFactory[I] requires I to be a named interface "+
+						"Add{Lifetime}Factory[I] requires I to be a named interface "+
 						"(would emit illegal field name f_%s)", s.GoType, s.Name))
 				continue
 			}
@@ -300,15 +302,15 @@ func collectRegistrations(pkg *packages.Package) []registration {
 			ta := inst.TypeArgs
 
 			switch fn.Name() {
-			case "AddSingleton":
+			case "AddSingleton", "AddScoped", "AddTransient":
 				if ta.Len() != 2 {
 					return true
 				}
 				out = append(out, registration{
-					form: "A", pos: call.Pos(),
+					form: "A", lifetime: lifetimeFromName(fn.Name()), pos: call.Pos(),
 					iType: ta.At(0), implType: ta.At(1),
 				})
-			case "AddSingletonFactory":
+			case "AddSingletonFactory", "AddScopedFactory", "AddTransientFactory":
 				if ta.Len() != 1 {
 					return true
 				}
@@ -317,7 +319,7 @@ func collectRegistrations(pkg *packages.Package) []registration {
 					factory = call.Args[1]
 				}
 				out = append(out, registration{
-					form: "B", pos: call.Pos(),
+					form: "B", lifetime: lifetimeFromName(fn.Name()), pos: call.Pos(),
 					iType: ta.At(0), factory: factory,
 				})
 			}
@@ -379,7 +381,25 @@ func calleeName(call *ast.CallExpr) string {
 
 // isDSLName reports whether name is one of godi's DSL marker function names.
 func isDSLName(name string) bool {
-	return name == "AddSingleton" || name == "AddSingletonFactory"
+	switch name {
+	case "AddSingleton", "AddSingletonFactory",
+		"AddScoped", "AddScopedFactory",
+		"AddTransient", "AddTransientFactory":
+		return true
+	}
+	return false
+}
+
+// lifetimeFromName maps a DSL marker function name to its plan.Lifetime.
+func lifetimeFromName(name string) plan.Lifetime {
+	switch {
+	case strings.HasPrefix(name, "AddTransient"):
+		return plan.Transient
+	case strings.HasPrefix(name, "AddScoped"):
+		return plan.Scoped
+	default:
+		return plan.Singleton
+	}
 }
 
 // warnUnrecognized emits a build-time warning to stderr when a call that looks

@@ -25,8 +25,8 @@ import (
 )
 
 // conformanceRegistry mirrors conformance/codegen/registration.go, the source
-// the //go:generate CLI analyzes: a FakeService singleton and a FakeConsumer
-// singleton that depends on it (Story 2.1).
+// the //go:generate CLI analyzes: singletons FakeService/FakeConsumer, scoped
+// FakeScopedService, and transients FakeTransientService/FakeTransientWithScopedDep.
 func conformanceRegistry() *plan.Registry {
 	reg := plan.NewRegistry()
 	reg.Imports = []string{"github.com/gonewx/godi/conformance/fakes"}
@@ -42,6 +42,25 @@ func conformanceRegistry() *plan.Registry {
 		Ctor:     "fakes.NewFakeConsumer",
 		Lifetime: plan.Singleton,
 		Deps:     []string{"FakeService"},
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeScopedService",
+		GoType:   "fakes.IFakeScopedService",
+		Ctor:     "fakes.NewFakeScopedService",
+		Lifetime: plan.Scoped,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeTransientService",
+		GoType:   "fakes.IFakeTransientService",
+		Ctor:     "fakes.NewFakeTransientService",
+		Lifetime: plan.Transient,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeTransientWithScopedDep",
+		GoType:   "fakes.IFakeTransientWithScopedDep",
+		Ctor:     "fakes.NewFakeTransientWithScopedDep",
+		Lifetime: plan.Transient,
+		Deps:     []string{"FakeScopedService"},
 	})
 	return reg
 }

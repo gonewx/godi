@@ -145,3 +145,55 @@ func (r *Registry) SingletonsTopo() []Service {
 	}
 	return out
 }
+
+// ScopedTopo returns the registered scoped services in dependency order: every
+// scoped service appears AFTER each scoped service it depends on, so CreateScope
+// can wire them top-to-bottom. Singleton dependencies are NOT included (they are
+// wired separately in NewRoot and accessed via s.root.f_X).
+//
+// The algorithm mirrors SingletonsTopo: deterministic depth-first post-order
+// over registration order, restricted to Scoped lifetime services. A visited
+// set dedups shared dependencies.
+//
+// Precondition: Validate has passed (no missing deps, no cycles).
+func (r *Registry) ScopedTopo() []Service {
+	visited := make(map[string]struct{}, len(r.services))
+	out := make([]Service, 0, len(r.services))
+
+	var visit func(s Service)
+	visit = func(s Service) {
+		if _, done := visited[s.Name]; done {
+			return
+		}
+		visited[s.Name] = struct{}{}
+		for _, dep := range s.Deps {
+			d, ok := r.byName[dep]
+			if !ok || d.Lifetime != Scoped {
+				continue
+			}
+			visit(d)
+		}
+		out = append(out, s)
+	}
+
+	for _, s := range r.services {
+		if s.Lifetime != Scoped {
+			continue
+		}
+		visit(s)
+	}
+	return out
+}
+
+// Transients returns all registered transient services in registration order.
+// Transients have no dependency-ordering need (each New*() is independent), but
+// a stable enumeration order is required for deterministic code generation (AD-14).
+func (r *Registry) Transients() []Service {
+	out := make([]Service, 0)
+	for _, s := range r.services {
+		if s.Lifetime == Transient {
+			out = append(out, s)
+		}
+	}
+	return out
+}

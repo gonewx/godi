@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.2 (AC1) — plan package: ScopedTopo()
 // and Transients() lifetime-aware query methods.
 //

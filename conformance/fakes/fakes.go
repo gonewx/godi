@@ -54,3 +54,52 @@ func (c *FakeConsumer) Dependency() IFakeService { return c.dep }
 // r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService); the runtime factory
 // wraps it in a form-B closure that resolves the dependency through the provider.
 func NewFakeConsumer(dep IFakeService) *FakeConsumer { return &FakeConsumer{dep: dep} }
+
+// IFakeScopedService is the scoped-lifetime fixture used by Story 2.2 lifetime
+// conformance tests. Each scope creates its own instance; root acts as root
+// scope (D-2).
+type IFakeScopedService interface {
+	isFakeScopedService()
+}
+
+// FakeScopedService has a padding field to ensure distinct heap allocations
+// produce distinct pointer identities (Go zero-sized structs may share one
+// address).
+type FakeScopedService struct{ _ int }
+
+func (*FakeScopedService) isFakeScopedService() {}
+
+func NewFakeScopedService() *FakeScopedService { return &FakeScopedService{} }
+
+// IFakeTransientService is the transient-lifetime fixture used by Story 2.2.
+// Every resolution creates a new instance, never cached (AD-14).
+type IFakeTransientService interface {
+	isFakeTransientService()
+}
+
+type FakeTransientService struct{ _ int }
+
+func (*FakeTransientService) isFakeTransientService() {}
+
+func NewFakeTransientService() *FakeTransientService { return &FakeTransientService{} }
+
+// IFakeTransientWithScopedDep is the AC2 fixture: a transient service that
+// depends on a scoped service. Tests verify that two transient resolutions
+// within the same scope yield different transient instances but share the
+// same scoped dependency.
+type IFakeTransientWithScopedDep interface {
+	isFakeTransientWithScopedDep()
+	ScopedDep() IFakeScopedService
+}
+
+type FakeTransientWithScopedDep struct {
+	dep IFakeScopedService
+	_   int
+}
+
+func (*FakeTransientWithScopedDep) isFakeTransientWithScopedDep()   {}
+func (f *FakeTransientWithScopedDep) ScopedDep() IFakeScopedService { return f.dep }
+
+func NewFakeTransientWithScopedDep(dep IFakeScopedService) *FakeTransientWithScopedDep {
+	return &FakeTransientWithScopedDep{dep: dep}
+}

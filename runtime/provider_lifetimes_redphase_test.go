@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.2 (AC1/AC2) — runtime provider: scoped
 // and transient resolution + real CreateScope + nesting.
 //
@@ -271,7 +269,7 @@ func TestRT_TransientDependsOnScoped_SameScopeReusesScoped(t *testing.T) {
 	t2 := p.GetService(tt).(iTransientWithScopedDep)
 
 	testutil.True(t, t1 != t2, "two transients must be different instances")
-	testutil.Equal(t, t1.ScopedDep(), t2.ScopedDep(),
+	testutil.True(t, t1.ScopedDep() == t2.ScopedDep(),
 		"AC2: both transients must share the SAME scoped dependency within root scope")
 
 	// Resolve from a child scope — different scoped dep than root
