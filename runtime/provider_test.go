@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 1.3 — the reflect-free runtime provider
 // minimal slice: single SINGLETON resolution (shared instance), Get[T] miss,
 // and idempotent Close (AD-1 / AD-13 / AD-14 / AD-16 / AD-17).
@@ -244,4 +242,42 @@ func TestKeyed_HonestMinimalBehavior(t *testing.T) {
 
 	testutil.Nil(t, p.GetKeyedService(lt, "some-key")) // no keyed services (Epic 3)
 	testutil.Nil(t, p.GetKeyedServices(lt, "some-key"))
+}
+
+// --- 1.3-UNIT-009 (AC4, P2) -------------------------------------------------
+
+// TestScope_DelegatesFullResolutionSurface: the minimal child scope (D3) exposes
+// the SAME resolution surface as root by delegating every method to it —
+// IsService, GetKeyedService (nil-key routing, AD-17), GetKeyedServices, and
+// nested CreateScope all behave identically through a scope as through root. A
+// grandchild scope still shares the root singleton (AD-1). This pins the scope's
+// honest minimal behavior across its whole face, not just GetService/Close.
+func TestScope_DelegatesFullResolutionSurface(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return &logger{} })
+	p := b.Build()
+	t.Cleanup(func() { _ = p.Close() })
+
+	lt := reflect.TypeFor[*logger]()
+	rootInstance, _ := p.GetService(lt).(*logger)
+
+	scope := p.CreateScope()
+	t.Cleanup(func() { _ = scope.Close() })
+
+	// IsService delegates to root.
+	testutil.True(t, scope.IsService(lt), "scope.IsService must mirror root")
+	testutil.True(t, !scope.IsService(reflect.TypeFor[*closableLogger]()), "scope reports miss like root")
+
+	// Keyed methods delegate: nil key routes to the unkeyed singleton (AD-17),
+	// a non-nil key misses, and keyed collections are nil (Epic 3).
+	viaNilKey, _ := scope.GetKeyedService(lt, nil).(*logger)
+	testutil.Equal(t, viaNilKey, rootInstance)
+	testutil.Nil(t, scope.GetKeyedService(lt, "some-key"))
+	testutil.Nil(t, scope.GetKeyedServices(lt, "some-key"))
+
+	// Nested CreateScope still shares the root singleton (AD-1).
+	grandchild := scope.CreateScope()
+	t.Cleanup(func() { _ = grandchild.Close() })
+	inGrandchild, _ := grandchild.GetService(lt).(*logger)
+	testutil.Equal(t, inGrandchild, rootInstance)
 }
