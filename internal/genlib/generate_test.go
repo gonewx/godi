@@ -38,6 +38,7 @@ import (
 // canonical minimum-viable registration for Generate.
 func singleServiceRegistry() *plan.Registry {
 	reg := plan.NewRegistry()
+	reg.Imports = []string{"example.com/logger"}
 	reg.Service(plan.Service{
 		Name:     "Logger",
 		GoType:   "*logger.Logger",

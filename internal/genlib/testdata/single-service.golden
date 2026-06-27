@@ -4,6 +4,7 @@ package container
 import (
 	"reflect"
 
+	"example.com/logger"
 	"github.com/gonewx/godi"
 )
 

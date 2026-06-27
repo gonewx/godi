@@ -78,7 +78,9 @@ func emitHeader(buf *bytes.Buffer, pkgName string) {
 // godi.Scope); userImports carries service-package paths. Paths are deduped and
 // service packages sorted for stable output.
 func emitImports(buf *bytes.Buffer, userImports []string) {
-	uniq := make(map[string]struct{}, len(userImports))
+	uniq := make(map[string]struct{}, len(userImports)+2)
+	uniq["reflect"] = struct{}{}
+	uniq["github.com/gonewx/godi"] = struct{}{}
 	sorted := make([]string, 0, len(userImports))
 	for _, p := range userImports {
 		if p == "" {
