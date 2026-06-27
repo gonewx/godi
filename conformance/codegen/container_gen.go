@@ -10,16 +10,18 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_FakeService fakes.IFakeService
+	f_FakeService  fakes.IFakeService
+	f_FakeConsumer fakes.IFakeConsumer
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly (AD-1).
-func NewRoot() *Root {
+// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
+func NewRoot() (*Root, error) {
 	r := &Root{}
 	r.f_FakeService = fakes.NewFakeService()
-	return r
+	r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService)
+	return r, nil
 }
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
@@ -27,6 +29,8 @@ func (r *Root) GetService(t reflect.Type) any {
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
 		return r.f_FakeService
+	case reflect.TypeFor[fakes.IFakeConsumer]():
+		return r.f_FakeConsumer
 	}
 	return nil
 }
@@ -34,6 +38,8 @@ func (r *Root) GetService(t reflect.Type) any {
 func (r *Root) IsService(t reflect.Type) bool {
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return true
 	}
 	return false

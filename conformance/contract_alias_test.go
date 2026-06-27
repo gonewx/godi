@@ -25,7 +25,9 @@ var _ godi.Provider = (*codegen.Root)(nil)
 // container resolves IFakeService through the godi.Provider interface, proving
 // the conformance suite references the single source of truth (AD-14 / AD-16).
 func TestContract_CodegenFlowsThroughGodiProvider(t *testing.T) {
-	var p godi.Provider = codegen.NewRoot()
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
+	var p godi.Provider = root
 	t.Cleanup(func() { _ = p.Close() })
 
 	got := p.GetService(reflect.TypeFor[fakes.IFakeService]())

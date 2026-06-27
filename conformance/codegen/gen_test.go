@@ -1,6 +1,11 @@
-// Conformance tests for Story 1.5 — codegen container: regeneration-comparison
-// guard (AD-14 deterministic output), behavior smoke tests, and dependency
-// direction self-check (AD-2).
+// Conformance tests for the codegen container: regeneration-comparison guard
+// (AD-14 deterministic output), behavior smoke tests, and dependency-direction
+// self-check (AD-2).
+//
+// Story 2.1 grows the registration to a dependency graph — FakeService plus a
+// FakeConsumer that depends on it — produced by the real cmd/godi-gen CLI behind
+// //go:generate (registration.go). NewRoot now returns (*Root, error) (D-1) and
+// the regeneration guard pins the real generate output byte-for-byte.
 package codegen_test
 
 import (
@@ -19,6 +24,9 @@ import (
 	"github.com/gonewx/godi/plan"
 )
 
+// conformanceRegistry mirrors conformance/codegen/registration.go, the source
+// the //go:generate CLI analyzes: a FakeService singleton and a FakeConsumer
+// singleton that depends on it (Story 2.1).
 func conformanceRegistry() *plan.Registry {
 	reg := plan.NewRegistry()
 	reg.Imports = []string{"github.com/gonewx/godi/conformance/fakes"}
@@ -28,14 +36,22 @@ func conformanceRegistry() *plan.Registry {
 		Ctor:     "fakes.NewFakeService",
 		Lifetime: plan.Singleton,
 	})
+	reg.Service(plan.Service{
+		Name:     "FakeConsumer",
+		GoType:   "fakes.IFakeConsumer",
+		Ctor:     "fakes.NewFakeConsumer",
+		Lifetime: plan.Singleton,
+		Deps:     []string{"FakeService"},
+	})
 	return reg
 }
 
-// --- 1.5-GEN-001 (AC3, P0) ---------------------------------------------------
+// --- 2.1-CG-001 (AC3, P0) ----------------------------------------------------
 
 // TestCodegen_RegenComparison: the committed container_gen.go must be
-// byte-identical to a fresh genlib.Generate run. Drift means someone
-// hand-forked the codegen container — violating AD-14.
+// byte-identical to a fresh genlib.Generate run for the dependency registration —
+// drift means a hand-fork (AD-14). This guards that the real //go:generate output
+// stays deterministic.
 func TestCodegen_RegenComparison(t *testing.T) {
 	reg := conformanceRegistry()
 	freshSrc, err := genlib.Generate(reg, "codegen")
@@ -49,46 +65,68 @@ func TestCodegen_RegenComparison(t *testing.T) {
 	testutil.Equal(t, string(freshSrc), string(committed))
 }
 
-// --- 1.5-GEN-002 (AC3, P0) ---------------------------------------------------
+// --- 2.1-CG-002 (AC3, P0) ----------------------------------------------------
 
-// TestCodegen_GetService_IFakeService: the pre-generated codegen container
-// resolves IFakeService to a non-nil *fakes.FakeService (AD-1/AD-16).
-func TestCodegen_GetService_IFakeService(t *testing.T) {
-	root := codegen.NewRoot()
+// TestCodegen_NewRootResolvesServices: the regenerated container adopts
+// NewRoot() (*Root, error) (D-1) and resolves both the leaf FakeService and the
+// dependency-injected FakeConsumer to their non-nil concrete types (AD-1/AD-16).
+func TestCodegen_NewRootResolvesServices(t *testing.T) {
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
 
-	got := root.GetService(reflect.TypeFor[fakes.IFakeService]())
-	testutil.NotNil(t, got)
-	testutil.Equal(t, reflect.TypeOf(got).String(), "*fakes.FakeService")
-}
+	svc := root.GetService(reflect.TypeFor[fakes.IFakeService]())
+	testutil.NotNil(t, svc)
+	testutil.Equal(t, reflect.TypeOf(svc).String(), "*fakes.FakeService")
 
-// --- 1.5-GEN-003 (AC3, P0) ---------------------------------------------------
+	cons := root.GetService(reflect.TypeFor[fakes.IFakeConsumer]())
+	testutil.NotNil(t, cons)
+	testutil.Equal(t, reflect.TypeOf(cons).String(), "*fakes.FakeConsumer")
+}
 
 // TestCodegen_IsService_Consistency: IsService must agree with GetService
 // (AD-16 self-consistency).
 func TestCodegen_IsService_Consistency(t *testing.T) {
-	root := codegen.NewRoot()
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
 
 	testutil.True(t, root.IsService(reflect.TypeFor[fakes.IFakeService]()),
 		"registered type must report IsService=true")
+	testutil.True(t, root.IsService(reflect.TypeFor[fakes.IFakeConsumer]()),
+		"registered dependency consumer must report IsService=true")
 	testutil.True(t, !root.IsService(reflect.TypeFor[int]()),
 		"unregistered type must report IsService=false")
 }
 
-// --- 1.5-GEN-004 (AC3, P1) ---------------------------------------------------
-
 // TestCodegen_Close_Idempotent: Close is idempotent (AD-16).
 func TestCodegen_Close_Idempotent(t *testing.T) {
-	root := codegen.NewRoot()
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
 	testutil.NoError(t, root.Close())
 	testutil.NoError(t, root.Close())
 }
 
-// --- 1.5-GEN-005 (AC3/AC4, P0) -----------------------------------------------
+// TestCodegen_SingletonSharedNotReconstructed: the dependency injected into
+// FakeConsumer is the SAME singleton the container resolves directly — exactly
+// one constructor on the assembly path (AD-8). Pointer identity within one
+// provider is legal (R4 forbids it only across providers).
+func TestCodegen_SingletonSharedNotReconstructed(t *testing.T) {
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
 
-// TestCodegen_DependencyDirection: the generated container must NOT import
-// plan, genlib, runtime, or cmd (AD-2 dependency direction).
+	var direct any = root.GetService(reflect.TypeFor[fakes.IFakeService]())
+	var injected any = root.GetService(reflect.TypeFor[fakes.IFakeConsumer]()).(fakes.IFakeConsumer).Dependency()
+	testutil.NotNil(t, direct)
+	testutil.Equal(t, direct, injected)
+}
+
+// --- 2.1-CG-003 (AC3, P1) ----------------------------------------------------
+
+// TestCodegen_DependencyDirection: the generated container must NOT import plan,
+// genlib, runtime, or cmd (AD-2 dependency direction) — a regression guard that
+// the richer dependency wiring did not pull in the generator's packages.
 func TestCodegen_DependencyDirection(t *testing.T) {
 	deps := goListDeps(t, "github.com/gonewx/godi/conformance/codegen")
 	for _, dep := range deps {

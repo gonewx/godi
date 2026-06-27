@@ -1,25 +1,13 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.1 (AC1) — form-B DSL marker contract.
+// Story 2.1 (AC1) — form-B DSL marker contract (AddSingletonFactory).
 //
 // Form B is the escape hatch (AD-8): when an implementation has no `New{Impl}`
 // constructor for form-A discovery, the developer registers it with a factory.
 // Go has NO generic-function overloading (D-4), so the form-B marker CANNOT
 // share the name `AddSingleton` with form A — it is `AddSingletonFactory`, a
 // distinct static marker the generator recognizes by name and reads the factory
-// argument expression from (AD-7, never executed).
-//
-// RED: godi.AddSingletonFactory does not exist yet → compilation fails under
-// `-tags atdd_redphase`. Activation: implement the marker in dsl.go, then delete
-// the //go:build line above and the blank line after it.
-//
-// API CONTRACT THIS SCAFFOLD ASSUMES (D-4):
+// argument expression from (AD-7, never executed):
 //
 //	godi.AddSingletonFactory[I any](r *godi.Registry, factory func(godi.Provider) I) *godi.Registry
-//
-// If the dev pins a different name (e.g. AddSingletonF), update the calls below —
-// the BEHAVIOR asserted (pure static marker, returns receiver, chains with form
-// A) is the contract and must not change.
 package godi_test
 
 import (

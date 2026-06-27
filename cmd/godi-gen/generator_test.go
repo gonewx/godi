@@ -1,46 +1,22 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.1 (AC1/AC2) — the real godi-gen CLI:
-// static-analysis constructor discovery + the missing-New{Impl} gen-time error
-// gate (Task 3). This is the first story where cmd/godi-gen does real work; its
-// main() is a placeholder today.
+// Story 2.1 (AC1/AC2) — the real godi-gen CLI: static-analysis constructor
+// discovery + the missing-New{Impl} gen-time error gate (Task 3). This is the
+// first story where cmd/godi-gen does real work (its main() was a placeholder).
 //
 // The generator loads a registration package with go/packages, reads type facts
 // with go/types (reusing the spike's Info.Instances path), discovers the unique
-// `New{Impl}` constructor for each form-A service, reads its dependencies left
-// to right from the signature, detects a trailing error, runs plan.Validate, and
-// emits via genlib.Generate. A form-A service with no `New{Impl}` is a gen-time
-// error that hints form B and emits ZERO bytes (NFR2 hard gate, AD-8).
+// New{Impl} constructor for each form-A service, reads its dependencies left to
+// right from the signature, detects a trailing error, runs plan.Validate (inside
+// genlib.Generate), and emits the container. A form-A service with no New{Impl}
+// is a gen-time error that hints form B and emits ZERO bytes (NFR2, AD-8).
 //
-// RED: the generator entry `generate` does not exist yet (main is an empty
-// placeholder) → compilation fails under `-tags atdd_redphase`. Activation:
-// implement the CLI in cmd/godi-gen + add the testdata fixtures below, then
-// delete the //go:build line and the blank line after it.
+// generate(srcDir, pkgName) ([]byte, error) is the testable entry point:
+//   - legal form-A graph  -> emitted container source, nil error
+//   - form-A with no New{Impl} -> nil output + error hinting form B
+//   - static analysis NEVER executes user code (AD-7)
 //
-// API CONTRACT THIS SCAFFOLD ASSUMES:
-//
-//	func generate(srcDir, pkgName string) ([]byte, error)
-//	  - legal form-A graph → emitted container source, nil error
-//	  - form-A service with no New{Impl} → nil output + error hinting form B
-//	  - static analysis NEVER executes user code (AD-7)
-//
-// If the dev pins a different entry shape (e.g. run([]string) int with os.Exit),
-// update the calls — the BEHAVIORS asserted (discovery+deps, form-B hint on
-// miss, zero-byte output on error, non-execution) are the contract.
-//
-// REQUIRED testdata fixtures (dev creates in the green phase; each is test
-// INPUT under testdata/, never part of the module build — like testdata/spike):
-//   - testdata/deps: form-A registration of Service + Consumer where
-//     NewConsumer(IService) (and optionally a trailing error) wires a dependency;
-//     include an init() panic tripwire to prove non-execution (AD-7).
-//   - testdata/nonewimpl: form-A registration of a type with NO New{Impl}
-//     constructor → triggers the AC2 error gate.
-//   - testdata/formb: AddSingletonFactory registration whose factory expression
-//     the generator inlines (D-2).
-//
-// ACTIVATION end-to-end check for AC2's non-zero exit (run after green):
-//
-//	GOWORK=off go run . testdata/nonewimpl ; echo "exit=$?"   # exit must be non-zero
+// The testdata fixtures (deps / nonewimpl / formb) are test INPUT under
+// testdata/, never part of the module build. AC2's non-zero exit is verified
+// end-to-end with: GOWORK=off go run . -pkg codegen testdata/nonewimpl
 package main
 
 import (

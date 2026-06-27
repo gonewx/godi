@@ -20,11 +20,16 @@ import (
 // the dispatch key only (Tier B, AD-13); construction is the direct Ctor call,
 // never reflect.New / reflect.Value.Call.
 //
-// Story 1.5 evolves this from the 1.4 self-contained-`any` skeleton: emit now
+// Story 1.5 evolved this from the 1.4 self-contained-`any` skeleton: emit
 // imports the host godi package + each service package in reg.Imports, the
 // fields are typed (GoType), and the constructor is the form-A Ctor string.
-// Story 2.1 replaces the stringly-typed inputs (GoType / Ctor / Imports) with
-// go/types facts (AD-7); the emit shape stays the same.
+// Story 2.1 evolves the emit SHAPE for dependency wiring: NewRoot becomes
+// (*Root, error) (D-1), singletons are wired in dependency order with their
+// dependencies passed as constructor arguments (r.f_X = Ctor(r.f_Dep)), a
+// trailing constructor error propagates, and a form-B factory expression is
+// inlined (D-2). The stringly-typed inputs (GoType / Ctor / FactoryExpr /
+// Imports) are still emit inputs, now derived from go/types facts by the
+// static analyzer cmd/godi-gen rather than hand-written (AD-7).
 func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	if errs := reg.Validate(); len(errs) > 0 {
 		msgs := make([]string, len(errs))
@@ -36,13 +41,18 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 
 	var buf bytes.Buffer
 	services := reg.Services()
+	// Two views of the singletons: registration order for the struct fields and
+	// the reflect.Type dispatch (stable, declaration-like), and dependency order
+	// for the wiring in NewRoot so a dependency's field is built before it is
+	// passed as a constructor argument (Story 2.1, AD-8).
 	singletons := filterSingletons(services)
+	wiring := reg.SingletonsTopo()
 
 	emitHeader(&buf, pkgName)
 	emitImports(&buf, reg.Imports)
 	emitRootStruct(&buf, singletons)
 	emitProviderAssertion(&buf)
-	emitNewRoot(&buf, singletons)
+	emitNewRoot(&buf, wiring)
 	emitGetService(&buf, singletons)
 	emitIsService(&buf, singletons)
 	emitGetKeyedService(&buf)
@@ -119,18 +129,71 @@ func emitProviderAssertion(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "var _ godi.Provider = (*Root)(nil)\n\n")
 }
 
-// emitNewRoot writes the eager singleton wiring (AD-1, NFR8). Every singleton
-// is constructed exactly once at NewRoot time; subsequent GetService is a
-// field load, never a construction.
+// emitNewRoot writes the eager singleton wiring (AD-1, NFR8). Every singleton is
+// constructed exactly once at NewRoot time, in dependency order (the input slice
+// is reg.SingletonsTopo()), so a dependency's field is already populated when it
+// is passed as a constructor argument; subsequent GetService is a field load,
+// never a construction.
+//
+// The signature is NewRoot() (*Root, error) (D-1, unified across both providers):
+// a constructor with a trailing error return (Service.CtorErr) is emitted in the
+// comma-err form with an early `return nil, err`, propagating the failure out of
+// NewRoot (AD-8 error pass-through). A no-error graph still returns (r, nil) so
+// the conformance suite asserts one signature regardless of the input graph.
+//
+// Wiring shapes by service kind:
+//   - form A, no error:  r.f_X = Ctor(r.f_Dep1, r.f_Dep2)
+//   - form A, error:     r.f_X, err = Ctor(...); if err != nil { return nil, err }
+//   - form B (D-2):      r.f_X = (factoryExpr)(r)   — the inlined factory closure
+//     resolves its own dependencies through the *Root provider at runtime.
 func emitNewRoot(buf *bytes.Buffer, singletons []plan.Service) {
-	fmt.Fprintf(buf, "// NewRoot constructs and wires all singletons eagerly (AD-1).\n")
-	fmt.Fprintf(buf, "func NewRoot() *Root {\n")
-	fmt.Fprintf(buf, "\tr := &Root{}\n")
+	needsErr := false
 	for _, s := range singletons {
-		fmt.Fprintf(buf, "\tr.f_%s = %s()\n", s.Name, s.Ctor)
+		if s.CtorErr {
+			needsErr = true
+			break
+		}
 	}
-	fmt.Fprintf(buf, "\treturn r\n")
+
+	fmt.Fprintf(buf, "// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).\n")
+	fmt.Fprintf(buf, "func NewRoot() (*Root, error) {\n")
+	fmt.Fprintf(buf, "\tr := &Root{}\n")
+	if needsErr {
+		fmt.Fprintf(buf, "\tvar err error\n")
+	}
+	for _, s := range singletons {
+		if s.FactoryExpr != "" {
+			// Form B escape hatch (D-2): inline the factory expression, passing r
+			// (a godi.Provider) so the closure resolves its dependencies at runtime.
+			fmt.Fprintf(buf, "\tr.f_%s = (%s)(r)\n", s.Name, s.FactoryExpr)
+			continue
+		}
+		if s.CtorErr {
+			fmt.Fprintf(buf, "\tr.f_%s, err = %s(%s)\n", s.Name, s.Ctor, depArgs(s.Deps))
+			fmt.Fprintf(buf, "\tif err != nil {\n")
+			fmt.Fprintf(buf, "\t\treturn nil, err\n")
+			fmt.Fprintf(buf, "\t}\n")
+			continue
+		}
+		fmt.Fprintf(buf, "\tr.f_%s = %s(%s)\n", s.Name, s.Ctor, depArgs(s.Deps))
+	}
+	fmt.Fprintf(buf, "\treturn r, nil\n")
 	fmt.Fprintf(buf, "}\n\n")
+}
+
+// depArgs renders a singleton's dependencies as the constructor argument list.
+// Each dep is another singleton's Name, accessed through its already-built Root
+// field as r.f_<Dep> (singletons live in Root fields — AD-1). Empty deps yield
+// an empty string, so a no-dep constructor emits as Ctor().
+func depArgs(deps []string) string {
+	if len(deps) == 0 {
+		return ""
+	}
+	parts := make([]string, len(deps))
+	for i, d := range deps {
+		parts[i] = "r.f_" + d
+	}
+	return strings.Join(parts, ", ")
 }
 
 // emitGetService writes the reflect.Type → field dispatch (Tier B, AD-13).

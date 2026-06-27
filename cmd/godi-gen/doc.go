@@ -25,10 +25,18 @@
 //     TestImplements), not proven by a test here. Story 1.4 adds the first real
 //     Disposable-detection assertion on the go/types path.
 //
-// Story 1.4 replaces the throwaway spike emitter with the real layered generator
-// (go/packages load -> plan.Validate -> genlib emit). The spike artifact is
-// disposable; only these API facts and the "no blocker" conclusion carry over.
+// Story 1.4 archived the real layered generator design (go/packages load ->
+// plan.Validate -> genlib emit). The spike artifact is disposable; only these
+// API facts and the "no blocker" conclusion carry over.
 //
-// No //go:generate directive is wired here or anywhere else (regression risk
-// R1): the CI Generate gate stays a clean no-op until Story 1.4.
+// # Story 2.1: the real CLI lands
+//
+// main.go is no longer a placeholder. The generator loads a registration package
+// (go/packages), reads type facts (go/types: Info.Instances for the
+// AddSingleton[I,Impl] / AddSingletonFactory[I] markers; constructor-signature
+// reading for New{Impl} dependency discovery and trailing-error detection;
+// types.Implements for Disposable), builds a plan.Registry, and emits through the
+// single code-emission path genlib.Generate. A form-A service with no New{Impl}
+// is rejected at generation time with zero output and a non-zero exit (NFR2,
+// AD-3). The conformance/codegen package wires this behind //go:generate.
 package main

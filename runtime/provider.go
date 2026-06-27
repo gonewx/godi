@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -8,20 +9,30 @@ import (
 )
 
 // root is the reflect-free runtime provider — the compliance oracle (AD-14).
-// This story delivers its minimal slice: a single SINGLETON resolved by a
-// form-B closure, an honest miss for unregistered types, and an idempotent
-// Close. Scoped/transient lifetimes, IEnumerable, keyed services and the LIFO
-// disposer are out of scope (Epic 2/3, Story 2.3).
+// Story 2.1 grows it to singletons WITH dependencies: a singleton's factory may
+// resolve other singletons through the provider, so wiring must be independent
+// of registration / map-iteration order. Scoped/transient lifetimes,
+// IEnumerable, keyed services and the LIFO disposer remain out of scope (Epic
+// 2.2/2.4, Story 2.3).
 //
 // Lifetime is encoded by WHERE the instance lives (AD-1): a singleton is a Root
-// field, so it is cached once in the singletons map and every resolve returns
-// that same cached value. reflect.Type is used ONLY as a dispatch key (Tier B,
-// AD-13); construction is performed by the closure (`&Logger{}`), never by
-// reflect.New / reflect.Value.Call.
+// field, cached once and returned identically on every resolve. reflect.Type is
+// used ONLY as a dispatch key (Tier B, AD-13); construction is performed by the
+// closure, never by reflect.New / reflect.Value.Call.
+//
+// Materialization is lazy-memoize (D-3): GetService builds a singleton on first
+// access and caches it, so a dependent's factory recursively materializes its
+// dependency regardless of map order — fixing the deferred-1.3 bug where eager
+// map-order iteration could hand a factory a not-yet-built (nil) dependency.
+// Build then forces ALL singletons, so the graph is fully constructed when Build
+// returns (eager completion, NFR8). After Build, GetService is a pure cache hit.
 type root struct {
-	// singletons holds every singleton instance, eagerly materialized at Build()
-	// time (D2). reflect.Type is the dispatch key (Tier B, AD-13); the stored
-	// value is whatever the closure constructed.
+	// factories is the lazy source: each singleton's closure keyed by its
+	// reflect.Type. GetService consults it on a cache miss.
+	factories map[reflect.Type]func(godi.Provider) any
+	// singletons is the materialization cache. Build fills it completely; a
+	// later GetService is a pure lookup. reflect.Type is the dispatch key (Tier
+	// B, AD-13); the stored value is whatever the closure constructed.
 	singletons map[reflect.Type]any
 	// closeOnce gates Close so the release body runs at most once (D4). This
 	// story builds no LIFO disposer (Story 2.3) — the gate is the seam for it.
@@ -34,16 +45,31 @@ type root struct {
 var _ godi.Provider = (*root)(nil)
 
 // GetService returns the singleton registered for t, or nil on a miss (AD-16).
-// reflect.Type is only the map dispatch key; no reflective construction happens
-// here (AD-13).
+// On a cache hit it returns the stored instance; on a miss it materializes the
+// singleton via its factory and caches it (lazy-memoize, D-3). The factory may
+// call GetService for its own dependencies, which recursively materializes them
+// — so a dependent built before its dependency still wires correctly, regardless
+// of map-iteration order. reflect.Type is only the dispatch key; construction is
+// the closure's, never reflective (AD-13).
 func (r *root) GetService(t reflect.Type) any {
-	return r.singletons[t]
+	if v, ok := r.singletons[t]; ok {
+		return v
+	}
+	factory, ok := r.factories[t]
+	if !ok {
+		return nil // honest miss: unregistered type (AD-16)
+	}
+	v := factory(r)
+	r.singletons[t] = v
+	return v
 }
 
 // IsService reports whether t resolves to a registered singleton (CAP-6). It is
-// self-consistent with GetService and Get[T]'s miss semantics (AD-16).
+// keyed on registration (the factory set), so it is true for a registered type
+// whether or not it has been materialized yet, and self-consistent with
+// GetService / Get[T]'s miss semantics (AD-16).
 func (r *root) IsService(t reflect.Type) bool {
-	_, ok := r.singletons[t]
+	_, ok := r.factories[t]
 	return ok
 }
 
@@ -144,15 +170,31 @@ func AddSingleton[T any](b *Builder, factory func(godi.Provider) T) *Builder {
 }
 
 // Build materializes the registered singletons and returns the runtime provider
-// as a godi.Provider. Materialization is EAGER (D2): every singleton factory is
-// executed exactly once here and the instance is cached, aligning with AD-1
-// (singleton = Root field) and NFR8 (the root singleton graph is constructed
-// once in NewRoot, with no per-resolve reconstruction and no concurrent
-// construction). After Build, GetService is a pure map lookup.
-func (b *Builder) Build() godi.Provider {
-	r := &root{singletons: make(map[reflect.Type]any, len(b.factories))}
-	for t, factory := range b.factories {
-		r.singletons[t] = factory(r)
+// as a godi.Provider plus an error (D-1: the signature mirrors the codegen
+// NewRoot() (*Root, error) so the conformance suite asserts one shape for both
+// providers). Materialization is eager-via-lazy-memoize (D-3): Build forces
+// every singleton through root.GetService, which builds each on first access and
+// recursively materializes its dependencies — so map-iteration order is harmless
+// (a dependent reached first pulls its dependency up). When Build returns with no
+// error the whole singleton graph is constructed exactly once (AD-1, NFR8) and
+// every subsequent GetService is a pure cache hit.
+//
+// A factory that panics while constructing (e.g. a missing dependency surfacing
+// as a failed type assertion) is recovered into a build error — the seam for the
+// runtime side of "bad graph is rejected at Build" (AD-3). Full graph validation
+// is Epic 5; this story only needs the error channel to exist and propagate.
+func (b *Builder) Build() (provider godi.Provider, err error) {
+	r := &root{
+		factories:  b.factories,
+		singletons: make(map[reflect.Type]any, len(b.factories)),
 	}
-	return r
+	defer func() {
+		if rec := recover(); rec != nil {
+			provider, err = nil, fmt.Errorf("runtime build failed materializing singletons: %v", rec)
+		}
+	}()
+	for t := range b.factories {
+		_ = r.GetService(t) // force eager materialization; recursion wires deps
+	}
+	return r, nil
 }

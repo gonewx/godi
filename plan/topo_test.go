@@ -1,19 +1,11 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.1 (AC1/AC3) — plan.SingletonsTopo
-// dependency-ordered toposort + Service.CtorErr emit-input field.
+// Story 2.1 (AC1/AC3) — plan.SingletonsTopo dependency-ordered toposort +
+// Service.CtorErr emit-input field.
 //
 // emitNewRoot must wire singletons in dependency order (a service after every
 // singleton it depends on), so plan exposes SingletonsTopo() for genlib to
 // consume directly (Task 1). Service.CtorErr records whether the constructor
 // has a trailing error return — an emit input derived from go/types by the
-// static analyzer (AD-7), NOT a hand-set canonical fact.
-//
-// RED: SingletonsTopo() and Service.CtorErr do not exist yet → compilation
-// fails under `-tags atdd_redphase`. Activation: add both to plan/registry.go,
-// then delete the //go:build line and the blank line after it.
-//
-// API CONTRACT THIS SCAFFOLD ASSUMES:
+// static analyzer (AD-7), NOT a hand-set canonical fact:
 //
 //	func (r *plan.Registry) SingletonsTopo() []plan.Service  // dependency order
 //	plan.Service.CtorErr bool                                // trailing-error flag

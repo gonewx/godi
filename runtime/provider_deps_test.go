@@ -1,22 +1,15 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.1 (AC1) — runtime provider: dependency
-// wiring + Build error signature + registration-order independence (Task 4).
+// Story 2.1 (AC1) — runtime provider: dependency wiring + Build error signature
+// + registration-order independence (Task 4).
 //
 // Epic 1's Build() eagerly materialized singletons by iterating the factory map
 // in random order — when a dependent was built before its dependency, the
-// factory's p.GetService(dep) returned nil (deferred 1.3, named for this story).
+// factory's p.GetService(dep) returned nil (deferred 1.3, fixed for this story).
 // D-3 fixes this with lazy-memoize: GetService builds on first access and caches,
 // so a dependent's factory recursively materializes its dependency regardless of
 // map order; Build then forces all of them (eager completion, NFR8). D-1 evolves
 // Build() to (godi.Provider, error) to match the codegen NewRoot signature.
 //
-// RED: Build() returns a single value today, so `p, err := b.Build()` is an
-// assignment mismatch → compilation fails under `-tags atdd_redphase`.
-// Activation: evolve runtime/provider.go (lazy-memoize + Build error), then
-// delete the //go:build line and the blank line after it.
-//
-// API CONTRACT THIS SCAFFOLD ASSUMES (D-1/D-3):
+// API CONTRACT (D-1/D-3):
 //
 //	func (b *runtime.Builder) Build() (godi.Provider, error)
 //	  - dependencies resolved via p.GetService inside factories, order-independent.
@@ -87,5 +80,5 @@ func TestRTDeps_RegistrationOrderIndependent(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	c := p.GetService(reflect.TypeFor[iConsumerRT]()).(iConsumerRT)
-	testutil.NotNil(t, c.dependency(), "dependency must be materialized regardless of registration order (D-3)")
+	testutil.True(t, c.dependency() != nil, "dependency must be materialized regardless of registration order (D-3)")
 }

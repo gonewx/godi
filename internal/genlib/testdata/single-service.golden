@@ -15,11 +15,11 @@ type Root struct {
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly (AD-1).
-func NewRoot() *Root {
+// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
+func NewRoot() (*Root, error) {
 	r := &Root{}
 	r.f_Logger = logger.NewLogger()
-	return r
+	return r, nil
 }
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.

@@ -71,7 +71,7 @@ func TestSingleton_SharedAcrossResolves_FactoryRunsOnce(t *testing.T) {
 		calls++
 		return &logger{}
 	})
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
@@ -96,7 +96,7 @@ func TestSingleton_InstanceComesFromClosure_NoReflectiveConstruction(t *testing.
 	sentinel := &logger{id: "from-closure"}
 	b := runtime.NewBuilder()
 	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return sentinel })
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	got, _ := p.GetService(reflect.TypeFor[*logger]()).(*logger)
@@ -109,7 +109,7 @@ func TestSingleton_InstanceComesFromClosure_NoReflectiveConstruction(t *testing.
 // (zero, false) via the reused godi.Get[T] (Story 1.2), never panicking, and the
 // underlying GetService/IsService agree on the miss (AD-16).
 func TestGet_UnregisteredType_ReturnsZeroFalse(t *testing.T) {
-	p := runtime.NewBuilder().Build()
+	p, _ := runtime.NewBuilder().Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	v, ok := godi.Get[*logger](p)
@@ -129,7 +129,7 @@ func TestGet_UnregisteredType_ReturnsZeroFalse(t *testing.T) {
 func TestGet_RegisteredSingleton_ReturnsValueTrue_SameInstance(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return &logger{} })
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	v, ok := godi.Get[*logger](p)
@@ -148,7 +148,7 @@ func TestGet_RegisteredSingleton_ReturnsValueTrue_SameInstance(t *testing.T) {
 // TestClose_Idempotent: calling Close repeatedly is safe — no panic, and each
 // call returns nil (AD-16: Close is idempotent via a one-shot gate).
 func TestClose_Idempotent(t *testing.T) {
-	p := runtime.NewBuilder().Build()
+	p, _ := runtime.NewBuilder().Build()
 
 	testutil.NoError(t, p.Close())
 	testutil.NoError(t, p.Close())
@@ -165,7 +165,7 @@ func TestClose_DoesNotDoubleRelease(t *testing.T) {
 	runtime.AddSingleton[*closableLogger](b, func(godi.Provider) *closableLogger {
 		return &closableLogger{onClose: func() { closeCount++ }}
 	})
-	p := b.Build()
+	p, _ := b.Build()
 
 	_ = p.Close()
 	_ = p.Close()
@@ -182,7 +182,7 @@ func TestClose_DoesNotDoubleRelease(t *testing.T) {
 // pinned method face (R2). The internal `var _ godi.Provider = (*root)(nil)`
 // assertion is the dev's to add in runtime/provider.go (Task 2).
 func TestProvider_SatisfiesGodiProviderContract(t *testing.T) {
-	var p godi.Provider = runtime.NewBuilder().Build()
+	p, _ := runtime.NewBuilder().Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
@@ -207,7 +207,7 @@ func TestProvider_SatisfiesGodiProviderContract(t *testing.T) {
 func TestCreateScope_SharesRootSingleton(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return &logger{} })
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
@@ -231,7 +231,7 @@ func TestCreateScope_SharesRootSingleton(t *testing.T) {
 func TestKeyed_HonestMinimalBehavior(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return &logger{} })
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
@@ -255,7 +255,7 @@ func TestKeyed_HonestMinimalBehavior(t *testing.T) {
 func TestScope_DelegatesFullResolutionSurface(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddSingleton[*logger](b, func(godi.Provider) *logger { return &logger{} })
-	p := b.Build()
+	p, _ := b.Build()
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
