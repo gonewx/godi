@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 1.4 — genlib package: Generate unique
+// ATDD scaffold for Story 1.4 — genlib package: Generate unique
 // code-emission path (plan.Validate → emit). This is the second of two test
 // files; the first is plan/registry_test.go (Validate assertions).
 //

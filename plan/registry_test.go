@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 1.4 — plan package: Registry model +
+// ATDD scaffold for Story 1.4 — plan package: Registry model +
 // Validate minimum slice (missing dependency detection).
 //
 // Activation (TDD red -> green): delete the //go:build line above and the blank
