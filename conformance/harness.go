@@ -7,48 +7,32 @@
 // source — the reflect-free runtime provider (the semantic oracle) and the
 // codegen provider — asserting identical observable results.
 //
-// SCAFFOLD STATUS — M1 fills this in. The real godi.Provider, the runtime
-// provider, and the codegen provider do not exist yet. This file defines the
-// harness *contract* and *runner*; spec_sample_test.go proves the pattern runs
-// green against an in-test stub. In M1:
-//   - replace the local Provider/Scope interfaces with type aliases to
-//     godi.Provider / godi.Scope once that package lands;
+// SCAFFOLD STATUS — godi.Provider / godi.Scope now exist (Story 1.2), and the
+// harness Provider / Scope below are type aliases onto them: the suite holds
+// every provider to one source of truth (AD-14 / AD-16), no local copy of the
+// contract. The runtime and codegen providers do not exist yet — this file
+// defines the harness *contract* and *runner*, and spec_sample_test.go proves
+// the pattern runs green against an in-test stub. Still to do:
 //   - register the two real ProviderFactory values (runtime, codegen) built from
 //     a single shared registration source;
 //   - port the 116 cases into spec_test.go and feed them to RunSuite.
 package conformance
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/gonewx/godi"
 )
 
-// Provider is the harness view of the shared runtime contract pinned by AD-16.
-// Its method set and unmet-lookup semantics mirror dotnet's IServiceProvider
-// family; M1 turns this into a type alias for godi.Provider.
-type Provider interface {
-	// GetService returns the service registered for t, or nil if none
-	// (AD-16: unregistered → nil, never panic).
-	GetService(t reflect.Type) any
-	// IsService reports whether t can be resolved (CAP-6).
-	IsService(t reflect.Type) bool
-	// GetKeyedService returns the service registered for (t, key); a nil key
-	// routes to the unkeyed service (AD-17).
-	GetKeyedService(t reflect.Type, key any) any
-	// GetKeyedServices returns all services registered for (t, key) in
-	// registration order (CAP-4 / CAP-5).
-	GetKeyedServices(t reflect.Type, key any) []any
-	// CreateScope opens a child resolution scope (AD-1 / AD-3).
-	CreateScope() Scope
-	// Close releases this provider/scope; it is idempotent (AD-16).
-	Close() error
-}
+// Provider is the harness alias for the single shared runtime contract pinned by
+// AD-16. It was a local interface during the scaffold phase; Story 1.2 collapsed
+// it onto godi.Provider so the conformance suite references one source of truth
+// rather than a parallel copy (AD-14 / AD-16).
+type Provider = godi.Provider
 
-// Scope is a resolution scope. It exposes the same resolution surface as its
-// parent Provider; M1 aligns it with godi.Scope.
-type Scope interface {
-	Provider
-}
+// Scope is the harness alias for godi.Scope, a resolution scope exposing the same
+// resolution surface as its parent Provider (AD-16).
+type Scope = godi.Scope
 
 // ProviderFactory builds a fresh, fully-configured Provider for one spec case.
 // It is the Go equivalent of dotnet's `abstract CreateServiceProvider`: each

@@ -1,10 +1,6 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 1.2 (AC2 / AC3) — the Get[T] / GetRequired[T]
-// free-generic convenience layer and its dotnet-aligned unmet-lookup semantics.
-//
-// Activation (TDD red -> green): delete the //go:build line above and the blank
-// line after it once godi.Get / godi.GetRequired exist (Story 1.2 Task 2).
+// Unit tests for Story 1.2 (AC2 / AC3) — the Get[T] / GetRequired[T] free-generic
+// convenience layer and its dotnet-aligned unmet-lookup semantics (hit / miss /
+// panic, plus interface-type safety per design decision D2).
 package godi_test
 
 import (

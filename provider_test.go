@@ -1,12 +1,6 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 1.2 (AC1) — the AD-16 Provider / Scope
-// interface contract.
-//
-// Activation (TDD red -> green): delete the //go:build line above and the blank
-// line after it once godi.Provider and godi.Scope exist (Story 1.2 Task 1). The
-// file then joins the default build and these assertions drive the contract to
-// green. See _bmad-output/test-artifacts/atdd-checklist-1-2-provider-interface.md.
+// Unit tests for Story 1.2 (AC1) — the AD-16 Provider / Scope interface contract.
+// These assertions pin godi.Provider's method face to exactly the six AD-16
+// methods and godi.Scope to interface{ Provider }.
 package godi_test
 
 import (

@@ -1,17 +1,9 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 1.2 (AC4) — conformance collapses onto the
-// single source of truth for the Provider contract.
-//
-// Activation (TDD red -> green): delete the //go:build line above AND complete
-// Story 1.2 Task 3 — replace harness.go's local Provider/Scope interface
-// definitions with `type Provider = godi.Provider` and `type Scope = godi.Scope`
-// and import the godi package. Until both are done this file fails to compile,
-// because stubProvider.CreateScope() returns the harness Scope, which must BE
-// godi.Scope for *stubProvider to satisfy godi.Provider. That compile-time link
-// is the R2 integration check: it proves godi.Provider's method face is exactly
-// the face AD-16 pins in the harness — a missing or drifted method here would
-// not compile.
+// Integration test for Story 1.2 (AC4) — conformance collapses onto the single
+// source of truth for the Provider contract. harness.go's Provider / Scope are
+// now type aliases for godi.Provider / godi.Scope, so stubProvider.CreateScope()
+// returning the harness Scope (== godi.Scope) is the R2 compile-time check: it
+// proves godi.Provider's method face is exactly the face AD-16 pins in the
+// harness — a missing or drifted method would not compile here.
 package conformance
 
 import (
