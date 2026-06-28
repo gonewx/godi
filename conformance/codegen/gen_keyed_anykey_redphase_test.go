@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 3.3 (AC2/AC3/AC6, Task 6) — codegen conformance: Path γ
 // STRICT tests for AnyKey-query + AnyKey single-resolve panic on the pre-generated
 // B2 container, plus the deterministic-regen guard.

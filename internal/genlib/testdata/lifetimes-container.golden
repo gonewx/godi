@@ -61,6 +61,9 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return r.GetService(t)
 	}
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
+	}
 	return nil
 }
 
@@ -123,6 +126,9 @@ func (s *scope) IsService(t reflect.Type) bool {
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return s.GetService(t)
+	}
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
 	}
 	return nil
 }

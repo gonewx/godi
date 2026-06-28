@@ -150,6 +150,21 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			"with explicit type arguments", pkg.PkgPath, godiPkgPath)
 	}
 
+	// AC1 registration side (AD-17): a nil key == unkeyed. Normalize nil-keyed
+	// registrations to plain unkeyed ones BEFORE the dependency-index pass, so a
+	// nil-key service joins the unkeyed namespace fully — resolvable via GetService
+	// AND injectable as a dependency target — symmetric to the runtime routing a
+	// nil key to b.singletonFactories. Detected by source text ("nil"); this runs
+	// before the D-1 constant check so `nil` (which has no constant value) is never
+	// mistaken for a non-constant key.
+	for i := range regs {
+		if regs[i].keyed && regs[i].keyText == "nil" {
+			regs[i].keyed = false
+			regs[i].keyExpr = nil
+			regs[i].keyText = ""
+		}
+	}
+
 	// Pass 1: index every service's type(s) -> its service Name, so a
 	// constructor parameter type can be resolved to the dependency it names. Both
 	// the service interface (I) and the implementation (Impl, and *Impl) are
@@ -188,6 +203,21 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			Lifetime: rg.lifetime,
 		}
 		if rg.keyed && rg.keyText != "" {
+			// AC4 (D-3): AnyKey is a query-only sentinel — reject it as a registration
+			// key with a SPECIFIC message, BEFORE the generic non-constant check below
+			// (which would otherwise fire, because AnyKey is a var, not a constant, and
+			// bury the real reason). dotnet's catch-all registration — a service
+			// resolved by ANY concrete key, with that key injected — has no Go
+			// mechanism: form-B func(Provider) I / form-A New{Impl} cannot receive a
+			// resolve-time key. Both providers reject AnyKey as a key.
+			if isAnyKeyExpr(pkg, rg.keyExpr) {
+				genErrs = append(genErrs, fmt.Sprintf(
+					"keyed service %q: AnyKey is a query-only sentinel and cannot be used as a "+
+						"registration key (catch-all registration has no Go mechanism, AD-17/D-3)",
+					s.Name))
+				continue
+			}
+
 			s.Key = rg.keyText
 
 			// D-1: codegen emits key text as a case expression; non-constant
@@ -445,6 +475,28 @@ func dslCallee(call *ast.CallExpr) *ast.Ident {
 		}
 	}
 	return nil
+}
+
+// isAnyKeyExpr reports whether expr refers to godi.AnyKey — the query-only
+// sentinel that cannot be a registration key (AC4, D-3). It resolves the
+// referenced object (a selector godi.AnyKey, or a dot-imported AnyKey ident) via
+// go/types and checks it is the AnyKey var declared in the godi package, so a
+// same-named symbol from another package is not misdetected.
+func isAnyKeyExpr(pkg *packages.Package, expr ast.Expr) bool {
+	var id *ast.Ident
+	switch e := expr.(type) {
+	case *ast.SelectorExpr:
+		id = e.Sel
+	case *ast.Ident:
+		id = e
+	default:
+		return false
+	}
+	obj := pkg.TypesInfo.Uses[id]
+	if obj == nil {
+		return false
+	}
+	return obj.Name() == "AnyKey" && obj.Pkg() != nil && obj.Pkg().Path() == godiPkgPath
 }
 
 // calleeName returns the bare function name a call invokes, unwrapping a generic

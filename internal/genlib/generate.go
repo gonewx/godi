@@ -841,6 +841,7 @@ func emitScopeGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSi
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn s.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
+	emitAnyKeySingleGuard(buf)
 
 	allKeyed := concatServices(keyedSingletons, keyedScoped, keyedTransients)
 	if len(allKeyed) > 0 {
@@ -912,6 +913,8 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 	}
 	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
+
+	emitAnyKeyQueryBranch(buf, reg, "s")
 
 	goTypes := distinctGoTypes(allKeyed)
 	fmt.Fprintf(buf, "\tswitch t {\n")
@@ -1125,6 +1128,7 @@ func emitGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSinglet
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn r.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
+	emitAnyKeySingleGuard(buf)
 
 	allKeyed := concatServices(keyedSingletons, keyedScoped, keyedTransients)
 	if len(allKeyed) > 0 {
@@ -1215,6 +1219,8 @@ func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singlet
 	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
 
+	emitAnyKeyQueryBranch(buf, reg, "r")
+
 	goTypes := distinctGoTypes(allKeyed)
 	fmt.Fprintf(buf, "\tswitch t {\n")
 	for _, goType := range goTypes {
@@ -1295,6 +1301,42 @@ func emitKeyedCollectionReturn(buf *bytes.Buffer, services []plan.Service, recv 
 		}
 	}
 	fmt.Fprintf(buf, "}\n")
+}
+
+// emitAnyKeySingleGuard emits the AnyKey single-resolve guard shared by Root and
+// scope GetKeyedService. AnyKey is a query-only sentinel: a single-value resolve
+// ALWAYS panics, intercepted after the nil check and BEFORE the type switch, so it
+// panics even with no keyed registration or a matching concrete key (AD-17). The
+// panic value comes from godi.AnyKeySingleResolveError — the SAME error source the
+// runtime uses — so generated code needs no fmt import (D-2).
+func emitAnyKeySingleGuard(buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "\tif key == godi.AnyKey {\n")
+	fmt.Fprintf(buf, "\t\tpanic(godi.AnyKeySingleResolveError(t))\n")
+	fmt.Fprintf(buf, "\t}\n")
+}
+
+// emitAnyKeyQueryBranch emits the GetKeyedServices(AnyKey) branch shared by Root
+// and scope. It returns every concrete-keyed service of type t in REGISTRATION
+// order — reg.KeyedServices() is registration-ordered, NOT lifetime/topo-ordered,
+// so interleaved keys come back un-grouped (ResolveKeyedServicesAnyKeyOrdering,
+// AC2). Unkeyed and nil-key services never enter the keyed registry, so they are
+// excluded for free. recv is "r" (Root) or "s" (scope); the per-service field
+// references reuse emitKeyedCollectionReturn, identical to the concrete-key path,
+// so AnyKey-query and concrete-key resolution share the same instances.
+func emitAnyKeyQueryBranch(buf *bytes.Buffer, reg *plan.Registry, recv string) {
+	keyed := reg.KeyedServices()
+	fmt.Fprintf(buf, "\tif key == godi.AnyKey {\n")
+	if len(keyed) > 0 {
+		fmt.Fprintf(buf, "\t\tswitch t {\n")
+		for _, goType := range distinctGoTypes(keyed) {
+			group := keyedServicesByGoType(keyed, goType)
+			fmt.Fprintf(buf, "\t\tcase reflect.TypeFor[%s]():\n", goType)
+			emitKeyedCollectionReturn(buf, group, recv)
+		}
+		fmt.Fprintf(buf, "\t\t}\n")
+	}
+	fmt.Fprintf(buf, "\t\treturn nil\n")
+	fmt.Fprintf(buf, "\t}\n")
 }
 
 func distinctGoTypes(services []plan.Service) []string {

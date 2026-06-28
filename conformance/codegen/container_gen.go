@@ -15,6 +15,7 @@ type Root struct {
 	f_FakeService                                      fakes.IFakeService
 	f_FakeConsumer                                     fakes.IFakeConsumer
 	f_FakeDisposableSingleton                          fakes.IFakeDisposableSingleton
+	f_AnyKeyServiceA                                   fakes.IAnyKeyService
 	f_FakeScopedService                                fakes.IFakeScopedService
 	f_FakeDisposableScoped                             fakes.IFakeDisposableScoped
 	f_KeyedServiceOne__service1_                       fakes.IKeyedService
@@ -26,6 +27,9 @@ type Root struct {
 	f_IKeyedServiceWithKey__injected_key_              fakes.IKeyedServiceWithKey
 	f_IKeyedServiceWithDep__missing_dep_               fakes.IKeyedServiceWithDep
 	f_IKeyedServiceWithProvider__with_provider_        fakes.IKeyedServiceWithProvider
+	f_AnyKeyServiceA__alpha_                           fakes.IAnyKeyService
+	f_AnyKeyServiceB__beta_                            fakes.IAnyKeyService
+	f_IAnyKeyService__alpha_                           fakes.IAnyKeyService
 	f_KeyedServiceOne__scoped_                         fakes.IKeyedService
 	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
 	disp                                               *runtime.Disposer
@@ -42,6 +46,7 @@ func NewRoot() (*Root, error) {
 	r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService)
 	r.f_FakeDisposableSingleton = fakes.NewFakeDisposableSingleton()
 	r.disp.Track(r.f_FakeDisposableSingleton.(io.Closer))
+	r.f_AnyKeyServiceA = fakes.NewAnyKeyServiceA()
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	r.disp.Track(r.f_FakeDisposableScoped.(io.Closer))
@@ -69,6 +74,11 @@ func NewRoot() (*Root, error) {
 	})(r)
 	r.f_IKeyedServiceWithProvider__with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
 		return fakes.NewKeyedServiceWithProvider(p)
+	})(r)
+	r.f_AnyKeyServiceA__alpha_ = fakes.NewAnyKeyServiceA()
+	r.f_AnyKeyServiceB__beta_ = fakes.NewAnyKeyServiceB()
+	r.f_IAnyKeyService__alpha_ = (func(p godi.Provider) fakes.IAnyKeyService {
+		return fakes.NewAnyKeyServiceA()
 	})(r)
 	r.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
 	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
@@ -125,6 +135,8 @@ func (r *Root) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
 	return r.f_FakeDisposableSingleton
 }
 
+func (r *Root) AnyKeyServiceA() fakes.IAnyKeyService { return r.f_AnyKeyServiceA }
+
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
@@ -138,6 +150,8 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_FakeConsumer
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 		return r.f_FakeDisposableSingleton
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return r.f_AnyKeyServiceA
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -182,6 +196,8 @@ func (r *Root) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		return true
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return true
 	}
 	return false
 }
@@ -189,6 +205,9 @@ func (r *Root) IsService(t reflect.Type) bool {
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return r.GetService(t)
+	}
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IKeyedService]():
@@ -227,6 +246,13 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 		case "scoped-with-provider":
 			return r.f_IKeyedServiceWithProvider__scoped_with_provider_
 		}
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		switch key {
+		case "alpha":
+			return r.f_IAnyKeyService__alpha_
+		case "beta":
+			return r.f_AnyKeyServiceB__beta_
+		}
 	}
 	return nil
 }
@@ -240,6 +266,8 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_FakeConsumer}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 			return []any{r.f_FakeDisposableSingleton}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{r.f_AnyKeyServiceA}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -256,6 +284,21 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.NewFakeOuterService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 			return []any{r.NewFakeOpenGenericService()}
+		}
+		return nil
+	}
+	if key == godi.AnyKey {
+		switch t {
+		case reflect.TypeFor[fakes.IKeyedService]():
+			return []any{r.f_KeyedServiceOne__service1_, r.f_KeyedServiceTwo__service2_, r.f_KeyedServiceOne__both_, r.f_KeyedServiceTwo__both_, r.f_KeyedServiceOne__singleton_factory_, r.NewKeyedServiceOne__transient_(), r.NewIKeyedService__transient_factory_(), r.f_KeyedServiceOne__scoped_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+			return []any{r.f_IKeyedServiceWithDep__with_dep_, r.f_IKeyedServiceWithDep__missing_dep_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+			return []any{r.f_IKeyedServiceWithKey__injected_key_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+			return []any{r.f_IKeyedServiceWithProvider__with_provider_, r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{r.f_AnyKeyServiceA__alpha_, r.f_AnyKeyServiceB__beta_, r.f_IAnyKeyService__alpha_}
 		}
 		return nil
 	}
@@ -295,6 +338,13 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_IKeyedServiceWithProvider__with_provider_}
 		case "scoped-with-provider":
 			return []any{r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		}
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		switch key {
+		case "alpha":
+			return []any{r.f_AnyKeyServiceA__alpha_, r.f_IAnyKeyService__alpha_}
+		case "beta":
+			return []any{r.f_AnyKeyServiceB__beta_}
 		}
 	}
 	return nil
@@ -341,6 +391,8 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_FakeConsumer
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 		return s.root.f_FakeDisposableSingleton
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return s.root.f_AnyKeyServiceA
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -369,6 +421,8 @@ func (s *scope) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 		return true
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -392,6 +446,9 @@ func (s *scope) IsService(t reflect.Type) bool {
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return s.GetService(t)
+	}
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IKeyedService]():
@@ -430,6 +487,13 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 		case "scoped-with-provider":
 			return s.f_IKeyedServiceWithProvider__scoped_with_provider_
 		}
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		switch key {
+		case "alpha":
+			return s.root.f_IAnyKeyService__alpha_
+		case "beta":
+			return s.root.f_AnyKeyServiceB__beta_
+		}
 	}
 	return nil
 }
@@ -443,6 +507,8 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_FakeConsumer}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 			return []any{s.root.f_FakeDisposableSingleton}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{s.root.f_AnyKeyServiceA}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -459,6 +525,21 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.NewFakeOuterService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 			return []any{s.NewFakeOpenGenericService()}
+		}
+		return nil
+	}
+	if key == godi.AnyKey {
+		switch t {
+		case reflect.TypeFor[fakes.IKeyedService]():
+			return []any{s.root.f_KeyedServiceOne__service1_, s.root.f_KeyedServiceTwo__service2_, s.root.f_KeyedServiceOne__both_, s.root.f_KeyedServiceTwo__both_, s.root.f_KeyedServiceOne__singleton_factory_, s.NewKeyedServiceOne__transient_(), s.NewIKeyedService__transient_factory_(), s.f_KeyedServiceOne__scoped_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+			return []any{s.root.f_IKeyedServiceWithDep__with_dep_, s.root.f_IKeyedServiceWithDep__missing_dep_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+			return []any{s.root.f_IKeyedServiceWithKey__injected_key_}
+		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_, s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_AnyKeyServiceB__beta_, s.root.f_IAnyKeyService__alpha_}
 		}
 		return nil
 	}
@@ -498,6 +579,13 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_}
 		case "scoped-with-provider":
 			return []any{s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		}
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		switch key {
+		case "alpha":
+			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_IAnyKeyService__alpha_}
+		case "beta":
+			return []any{s.root.f_AnyKeyServiceB__beta_}
 		}
 	}
 	return nil
@@ -571,6 +659,8 @@ func (s *scope) FakeConsumer() fakes.IFakeConsumer { return s.root.f_FakeConsume
 func (s *scope) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
 	return s.root.f_FakeDisposableSingleton
 }
+
+func (s *scope) AnyKeyServiceA() fakes.IAnyKeyService { return s.root.f_AnyKeyServiceA }
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
 

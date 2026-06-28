@@ -73,6 +73,22 @@ func register() {
 	godi.AddKeyedScopedFactory[fakes.IKeyedServiceWithProvider](&r, "scoped-with-provider", func(p godi.Provider) fakes.IKeyedServiceWithProvider {
 		return fakes.NewKeyedServiceWithProvider(p)
 	})
+
+	// Story 3-3: AnyKey / null-key boundary registrations (AD-17). The unkeyed A is
+	// the AnyKey-query EXCLUSION baseline and the nil-resolution target (AC1/AC2);
+	// the interleaved keys alpha→A, beta→B, alpha→A prove GetKeyedServices(AnyKey)
+	// returns registration order [A, B, A], NOT key-grouped order [A, A, B] (AC2,
+	// ResolveKeyedServicesAnyKeyOrdering). The second alpha→A is a form-B factory so
+	// it gets a name (IAnyKeyService#"alpha") distinct from the form-A AnyKeyServiceA#
+	// "alpha", avoiding a generated field-name collision while keeping the same
+	// observable type. No AnyKey is registered as a key — that is rejected at
+	// generate time (AC4); the rejection is asserted by a generator unit test.
+	godi.AddSingleton[fakes.IAnyKeyService, fakes.AnyKeyServiceA](&r)
+	godi.AddKeyedSingleton[fakes.IAnyKeyService, fakes.AnyKeyServiceA](&r, "alpha")
+	godi.AddKeyedSingleton[fakes.IAnyKeyService, fakes.AnyKeyServiceB](&r, "beta")
+	godi.AddKeyedSingletonFactory[fakes.IAnyKeyService](&r, "alpha", func(p godi.Provider) fakes.IAnyKeyService {
+		return fakes.NewAnyKeyServiceA()
+	})
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

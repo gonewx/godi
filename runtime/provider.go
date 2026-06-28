@@ -14,6 +14,28 @@ type keyedEntry struct {
 	key any
 }
 
+// keyedLifetime tags which lifetime map a keyed registration lives in, so an
+// AnyKey-query (GetKeyedServices(AnyKey)) can resolve each entry against the
+// SAME cache the concrete-key path uses (cache consistency, AC2/D-4).
+type keyedLifetime int
+
+const (
+	keyedSingleton keyedLifetime = iota
+	keyedScoped
+	keyedTransient
+)
+
+// keyedReg records one concrete-keyed registration in registration order. Go maps
+// are unordered, so the keyed factory maps alone cannot answer AnyKey-query order;
+// keyedReg gives the explicit cross-key registration sequence AnyKey-query needs
+// (D-4). slot is this registration's index inside its keyedEntry factory slice, so
+// the resolved instance lines up with the right factory under duplicate keys.
+type keyedReg struct {
+	ke       keyedEntry
+	lifetime keyedLifetime
+	slot     int
+}
+
 func materializeKeyedInto(cache map[keyedEntry][]any, ke keyedEntry, factories []func(godi.Provider) any, provider godi.Provider, disp *Disposer) []any {
 	if instances, ok := cache[ke]; ok {
 		return instances
@@ -60,6 +82,10 @@ type root struct {
 	keyedSingletons map[keyedEntry][]any
 	keyedRootScoped map[keyedEntry][]any
 
+	// keyedOrder is the cross-key registration sequence of all concrete-keyed
+	// services (nil/AnyKey excluded at registration), used by AnyKey-query (D-4).
+	keyedOrder []keyedReg
+
 	disp      *Disposer
 	closeOnce sync.Once
 	closeErr  error
@@ -103,6 +129,11 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return r.GetService(t)
 	}
+	// AnyKey is a query-only sentinel: intercept BEFORE the keyed-map lookup so a
+	// single-value resolve always panics, even if a concrete key exists (AD-17).
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
+	}
 	ke := keyedEntry{t: t, key: key}
 	if factories, ok := r.keyedSingletonFactories[ke]; ok {
 		instances := materializeKeyedInto(r.keyedSingletons, ke, factories, r, r.disp)
@@ -125,6 +156,9 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == nil {
 		return r.getUnkeyedServices(t)
+	}
+	if key == godi.AnyKey {
+		return r.getAnyKeyedServices(t)
 	}
 	ke := keyedEntry{t: t, key: key}
 	if factories, ok := r.keyedSingletonFactories[ke]; ok {
@@ -180,6 +214,37 @@ func (r *root) getUnkeyedServices(t reflect.Type) []any {
 	return nil
 }
 
+// getAnyKeyedServices returns every concrete-keyed registration of type t in
+// registration order — the GetKeyedServices(AnyKey) result (AC2). It walks
+// keyedOrder (NOT the unordered factory maps, D-4), and resolves each entry
+// against the SAME cache the concrete-key path uses so singletons/scoped stay
+// identical across AnyKey-query and concrete-key resolution (cache consistency,
+// R1). Unkeyed/null services never enter keyedOrder, so they are excluded for
+// free. No match → nil.
+func (r *root) getAnyKeyedServices(t reflect.Type) []any {
+	var out []any
+	for _, kr := range r.keyedOrder {
+		if kr.ke.t != t {
+			continue
+		}
+		switch kr.lifetime {
+		case keyedSingleton:
+			instances := materializeKeyedInto(r.keyedSingletons, kr.ke, r.keyedSingletonFactories[kr.ke], r, r.disp)
+			out = append(out, instances[kr.slot])
+		case keyedScoped:
+			instances := materializeKeyedInto(r.keyedRootScoped, kr.ke, r.keyedScopedFactories[kr.ke], r, r.disp)
+			out = append(out, instances[kr.slot])
+		case keyedTransient:
+			v := r.keyedTransientFactories[kr.ke][kr.slot](r)
+			if c, ok := v.(io.Closer); ok {
+				r.disp.Track(c)
+			}
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func (r *root) CreateScope() godi.Scope {
 	return &scope{
 		root:        r,
@@ -232,6 +297,10 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return s.GetService(t)
 	}
+	// AnyKey single-value resolve panics from a scope too (root+scope parity, AD-17).
+	if key == godi.AnyKey {
+		panic(godi.AnyKeySingleResolveError(t))
+	}
 	ke := keyedEntry{t: t, key: key}
 	if factories, ok := s.root.keyedSingletonFactories[ke]; ok {
 		instances := materializeKeyedInto(s.root.keyedSingletons, ke, factories, s.root, s.root.disp)
@@ -254,6 +323,9 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == nil {
 		return s.getUnkeyedServices(t)
+	}
+	if key == godi.AnyKey {
+		return s.getAnyKeyedServices(t)
 	}
 	ke := keyedEntry{t: t, key: key}
 	if factories, ok := s.root.keyedSingletonFactories[ke]; ok {
@@ -309,6 +381,35 @@ func (s *scope) getUnkeyedServices(t reflect.Type) []any {
 	return nil
 }
 
+// getAnyKeyedServices is the scope-level GetKeyedServices(AnyKey) (AC2). It walks
+// root.keyedOrder for the cross-key registration order, but materializes scoped
+// entries into THIS scope's own keyedScoped cache (singletons stay on root,
+// transients build anew) — the scoped-from-root materialization pattern from
+// Story 3-2 review P0 (R2). No match → nil.
+func (s *scope) getAnyKeyedServices(t reflect.Type) []any {
+	var out []any
+	for _, kr := range s.root.keyedOrder {
+		if kr.ke.t != t {
+			continue
+		}
+		switch kr.lifetime {
+		case keyedSingleton:
+			instances := materializeKeyedInto(s.root.keyedSingletons, kr.ke, s.root.keyedSingletonFactories[kr.ke], s.root, s.root.disp)
+			out = append(out, instances[kr.slot])
+		case keyedScoped:
+			instances := materializeKeyedInto(s.keyedScoped, kr.ke, s.root.keyedScopedFactories[kr.ke], s, s.disp)
+			out = append(out, instances[kr.slot])
+		case keyedTransient:
+			v := s.root.keyedTransientFactories[kr.ke][kr.slot](s)
+			if c, ok := v.(io.Closer); ok {
+				s.disp.Track(c)
+			}
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func (s *scope) CreateScope() godi.Scope {
 	return &scope{
 		root:        s.root,
@@ -335,6 +436,9 @@ type Builder struct {
 	keyedSingletonFactories map[keyedEntry][]func(godi.Provider) any
 	keyedScopedFactories    map[keyedEntry][]func(godi.Provider) any
 	keyedTransientFactories map[keyedEntry][]func(godi.Provider) any
+
+	// keyedOrder records concrete-keyed registrations in call order (D-4).
+	keyedOrder []keyedReg
 }
 
 func NewBuilder() *Builder {
@@ -373,26 +477,56 @@ func AddTransient[T any](b *Builder, factory func(godi.Provider) T) *Builder {
 }
 
 func AddKeyedSingleton[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
-	ke := keyedEntry{t: reflect.TypeFor[T](), key: key}
-	b.keyedSingletonFactories[ke] = append(b.keyedSingletonFactories[ke], func(p godi.Provider) any {
-		return factory(p)
-	})
+	t := reflect.TypeFor[T]()
+	wrapped := func(p godi.Provider) any { return factory(p) }
+	// Check order: AnyKey (reject) → nil (route to unkeyed) → concrete key.
+	if key == godi.AnyKey {
+		panic(godi.AnyKeyRegistrationError(t))
+	}
+	if key == nil {
+		// null key == unkeyed (AD-17): route to the unkeyed namespace, NOT the
+		// keyed index, symmetric to nil resolution (AC1 registration side).
+		b.singletonFactories[t] = append(b.singletonFactories[t], wrapped)
+		return b
+	}
+	ke := keyedEntry{t: t, key: key}
+	slot := len(b.keyedSingletonFactories[ke])
+	b.keyedSingletonFactories[ke] = append(b.keyedSingletonFactories[ke], wrapped)
+	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedSingleton, slot: slot})
 	return b
 }
 
 func AddKeyedScoped[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
-	ke := keyedEntry{t: reflect.TypeFor[T](), key: key}
-	b.keyedScopedFactories[ke] = append(b.keyedScopedFactories[ke], func(p godi.Provider) any {
-		return factory(p)
-	})
+	t := reflect.TypeFor[T]()
+	wrapped := func(p godi.Provider) any { return factory(p) }
+	if key == godi.AnyKey {
+		panic(godi.AnyKeyRegistrationError(t))
+	}
+	if key == nil {
+		b.scopedFactories[t] = append(b.scopedFactories[t], wrapped)
+		return b
+	}
+	ke := keyedEntry{t: t, key: key}
+	slot := len(b.keyedScopedFactories[ke])
+	b.keyedScopedFactories[ke] = append(b.keyedScopedFactories[ke], wrapped)
+	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedScoped, slot: slot})
 	return b
 }
 
 func AddKeyedTransient[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
-	ke := keyedEntry{t: reflect.TypeFor[T](), key: key}
-	b.keyedTransientFactories[ke] = append(b.keyedTransientFactories[ke], func(p godi.Provider) any {
-		return factory(p)
-	})
+	t := reflect.TypeFor[T]()
+	wrapped := func(p godi.Provider) any { return factory(p) }
+	if key == godi.AnyKey {
+		panic(godi.AnyKeyRegistrationError(t))
+	}
+	if key == nil {
+		b.transientFactories[t] = append(b.transientFactories[t], wrapped)
+		return b
+	}
+	ke := keyedEntry{t: t, key: key}
+	slot := len(b.keyedTransientFactories[ke])
+	b.keyedTransientFactories[ke] = append(b.keyedTransientFactories[ke], wrapped)
+	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedTransient, slot: slot})
 	return b
 }
 
@@ -423,6 +557,8 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 	ksf := copyKeyedFactoryMap(b.keyedSingletonFactories)
 	kscf := copyKeyedFactoryMap(b.keyedScopedFactories)
 	ktf := copyKeyedFactoryMap(b.keyedTransientFactories)
+	ko := make([]keyedReg, len(b.keyedOrder))
+	copy(ko, b.keyedOrder)
 
 	r := &root{
 		singletonFactories:      sf,
@@ -435,6 +571,7 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 		rootScoped:              make(map[reflect.Type][]any, len(scf)),
 		keyedSingletons:         make(map[keyedEntry][]any, len(ksf)),
 		keyedRootScoped:         make(map[keyedEntry][]any, len(kscf)),
+		keyedOrder:              ko,
 		disp:                    NewDisposer(),
 	}
 	defer func() {

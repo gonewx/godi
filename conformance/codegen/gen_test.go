@@ -201,6 +201,37 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime:    plan.Scoped,
 		Key:         "\"scoped-with-provider\"",
 	})
+	// Story 3-3: AnyKey / null-key boundary registrations (AD-17). The unkeyed
+	// AnyKeyServiceA is the AnyKey-query exclusion baseline + nil-resolution target;
+	// the interleaved keys alpha→A, beta→B, alpha→A (the second alpha is form-B so
+	// its name differs from the form-A one) prove AnyKey-query registration order.
+	reg.Service(plan.Service{
+		Name:     "AnyKeyServiceA",
+		GoType:   "fakes.IAnyKeyService",
+		Ctor:     "fakes.NewAnyKeyServiceA",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "AnyKeyServiceA#\"alpha\"",
+		GoType:   "fakes.IAnyKeyService",
+		Ctor:     "fakes.NewAnyKeyServiceA",
+		Lifetime: plan.Singleton,
+		Key:      "\"alpha\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "AnyKeyServiceB#\"beta\"",
+		GoType:   "fakes.IAnyKeyService",
+		Ctor:     "fakes.NewAnyKeyServiceB",
+		Lifetime: plan.Singleton,
+		Key:      "\"beta\"",
+	})
+	reg.Service(plan.Service{
+		Name:        "IAnyKeyService#\"alpha\"",
+		GoType:      "fakes.IAnyKeyService",
+		FactoryExpr: "func(p godi.Provider) fakes.IAnyKeyService {\n\treturn fakes.NewAnyKeyServiceA()\n}",
+		Lifetime:    plan.Singleton,
+		Key:         "\"alpha\"",
+	})
 	return reg
 }
 

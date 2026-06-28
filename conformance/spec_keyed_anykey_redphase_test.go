@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 3.3 (AC1-AC6) — conformance suite: AnyKey sentinel +
 // null-key boundary semantics across BOTH providers (runtime oracle + codegen B2)
 // with cross-provider differential equivalence (AD-15/AD-16/AD-17).

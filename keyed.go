@@ -13,6 +13,27 @@ type keyedAnyKey struct{}
 // this story only defines the sentinel.
 var AnyKey = keyedAnyKey{}
 
+// AnyKeySingleResolveError builds the error used when GetKeyedService is called
+// with the AnyKey sentinel. AnyKey is a query-only sentinel for GetKeyedServices
+// and is never valid for single-value resolution (AD-17). Both providers panic
+// with this error so runtime and generated code share ONE message source —
+// generated code calls godi.AnyKeySingleResolveError instead of building its own
+// fmt.Errorf, avoiding a new import in the generated file.
+func AnyKeySingleResolveError(t reflect.Type) error {
+	return fmt.Errorf("godi: AnyKey is a query-only sentinel for GetKeyedServices and cannot be used with GetKeyedService for type %s (AD-17)", t)
+}
+
+// AnyKeyRegistrationError builds the error used when AnyKey is used as a
+// registration key. dotnet's AnyKey-catch-all registration (a service resolved by
+// ANY concrete key, with that key injected into the constructor) has no Go
+// mechanism — a form-B `func(Provider) I` / form-A `New{Impl}` cannot receive a
+// resolve-time key (D-3). Both providers REJECT AnyKey as a registration key: the
+// runtime panics with this at AddKeyed*, symmetric to the generator's
+// generate-time rejection (AC4).
+func AnyKeyRegistrationError(t reflect.Type) error {
+	return fmt.Errorf("godi: AnyKey is a query-only sentinel and cannot be used as a registration key for type %s (catch-all registration has no Go mechanism, AD-17)", t)
+}
+
 // GetRequiredKeyed resolves the keyed service of type T from p, returning the
 // instance on a hit and PANICKING on a miss. The panic value is an error naming
 // the missing type and key (AC9).
