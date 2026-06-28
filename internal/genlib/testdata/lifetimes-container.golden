@@ -76,7 +76,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[svc.IWidget]():
 		return []any{r.NewWidget()}
 	}
-	return []any{}
+	return nil
 }
 
 func (r *Root) CreateScope() godi.Scope {
@@ -139,7 +139,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[svc.IWidget]():
 		return []any{s.NewWidget()}
 	}
-	return []any{}
+	return nil
 }
 
 func (s *scope) CreateScope() godi.Scope {

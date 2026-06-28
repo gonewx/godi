@@ -22,6 +22,7 @@ type Root struct {
 	f_KeyedServiceOne__both_              fakes.IKeyedService
 	f_KeyedServiceTwo__both_              fakes.IKeyedService
 	f_KeyedServiceOne__singleton_factory_ fakes.IKeyedService
+	f_KeyedServiceOne__scoped_            fakes.IKeyedService
 	disp                                  *runtime.Disposer
 	closed                                bool
 }
@@ -79,6 +80,12 @@ func (r *Root) NewFakeOpenGenericService() fakes.IFakeOpenGenericService[fakes.I
 
 func (r *Root) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
+}
+
+func (r *Root) NewIKeyedService__transient_factory_() fakes.IKeyedService {
+	return (func(p godi.Provider) fakes.IKeyedService {
+		return fakes.NewKeyedServiceOne()
+	})(r)
 }
 
 func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
@@ -165,8 +172,12 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 			return r.f_KeyedServiceTwo__both_
 		case "singleton-factory":
 			return r.f_KeyedServiceOne__singleton_factory_
+		case "scoped":
+			return r.f_KeyedServiceOne__scoped_
 		case "transient":
 			return r.NewKeyedServiceOne__transient_()
+		case "transient-factory":
+			return r.NewIKeyedService__transient_factory_()
 		}
 	}
 	return nil
@@ -198,7 +209,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 			return []any{r.NewFakeOpenGenericService()}
 		}
-		return []any{}
+		return nil
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IKeyedService]():
@@ -211,8 +222,12 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_KeyedServiceOne__both_, r.f_KeyedServiceTwo__both_}
 		case "singleton-factory":
 			return []any{r.f_KeyedServiceOne__singleton_factory_}
+		case "scoped":
+			return []any{r.f_KeyedServiceOne__scoped_}
 		case "transient":
 			return []any{r.NewKeyedServiceOne__transient_()}
+		case "transient-factory":
+			return []any{r.NewIKeyedService__transient_factory_()}
 		}
 	}
 	return nil
@@ -224,6 +239,7 @@ func (r *Root) CreateScope() godi.Scope {
 	s.f_FakeScopedService = fakes.NewFakeScopedService()
 	s.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	s.disp.Track(s.f_FakeDisposableScoped.(io.Closer))
+	s.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
 	return s
 }
 
@@ -236,11 +252,12 @@ func (r *Root) Close() error {
 }
 
 type scope struct {
-	root                   *Root
-	f_FakeScopedService    fakes.IFakeScopedService
-	f_FakeDisposableScoped fakes.IFakeDisposableScoped
-	disp                   *runtime.Disposer
-	closed                 bool
+	root                       *Root
+	f_FakeScopedService        fakes.IFakeScopedService
+	f_FakeDisposableScoped     fakes.IFakeDisposableScoped
+	f_KeyedServiceOne__scoped_ fakes.IKeyedService
+	disp                       *runtime.Disposer
+	closed                     bool
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -316,8 +333,12 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 			return s.root.f_KeyedServiceTwo__both_
 		case "singleton-factory":
 			return s.root.f_KeyedServiceOne__singleton_factory_
+		case "scoped":
+			return s.f_KeyedServiceOne__scoped_
 		case "transient":
 			return s.NewKeyedServiceOne__transient_()
+		case "transient-factory":
+			return s.NewIKeyedService__transient_factory_()
 		}
 	}
 	return nil
@@ -349,7 +370,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 			return []any{s.NewFakeOpenGenericService()}
 		}
-		return []any{}
+		return nil
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IKeyedService]():
@@ -362,8 +383,12 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_KeyedServiceOne__both_, s.root.f_KeyedServiceTwo__both_}
 		case "singleton-factory":
 			return []any{s.root.f_KeyedServiceOne__singleton_factory_}
+		case "scoped":
+			return []any{s.f_KeyedServiceOne__scoped_}
 		case "transient":
 			return []any{s.NewKeyedServiceOne__transient_()}
+		case "transient-factory":
+			return []any{s.NewIKeyedService__transient_factory_()}
 		}
 	}
 	return nil
@@ -375,6 +400,7 @@ func (s *scope) CreateScope() godi.Scope {
 	ns.f_FakeScopedService = fakes.NewFakeScopedService()
 	ns.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	ns.disp.Track(ns.f_FakeDisposableScoped.(io.Closer))
+	ns.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
 	return ns
 }
 
@@ -418,6 +444,12 @@ func (s *scope) NewFakeOpenGenericService() fakes.IFakeOpenGenericService[fakes.
 
 func (s *scope) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
+}
+
+func (s *scope) NewIKeyedService__transient_factory_() fakes.IKeyedService {
+	return (func(p godi.Provider) fakes.IKeyedService {
+		return fakes.NewKeyedServiceOne()
+	})(s)
 }
 
 func (s *scope) FakeService() fakes.IFakeService { return s.root.f_FakeService }

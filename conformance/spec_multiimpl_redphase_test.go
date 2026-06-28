@@ -128,12 +128,11 @@ var multiImplSpecCases = []SpecCase{
 	},
 	// --- 2.4-SPEC-005 (AC4, P1) — NonexistentServiceCanBeIEnumerableResolved --
 	{
-		Name: "multi-impl: unregistered type returns empty collection (AC4, DISpec:801)",
+		Name: "multi-impl: unregistered type returns nil (AC4, DISpec:801)",
 		Run: func(t *testing.T, p Provider) {
 			// Use a type that is NOT registered
 			all := p.GetKeyedServices(reflect.TypeFor[interface{ notRegistered() }](), nil)
-			testutil.NotNil(t, all)
-			testutil.Equal(t, len(all), 0)
+			testutil.Nil(t, all)
 		},
 	},
 	// --- 2.4-SPEC-006 (AC6, P1) — OuterServiceCanHaveOtherServicesInjected ----

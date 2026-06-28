@@ -97,15 +97,14 @@ func TestCodegen_PathGamma_MultiImpl_OuterServiceInjection(t *testing.T) {
 // --- 2.4-CGPATH-004 (AC4, P1) — Path γ: empty collection for unregistered ---
 
 // TestCodegen_PathGamma_MultiImpl_EmptyCollection: on the B2 container,
-// GetKeyedServices for an unregistered type returns empty (not nil).
+// GetKeyedServices for an unregistered type returns nil.
 func TestCodegen_PathGamma_MultiImpl_EmptyCollection(t *testing.T) {
 	root, err := codegen.NewRoot()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
 
 	all := root.GetKeyedServices(reflect.TypeFor[interface{ notRegistered() }](), nil)
-	testutil.NotNil(t, all)
-	testutil.Equal(t, len(all), 0)
+	testutil.Nil(t, all)
 }
 
 // --- 2.4-CGPATH-005 (AC3, P1) — Path γ: single reg collection on B2 ---------

@@ -80,7 +80,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return []any{r.NewFakeOuterService()}
 	}
-	return []any{}
+	return nil
 }
 
 func (r *Root) CreateScope() godi.Scope {
@@ -141,7 +141,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return []any{s.NewFakeOuterService()}
 	}
-	return []any{}
+	return nil
 }
 
 func (s *scope) CreateScope() godi.Scope {

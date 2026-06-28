@@ -56,7 +56,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[*logger.Logger]():
 		return []any{r.f_Logger}
 	}
-	return []any{}
+	return nil
 }
 
 func (r *Root) CreateScope() godi.Scope {

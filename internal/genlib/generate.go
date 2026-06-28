@@ -33,6 +33,27 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 		return nil, fmt.Errorf("validation failed:\n%s", strings.Join(msgs, "\n"))
 	}
 
+	// Pre-emit check: detect sanitized field name collisions across all
+	// services. Two services whose Names sanitize to the same Go identifier
+	// would produce duplicate struct fields → compile error (review F1).
+	{
+		type fieldOrigin struct {
+			name      string
+			sanitized string
+		}
+		fieldSeen := make(map[string]fieldOrigin)
+		allSvcs := append(reg.Services(), reg.KeyedServices()...)
+		for _, s := range allSvcs {
+			sf := sanitizeFieldName(s.Name)
+			if prev, dup := fieldSeen[sf]; dup && prev.name != s.Name {
+				return nil, fmt.Errorf("field name collision: services %q and %q both "+
+					"sanitize to field f_%s; use distinct key expressions that produce "+
+					"different identifier suffixes", prev.name, s.Name, sf)
+			}
+			fieldSeen[sf] = fieldOrigin{name: s.Name, sanitized: sf}
+		}
+	}
+
 	var buf bytes.Buffer
 	services := reg.Services()
 	singletons := filterByLifetime(services, plan.Singleton)
@@ -865,7 +886,7 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 			}
 			fmt.Fprintf(buf, "\t}\n")
 		}
-		fmt.Fprintf(buf, "\treturn []any{}\n")
+		fmt.Fprintf(buf, "\treturn nil\n")
 		fmt.Fprintf(buf, "}\n\n")
 		return
 	}
@@ -885,7 +906,7 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 		}
 		fmt.Fprintf(buf, "\t\t}\n")
 	}
-	fmt.Fprintf(buf, "\t\treturn []any{}\n")
+	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
 
 	goTypes := distinctGoTypes(allKeyed)
@@ -1167,7 +1188,7 @@ func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singlet
 			}
 			fmt.Fprintf(buf, "\t}\n")
 		}
-		fmt.Fprintf(buf, "\treturn []any{}\n")
+		fmt.Fprintf(buf, "\treturn nil\n")
 		fmt.Fprintf(buf, "}\n\n")
 		return
 	}
@@ -1187,7 +1208,7 @@ func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singlet
 		}
 		fmt.Fprintf(buf, "\t\t}\n")
 	}
-	fmt.Fprintf(buf, "\t\treturn []any{}\n")
+	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
 
 	goTypes := distinctGoTypes(allKeyed)

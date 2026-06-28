@@ -147,8 +147,7 @@ func TestRT_MultiImpl_SingleRegistration_Collection(t *testing.T) {
 // --- 2.4-PROV-005 (AC4, P1) — NonexistentServiceCanBeIEnumerableResolved ----
 
 // TestRT_MultiImpl_Unregistered_EmptyCollection: GetKeyedServices for an
-// unregistered type must return an EMPTY slice (not nil). dotnet returns
-// Enumerable.Empty<T>() (DISpec line 801). Currently returns nil (red).
+// unregistered type must return nil (unified miss semantics, review F2).
 func TestRT_MultiImpl_Unregistered_EmptyCollection(t *testing.T) {
 	b := runtime.NewBuilder()
 	p, err := b.Build()
@@ -156,8 +155,7 @@ func TestRT_MultiImpl_Unregistered_EmptyCollection(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	all := p.GetKeyedServices(reflect.TypeFor[iMulti](), nil)
-	testutil.NotNil(t, all)
-	testutil.Equal(t, len(all), 0)
+	testutil.Nil(t, all)
 }
 
 // --- 2.4-PROV-006 (AC6, P1) — OuterServiceCanHaveOtherServicesInjected ------

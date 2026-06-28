@@ -151,6 +151,20 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Key:      "\"transient\"",
 	})
+	reg.Service(plan.Service{
+		Name:        "IKeyedService#\"transient-factory\"",
+		GoType:      "fakes.IKeyedService",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedService {\n\treturn fakes.NewKeyedServiceOne()\n}",
+		Lifetime:    plan.Transient,
+		Key:         "\"transient-factory\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceOne#\"scoped\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceOne",
+		Lifetime: plan.Scoped,
+		Key:      "\"scoped\"",
+	})
 	return reg
 }
 

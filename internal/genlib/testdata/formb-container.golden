@@ -56,7 +56,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[svc.IWidget]():
 		return []any{r.f_Widget}
 	}
-	return []any{}
+	return nil
 }
 
 func (r *Root) CreateScope() godi.Scope {

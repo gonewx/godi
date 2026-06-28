@@ -172,6 +172,15 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 	imports := newImportSet()
 	var genErrs []string
 
+	// keyedConstValues tracks (GoType, constant value string) to detect
+	// value-equal but text-distinct keys that would produce duplicate switch
+	// case arms in the generated container (review F1).
+	type keyedSeen struct {
+		goTypeKey string
+		valStr    string
+	}
+	seenKeyed := make(map[keyedSeen]string) // value → first keyText
+
 	for _, rg := range regs {
 		s := plan.Service{
 			Name:     serviceName(rg),
@@ -180,13 +189,43 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		}
 		if rg.keyed && rg.keyText != "" {
 			s.Key = rg.keyText
+
+			// D-1: codegen emits key text as a case expression; non-constant
+			// keys produce invalid or non-deterministic switch arms.
+			tv, tvOK := pkg.TypesInfo.Types[rg.keyExpr]
+			if !tvOK || tv.Value == nil {
+				genErrs = append(genErrs, fmt.Sprintf(
+					"keyed service %q: key expression %s is not a compile-time constant; "+
+						"codegen requires constant keys for switch case arms (D-1)",
+					s.Name, rg.keyText))
+				continue
+			}
+
+			// Detect value-equal but text-distinct keys for the same type,
+			// which would produce duplicate case arms → compile error.
+			sk := keyedSeen{goTypeKey: typeKey(rg.iType), valStr: tv.Value.String()}
+			if prev, dup := seenKeyed[sk]; dup && prev != rg.keyText {
+				genErrs = append(genErrs, fmt.Sprintf(
+					"keyed service %q: key %s has the same value as %s "+
+						"(both evaluate to %s); duplicate keys for the same type "+
+						"produce duplicate switch case arms",
+					s.Name, rg.keyText, prev, tv.Value.String()))
+				continue
+			}
+			seenKeyed[sk] = rg.keyText
 		}
 
 		if rg.form == "B" {
 			// Form B names the service after its interface's short name; a non-named
 			// type argument (*Foo, []Foo) would yield an illegal field name like
 			// f_*pkg.Foo and a non-compilable container. Require a valid identifier.
-			if !token.IsIdentifier(s.Name) {
+			// For keyed services, the Name contains "#key" suffix which is sanitized
+			// later — check only the base part before the "#".
+			baseName := s.Name
+			if idx := strings.Index(baseName, "#"); idx >= 0 {
+				baseName = baseName[:idx]
+			}
+			if !token.IsIdentifier(baseName) {
 				genErrs = append(genErrs, fmt.Sprintf(
 					"form-B service: type argument %s is not a named type — "+
 						"Add{Lifetime}Factory[I] requires I to be a named interface "+

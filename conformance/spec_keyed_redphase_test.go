@@ -82,6 +82,16 @@ var rtFactoryKeyed = ProviderFactory{
 			return fakes.NewKeyedServiceOne()
 		})
 
+		// AC8: transient factory keyed (form B) — exercises factory DSL path
+		runtime.AddKeyedTransient[fakes.IKeyedService](b, "transient-factory", func(p godi.Provider) fakes.IKeyedService {
+			return fakes.NewKeyedServiceOne()
+		})
+
+		// F3 (review): keyed scoped — scope isolation
+		runtime.AddKeyedScoped[fakes.IKeyedService](b, "scoped", func(p godi.Provider) fakes.IKeyedService {
+			return fakes.NewKeyedServiceOne()
+		})
+
 		p, err := b.Build()
 		testutil.NoError(t, err)
 		return p
@@ -208,15 +218,16 @@ var keyedSpecCases = []SpecCase{
 	//
 	// Go difference (D-1 from Story 3-1): factory signature is func(Provider) T —
 	// key is NOT passed to the factory (unlike dotnet's (sp, key) => new Service()).
-	// The key is available via closure capture. This test verifies transient factory
-	// behavior: each resolve creates a new instance.
+	// The key is available via closure capture. This test uses the "transient-factory"
+	// key which is registered via AddKeyedTransientFactory (form B) to properly
+	// exercise the factory DSL path.
 	{
 		Name: "keyed: transient factory — different instances, key via closure (ResolveKeyedServiceTransientFactory, D-1)",
 		Run: func(t *testing.T, p Provider) {
 			st := reflect.TypeFor[fakes.IKeyedService]()
 
-			result1 := p.GetKeyedService(st, "transient")
-			result2 := p.GetKeyedService(st, "transient")
+			result1 := p.GetKeyedService(st, "transient-factory")
+			result2 := p.GetKeyedService(st, "transient-factory")
 
 			testutil.NotNil(t, result1)
 			testutil.NotNil(t, result2)
@@ -234,6 +245,30 @@ var keyedSpecCases = []SpecCase{
 			testutil.Panics(t, func() {
 				godi.GetRequiredKeyed[fakes.IKeyedService](p, "not-registered")
 			})
+		},
+	},
+	// --- 3.1-SPEC-010 (F3, review) — Keyed scoped: scope isolation ----------------
+	//
+	// Verifies keyed scoped services are cached per scope and isolated across scopes.
+	{
+		Name: "keyed: scoped keyed — same scope returns same instance, different scopes return different instances (F3 review)",
+		Run: func(t *testing.T, p Provider) {
+			st := reflect.TypeFor[fakes.IKeyedService]()
+
+			scope1 := p.CreateScope()
+			t.Cleanup(func() { _ = scope1.Close() })
+			s1r1 := scope1.GetKeyedService(st, "scoped")
+			s1r2 := scope1.GetKeyedService(st, "scoped")
+			testutil.NotNil(t, s1r1)
+			testutil.NotNil(t, s1r2)
+			testutil.Equal(t, s1r1, s1r2) // same scope → same instance
+
+			scope2 := p.CreateScope()
+			t.Cleanup(func() { _ = scope2.Close() })
+			s2r1 := scope2.GetKeyedService(st, "scoped")
+			testutil.NotNil(t, s2r1)
+			testutil.True(t, s1r1 != s2r1,
+				"keyed scoped services must be different instances across scopes")
 		},
 	},
 }

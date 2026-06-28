@@ -177,7 +177,7 @@ func (r *root) getUnkeyedServices(t reflect.Type) []any {
 		}
 		return instances
 	}
-	return []any{}
+	return nil
 }
 
 func (r *root) CreateScope() godi.Scope {
@@ -306,7 +306,7 @@ func (s *scope) getUnkeyedServices(t reflect.Type) []any {
 		}
 		return instances
 	}
-	return []any{}
+	return nil
 }
 
 func (s *scope) CreateScope() godi.Scope {
