@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.6 — ActivatorUtilities: Tier C
 // reflective construction + best-match ambiguity resolution.
 //
@@ -406,8 +404,10 @@ func TestActivator_MarkedCtorRejectsMismatchedArgs(t *testing.T) {
 // dotnet: TypeActivatorCreateFactoryDoesNotAllowForAmbiguousConstructorMatches
 func TestActivator_CreateFactoryAmbiguousError(t *testing.T) {
 	ctors := []any{
+		fakes.NewClassWithAmbiguousCtorsFromString,
 		fakes.NewClassWithAmbiguousCtorsFromServiceAndString,
 		fakes.NewClassWithAmbiguousCtorsFromServiceAndInt,
+		fakes.NewClassWithAmbiguousCtorsFromAll,
 	}
 
 	for _, tc := range []struct {
