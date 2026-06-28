@@ -20,11 +20,12 @@ import (
 	"testing"
 
 	"github.com/gonewx/godi"
+	"reflect"
+
 	"github.com/gonewx/godi/conformance/codegen"
 	"github.com/gonewx/godi/conformance/fakes"
 	"github.com/gonewx/godi/internal/genlib"
 	"github.com/gonewx/godi/internal/testutil"
-	"reflect"
 )
 
 // --- 3.4-CGPATH-001 (AC1/AC4, P0) — B2 IsKeyedService true for registered ----
