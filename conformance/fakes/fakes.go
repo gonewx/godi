@@ -124,38 +124,92 @@ type IFakeDisposableTransient interface {
 	IsDisposed() bool
 }
 
+// DisposeRecorder collects labels in Close() call order (D-7).
+// Tests use it to verify LIFO release order as a provider-stable observable.
+type DisposeRecorder struct {
+	labels []string
+}
+
+func NewDisposeRecorder() *DisposeRecorder {
+	return &DisposeRecorder{}
+}
+
+func (r *DisposeRecorder) Record(label string) {
+	r.labels = append(r.labels, label)
+}
+
+func (r *DisposeRecorder) Labels() []string {
+	return r.labels
+}
+
 // FakeDisposableSingleton is the singleton disposable implementation.
 type FakeDisposableSingleton struct {
 	disposed bool
+	recorder *DisposeRecorder
+	label    string
 	_        int
 }
 
-func (f *FakeDisposableSingleton) Close() error    { f.disposed = true; return nil }
-func (f *FakeDisposableSingleton) IsDisposed() bool { return f.disposed }
+func (f *FakeDisposableSingleton) Close() error {
+	f.disposed = true
+	if f.recorder != nil {
+		f.recorder.Record(f.label)
+	}
+	return nil
+}
+func (f *FakeDisposableSingleton) IsDisposed() bool         { return f.disposed }
 func (*FakeDisposableSingleton) isFakeDisposableSingleton() {}
+func (f *FakeDisposableSingleton) SetRecorder(r *DisposeRecorder, label string) {
+	f.recorder = r
+	f.label = label
+}
 
 func NewFakeDisposableSingleton() *FakeDisposableSingleton { return &FakeDisposableSingleton{} }
 
 // FakeDisposableScoped is the scoped disposable implementation.
 type FakeDisposableScoped struct {
 	disposed bool
+	recorder *DisposeRecorder
+	label    string
 	_        int
 }
 
-func (f *FakeDisposableScoped) Close() error    { f.disposed = true; return nil }
-func (f *FakeDisposableScoped) IsDisposed() bool { return f.disposed }
+func (f *FakeDisposableScoped) Close() error {
+	f.disposed = true
+	if f.recorder != nil {
+		f.recorder.Record(f.label)
+	}
+	return nil
+}
+func (f *FakeDisposableScoped) IsDisposed() bool      { return f.disposed }
 func (*FakeDisposableScoped) isFakeDisposableScoped() {}
+func (f *FakeDisposableScoped) SetRecorder(r *DisposeRecorder, label string) {
+	f.recorder = r
+	f.label = label
+}
 
 func NewFakeDisposableScoped() *FakeDisposableScoped { return &FakeDisposableScoped{} }
 
 // FakeDisposableTransient is the transient disposable implementation.
 type FakeDisposableTransient struct {
 	disposed bool
+	recorder *DisposeRecorder
+	label    string
 	_        int
 }
 
-func (f *FakeDisposableTransient) Close() error    { f.disposed = true; return nil }
-func (f *FakeDisposableTransient) IsDisposed() bool { return f.disposed }
+func (f *FakeDisposableTransient) Close() error {
+	f.disposed = true
+	if f.recorder != nil {
+		f.recorder.Record(f.label)
+	}
+	return nil
+}
+func (f *FakeDisposableTransient) IsDisposed() bool         { return f.disposed }
 func (*FakeDisposableTransient) isFakeDisposableTransient() {}
+func (f *FakeDisposableTransient) SetRecorder(r *DisposeRecorder, label string) {
+	f.recorder = r
+	f.label = label
+}
 
 func NewFakeDisposableTransient() *FakeDisposableTransient { return &FakeDisposableTransient{} }

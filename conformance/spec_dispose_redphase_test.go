@@ -219,29 +219,43 @@ func TestConformanceDispose_DifferentialEquivalence(t *testing.T) {
 // The test skeleton below captures the assertion contract — the dev fills in
 // the recorder wiring when fakes are created.
 func TestConformanceDispose_LIFO_DifferentialEquivalence(t *testing.T) {
-	// For each provider: create scope, resolve scoped + 2 transients,
-	// close scope, collect label sequence from DisposeRecorder.
-	// Both providers' sequences must match.
-	for _, factory := range []ProviderFactory{rtFactoryDispose, cgFactoryDispose} {
+	var sequences [2][]string
+	for i, factory := range []ProviderFactory{rtFactoryDispose, cgFactoryDispose} {
 		p := factory.Build(t)
 
 		scope := p.CreateScope()
 
+		recorder := fakes.NewDisposeRecorder()
+
 		// Creation order: scoped, transient-0, transient-1
-		_ = scope.GetService(reflect.TypeFor[fakes.IFakeDisposableScoped]())
-		_ = scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
-		_ = scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
+		scoped := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableScoped]())
+		scoped.(interface {
+			SetRecorder(*fakes.DisposeRecorder, string)
+		}).SetRecorder(recorder, "scoped")
+
+		t0 := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
+		t0.(interface {
+			SetRecorder(*fakes.DisposeRecorder, string)
+		}).SetRecorder(recorder, "transient-0")
+
+		t1 := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
+		t1.(interface {
+			SetRecorder(*fakes.DisposeRecorder, string)
+		}).SetRecorder(recorder, "transient-1")
 
 		testutil.NoError(t, scope.Close())
 
-		// TODO(dev): After fakes are created, retrieve the DisposeRecorder's
-		// label sequence and assert LIFO order (reverse of creation).
-		// Example:
-		//   labels := recorder.Labels()
-		//   testutil.Equal(t, labels[0], "transient")  // last created, first released
-		//   testutil.Equal(t, labels[1], "transient")
-		//   testutil.Equal(t, labels[2], "scoped")     // first created, last released
+		// LIFO: last created released first (D-7, AD-12)
+		labels := recorder.Labels()
+		testutil.Equal(t, len(labels), 3)
+		testutil.Equal(t, labels[0], "transient-1")
+		testutil.Equal(t, labels[1], "transient-0")
+		testutil.Equal(t, labels[2], "scoped")
 
+		sequences[i] = labels
 		_ = p.Close()
 	}
+	// Cross-provider differential equivalence: both providers' label
+	// sequences must match (AD-15, D-7)
+	testutil.DeepEqual(t, sequences[0], sequences[1])
 }

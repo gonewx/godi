@@ -257,6 +257,7 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
+			_ = r.disp.CloseAll()
 			provider, err = nil, fmt.Errorf("runtime build failed materializing singletons: %v", rec)
 		}
 	}()

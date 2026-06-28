@@ -86,11 +86,23 @@ func TestCodegen_PathGamma_LIFO_StrictOnB2(t *testing.T) {
 	testutil.NoError(t, err)
 
 	scope := root.CreateScope()
+	recorder := fakes.NewDisposeRecorder()
 
 	// Resolve disposable services in creation order: scoped first, then transient
-	_ = scope.GetService(reflect.TypeFor[fakes.IFakeDisposableScoped]())
+	scoped := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableScoped]())
+	scoped.(interface {
+		SetRecorder(*fakes.DisposeRecorder, string)
+	}).SetRecorder(recorder, "scoped")
+
 	t0 := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
+	t0.(interface {
+		SetRecorder(*fakes.DisposeRecorder, string)
+	}).SetRecorder(recorder, "transient-0")
+
 	t1 := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableTransient]())
+	t1.(interface {
+		SetRecorder(*fakes.DisposeRecorder, string)
+	}).SetRecorder(recorder, "transient-1")
 
 	// Transients must be different instances (AD-14)
 	testutil.True(t, t0 != t1, "transient disposables must be different instances")
@@ -98,14 +110,13 @@ func TestCodegen_PathGamma_LIFO_StrictOnB2(t *testing.T) {
 	// Close scope — LIFO: last created released first
 	testutil.NoError(t, scope.Close())
 
-	// Retrieve the recorder from the scope's disposable fakes and verify LIFO
-	// order. The exact assertion depends on the DisposeRecorder API (Task 5).
-	// Pattern: each FakeDisposable.Close() appends its label to the recorder.
-	// After scope.Close(), recorder.Labels() must be reverse of creation order.
-	scoped := scope.GetService(reflect.TypeFor[fakes.IFakeDisposableScoped]())
-	_ = scoped // scope already closed — this would return the cached (disposed) instance
+	// Verify LIFO order strictly on the B2 container (AD-15 Path γ)
+	labels := recorder.Labels()
+	testutil.Equal(t, len(labels), 3)
+	testutil.Equal(t, labels[0], "transient-1")
+	testutil.Equal(t, labels[1], "transient-0")
+	testutil.Equal(t, labels[2], "scoped")
 
-	// Root close to clean up
 	testutil.NoError(t, root.Close())
 }
 
