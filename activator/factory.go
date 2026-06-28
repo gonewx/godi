@@ -143,7 +143,6 @@ func tryFactoryMatch(ft reflect.Type, argTypes []reflect.Type) ([]paramPlan, int
 	numIn := ft.NumIn()
 	plan := make([]paramPlan, numIn)
 	usedArgs := make([]bool, len(argTypes))
-	argIdx := 0
 	explicitCount := 0
 
 	for i := 0; i < numIn; i++ {
@@ -155,9 +154,8 @@ func tryFactoryMatch(ft reflect.Type, argTypes []reflect.Type) ([]paramPlan, int
 				continue
 			}
 			if at.AssignableTo(paramType) {
-				plan[i] = paramPlan{source: fromArg, argIndex: argIdx}
+				plan[i] = paramPlan{source: fromArg, argIndex: j}
 				usedArgs[j] = true
-				argIdx++
 				explicitCount++
 				matched = true
 				break
