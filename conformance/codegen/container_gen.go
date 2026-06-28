@@ -12,19 +12,24 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_FakeService                         fakes.IFakeService
-	f_FakeConsumer                        fakes.IFakeConsumer
-	f_FakeDisposableSingleton             fakes.IFakeDisposableSingleton
-	f_FakeScopedService                   fakes.IFakeScopedService
-	f_FakeDisposableScoped                fakes.IFakeDisposableScoped
-	f_KeyedServiceOne__service1_          fakes.IKeyedService
-	f_KeyedServiceTwo__service2_          fakes.IKeyedService
-	f_KeyedServiceOne__both_              fakes.IKeyedService
-	f_KeyedServiceTwo__both_              fakes.IKeyedService
-	f_KeyedServiceOne__singleton_factory_ fakes.IKeyedService
-	f_KeyedServiceOne__scoped_            fakes.IKeyedService
-	disp                                  *runtime.Disposer
-	closed                                bool
+	f_FakeService                                      fakes.IFakeService
+	f_FakeConsumer                                     fakes.IFakeConsumer
+	f_FakeDisposableSingleton                          fakes.IFakeDisposableSingleton
+	f_FakeScopedService                                fakes.IFakeScopedService
+	f_FakeDisposableScoped                             fakes.IFakeDisposableScoped
+	f_KeyedServiceOne__service1_                       fakes.IKeyedService
+	f_KeyedServiceTwo__service2_                       fakes.IKeyedService
+	f_KeyedServiceOne__both_                           fakes.IKeyedService
+	f_KeyedServiceTwo__both_                           fakes.IKeyedService
+	f_KeyedServiceOne__singleton_factory_              fakes.IKeyedService
+	f_IKeyedServiceWithDep__with_dep_                  fakes.IKeyedServiceWithDep
+	f_IKeyedServiceWithKey__injected_key_              fakes.IKeyedServiceWithKey
+	f_IKeyedServiceWithDep__missing_dep_               fakes.IKeyedServiceWithDep
+	f_IKeyedServiceWithProvider__with_provider_        fakes.IKeyedServiceWithProvider
+	f_KeyedServiceOne__scoped_                         fakes.IKeyedService
+	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
+	disp                                               *runtime.Disposer
+	closed                                             bool
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -45,6 +50,23 @@ func NewRoot() (*Root, error) {
 	r.f_KeyedServiceOne__both_ = fakes.NewKeyedServiceOne()
 	r.f_KeyedServiceTwo__both_ = fakes.NewKeyedServiceTwo()
 	r.f_KeyedServiceOne__singleton_factory_ = fakes.NewKeyedServiceOne()
+	r.f_IKeyedServiceWithDep__with_dep_ = (func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})(r)
+	r.f_IKeyedServiceWithKey__injected_key_ = (func(p godi.Provider) fakes.IKeyedServiceWithKey {
+		return fakes.NewKeyedServiceWithKey("injected-key")
+	})(r)
+	r.f_IKeyedServiceWithDep__missing_dep_ = (func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "nonexistent")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})(r)
+	r.f_IKeyedServiceWithProvider__with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(r)
 	return r, nil
 }
 
@@ -179,6 +201,25 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 		case "transient-factory":
 			return r.NewIKeyedService__transient_factory_()
 		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+		switch key {
+		case "with-dep":
+			return r.f_IKeyedServiceWithDep__with_dep_
+		case "missing-dep":
+			return r.f_IKeyedServiceWithDep__missing_dep_
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+		switch key {
+		case "injected-key":
+			return r.f_IKeyedServiceWithKey__injected_key_
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+		switch key {
+		case "with-provider":
+			return r.f_IKeyedServiceWithProvider__with_provider_
+		case "scoped-with-provider":
+			return r.f_IKeyedServiceWithProvider__scoped_with_provider_
+		}
 	}
 	return nil
 }
@@ -229,6 +270,25 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		case "transient-factory":
 			return []any{r.NewIKeyedService__transient_factory_()}
 		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+		switch key {
+		case "with-dep":
+			return []any{r.f_IKeyedServiceWithDep__with_dep_}
+		case "missing-dep":
+			return []any{r.f_IKeyedServiceWithDep__missing_dep_}
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+		switch key {
+		case "injected-key":
+			return []any{r.f_IKeyedServiceWithKey__injected_key_}
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+		switch key {
+		case "with-provider":
+			return []any{r.f_IKeyedServiceWithProvider__with_provider_}
+		case "scoped-with-provider":
+			return []any{r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		}
 	}
 	return nil
 }
@@ -240,6 +300,9 @@ func (r *Root) CreateScope() godi.Scope {
 	s.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	s.disp.Track(s.f_FakeDisposableScoped.(io.Closer))
 	s.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
+	s.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(s)
 	return s
 }
 
@@ -252,12 +315,13 @@ func (r *Root) Close() error {
 }
 
 type scope struct {
-	root                       *Root
-	f_FakeScopedService        fakes.IFakeScopedService
-	f_FakeDisposableScoped     fakes.IFakeDisposableScoped
-	f_KeyedServiceOne__scoped_ fakes.IKeyedService
-	disp                       *runtime.Disposer
-	closed                     bool
+	root                                               *Root
+	f_FakeScopedService                                fakes.IFakeScopedService
+	f_FakeDisposableScoped                             fakes.IFakeDisposableScoped
+	f_KeyedServiceOne__scoped_                         fakes.IKeyedService
+	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
+	disp                                               *runtime.Disposer
+	closed                                             bool
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -340,6 +404,25 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 		case "transient-factory":
 			return s.NewIKeyedService__transient_factory_()
 		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+		switch key {
+		case "with-dep":
+			return s.root.f_IKeyedServiceWithDep__with_dep_
+		case "missing-dep":
+			return s.root.f_IKeyedServiceWithDep__missing_dep_
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+		switch key {
+		case "injected-key":
+			return s.root.f_IKeyedServiceWithKey__injected_key_
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+		switch key {
+		case "with-provider":
+			return s.root.f_IKeyedServiceWithProvider__with_provider_
+		case "scoped-with-provider":
+			return s.f_IKeyedServiceWithProvider__scoped_with_provider_
+		}
 	}
 	return nil
 }
@@ -390,6 +473,25 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		case "transient-factory":
 			return []any{s.NewIKeyedService__transient_factory_()}
 		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+		switch key {
+		case "with-dep":
+			return []any{s.root.f_IKeyedServiceWithDep__with_dep_}
+		case "missing-dep":
+			return []any{s.root.f_IKeyedServiceWithDep__missing_dep_}
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+		switch key {
+		case "injected-key":
+			return []any{s.root.f_IKeyedServiceWithKey__injected_key_}
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+		switch key {
+		case "with-provider":
+			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_}
+		case "scoped-with-provider":
+			return []any{s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+		}
 	}
 	return nil
 }
@@ -401,6 +503,9 @@ func (s *scope) CreateScope() godi.Scope {
 	ns.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	ns.disp.Track(ns.f_FakeDisposableScoped.(io.Closer))
 	ns.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
+	ns.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(ns)
 	return ns
 }
 

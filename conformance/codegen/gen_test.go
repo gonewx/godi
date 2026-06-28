@@ -165,6 +165,42 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Scoped,
 		Key:      "\"scoped\"",
 	})
+	// Story 3-2: Keyed injection registrations (AC2-AC5)
+	reg.Service(plan.Service{
+		Name:        "IKeyedServiceWithDep#\"with-dep\"",
+		GoType:      "fakes.IKeyedServiceWithDep",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithDep {\n\tdep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), \"service1\")\n\treturn fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))\n}",
+		Lifetime:    plan.Singleton,
+		Key:         "\"with-dep\"",
+	})
+	reg.Service(plan.Service{
+		Name:        "IKeyedServiceWithKey#\"injected-key\"",
+		GoType:      "fakes.IKeyedServiceWithKey",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithKey {\n\treturn fakes.NewKeyedServiceWithKey(\"injected-key\")\n}",
+		Lifetime:    plan.Singleton,
+		Key:         "\"injected-key\"",
+	})
+	reg.Service(plan.Service{
+		Name:        "IKeyedServiceWithDep#\"missing-dep\"",
+		GoType:      "fakes.IKeyedServiceWithDep",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithDep {\n\tdep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), \"nonexistent\")\n\tif dep == nil {\n\t\treturn fakes.NewKeyedServiceWithDep(nil)\n\t}\n\treturn fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))\n}",
+		Lifetime:    plan.Singleton,
+		Key:         "\"missing-dep\"",
+	})
+	reg.Service(plan.Service{
+		Name:        "IKeyedServiceWithProvider#\"with-provider\"",
+		GoType:      "fakes.IKeyedServiceWithProvider",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithProvider {\n\treturn fakes.NewKeyedServiceWithProvider(p)\n}",
+		Lifetime:    plan.Singleton,
+		Key:         "\"with-provider\"",
+	})
+	reg.Service(plan.Service{
+		Name:        "IKeyedServiceWithProvider#\"scoped-with-provider\"",
+		GoType:      "fakes.IKeyedServiceWithProvider",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithProvider {\n\treturn fakes.NewKeyedServiceWithProvider(p)\n}",
+		Lifetime:    plan.Scoped,
+		Key:         "\"scoped-with-provider\"",
+	})
 	return reg
 }
 

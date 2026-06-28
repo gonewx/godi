@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 3.2 (AC6) — ActivatorUtilities + keyed parameter.
 //
 // dotnet: CreateServiceWithKeyedParameter

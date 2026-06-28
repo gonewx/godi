@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 3.2 (AC1-AC5, AC7) — conformance suite:
 // dual-provider keyed lifecycle-via-scope + keyed dependency injection
 // SpecCases + cross-provider differential equivalence.

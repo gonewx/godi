@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 3.2 (AC1-AC2, AC7, Task 4) — codegen conformance:
 // Path γ strict tests for keyed lifecycle-via-scope + keyed dependency injection
 // on the pre-generated B2 container + golden regeneration comparison.

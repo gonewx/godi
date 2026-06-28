@@ -1,6 +1,8 @@
 package codegen
 
 import (
+	"reflect"
+
 	"github.com/gonewx/godi"
 	"github.com/gonewx/godi/conformance/fakes"
 )
@@ -46,6 +48,28 @@ func register() {
 		return fakes.NewKeyedServiceOne()
 	})
 	godi.AddKeyedScoped[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "scoped")
+
+	// Story 3-2: Keyed injection registrations (AC2-AC5)
+	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithDep](&r, "with-dep", func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})
+	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithKey](&r, "injected-key", func(p godi.Provider) fakes.IKeyedServiceWithKey {
+		return fakes.NewKeyedServiceWithKey("injected-key")
+	})
+	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithDep](&r, "missing-dep", func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "nonexistent")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})
+	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithProvider](&r, "with-provider", func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})
+	godi.AddKeyedScopedFactory[fakes.IKeyedServiceWithProvider](&r, "scoped-with-provider", func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis
