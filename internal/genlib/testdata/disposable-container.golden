@@ -70,7 +70,18 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
-	return nil
+	if key != nil {
+		return nil
+	}
+	switch t {
+	case reflect.TypeFor[svc.IDBConn]():
+		return []any{r.f_DBConn}
+	case reflect.TypeFor[svc.ISession]():
+		return []any{r.f_Session}
+	case reflect.TypeFor[svc.ITempFile]():
+		return []any{r.NewTempFile()}
+	}
+	return []any{}
 }
 
 func (r *Root) CreateScope() godi.Scope {
@@ -130,7 +141,18 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
-	return nil
+	if key != nil {
+		return nil
+	}
+	switch t {
+	case reflect.TypeFor[svc.IDBConn]():
+		return []any{s.root.f_DBConn}
+	case reflect.TypeFor[svc.ISession]():
+		return []any{s.f_Session}
+	case reflect.TypeFor[svc.ITempFile]():
+		return []any{s.NewTempFile()}
+	}
+	return []any{}
 }
 
 func (s *scope) CreateScope() godi.Scope {

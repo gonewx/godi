@@ -205,7 +205,7 @@ func TestEmitMultiImpl_Golden(t *testing.T) {
 // must be byte-identical — multi-impl support must NOT regress existing emit.
 func TestEmitMultiImpl_ExistingGoldensUnchanged(t *testing.T) {
 	// Non-multi-impl registries (no same-GoType services) must produce
-	// identical output (hasMultiImpl guard ensures no new code paths trigger)
+	// identical output (single-impl containers now also emit full GetKeyedServices switch)
 
 	// Lifetimes registry (three-lifetime, no multi-impl)
 	reg := lifetimesRegistry()

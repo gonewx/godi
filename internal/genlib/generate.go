@@ -42,7 +42,6 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	scopedWiring := reg.ScopedTopo()
 	hasLifetimes := len(scoped) > 0 || len(transients) > 0
 	disposables := hasDisposables(services)
-	multiImpl := hasMultiImpl(services)
 
 	emitHeader(&buf, pkgName)
 	emitImports(&buf, reg.Imports, disposables)
@@ -60,10 +59,10 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	}
 
 	emitGetKeyedService(&buf)
-	emitGetKeyedServicesRoot(&buf, singletons, scoped, transients, multiImpl)
+	emitGetKeyedServicesRoot(&buf, singletons, scoped, transients)
 	emitCreateScope(&buf, scopedWiring, reg, hasLifetimes, disposables)
 	emitClose(&buf, disposables)
-	emitScope(&buf, singletons, scoped, transients, reg, hasLifetimes, disposables, multiImpl)
+	emitScope(&buf, singletons, scoped, transients, reg, hasLifetimes, disposables)
 
 	src, fmtErr := format.Source(buf.Bytes())
 	if fmtErr != nil {
@@ -80,17 +79,6 @@ func filterByLifetime(services []plan.Service, lt plan.Lifetime) []plan.Service 
 		}
 	}
 	return out
-}
-
-func hasMultiImpl(services []plan.Service) bool {
-	seen := make(map[string]struct{})
-	for _, s := range services {
-		if _, ok := seen[s.GoType]; ok {
-			return true
-		}
-		seen[s.GoType] = struct{}{}
-	}
-	return false
 }
 
 func lastByGoType(services []plan.Service, goType string) plan.Service {
@@ -311,6 +299,16 @@ func singleDepExpr(dep, recv string, reg *plan.Registry) string {
 func emitErrTransientDeps(buf *bytes.Buffer, deps []string, recv string, reg *plan.Registry, errAction string) {
 	for _, d := range deps {
 		if strings.HasPrefix(d, "[]") {
+			goType := d[2:]
+			for _, s := range reg.ServicesByGoType(goType) {
+				if s.Lifetime != plan.Transient || !s.CtorErr {
+					continue
+				}
+				fmt.Fprintf(buf, "\tdep_%s, err := %s.New%s()\n", s.Name, recv, s.Name)
+				fmt.Fprintf(buf, "\tif err != nil {\n")
+				fmt.Fprintf(buf, "\t\t%s\n", errAction)
+				fmt.Fprintf(buf, "\t}\n")
+			}
 			continue
 		}
 		s, ok := reg.Lookup(d)
@@ -489,29 +487,26 @@ func emitGetKeyedService(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitGetKeyedServicesRoot(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, multiImpl bool) {
+func emitGetKeyedServicesRoot(buf *bytes.Buffer, singletons, scoped, transients []plan.Service) {
 	fmt.Fprintf(buf, "func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {\n")
-	if !multiImpl {
-		fmt.Fprintf(buf, "\treturn nil\n")
-		fmt.Fprintf(buf, "}\n\n")
-		return
-	}
 	fmt.Fprintf(buf, "\tif key != nil {\n")
 	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
 	all := concatServices(singletons, scoped, transients)
-	seen := make(map[string]struct{})
-	fmt.Fprintf(buf, "\tswitch t {\n")
-	for _, s := range all {
-		if _, dup := seen[s.GoType]; dup {
-			continue
+	if len(all) > 0 {
+		seen := make(map[string]struct{})
+		fmt.Fprintf(buf, "\tswitch t {\n")
+		for _, s := range all {
+			if _, dup := seen[s.GoType]; dup {
+				continue
+			}
+			seen[s.GoType] = struct{}{}
+			group := servicesByGoType(all, s.GoType)
+			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
+			emitCollectionReturn(buf, group, "r")
 		}
-		seen[s.GoType] = struct{}{}
-		group := servicesByGoType(all, s.GoType)
-		fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
-		emitCollectionReturn(buf, group, "r")
+		fmt.Fprintf(buf, "\t}\n")
 	}
-	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\treturn []any{}\n")
 	fmt.Fprintf(buf, "}\n\n")
 }
@@ -526,14 +521,11 @@ func emitCollectionReturn(buf *bytes.Buffer, group []plan.Service, recv string) 
 	}
 	if hasErrTransient {
 		for i, s := range group {
-			expr := collectionItemExpr(s, recv)
 			if s.Lifetime == plan.Transient && s.CtorErr {
 				fmt.Fprintf(buf, "\t\tv%d, err := %s.New%s()\n", i, recv, s.Name)
 				fmt.Fprintf(buf, "\t\tif err != nil {\n")
 				fmt.Fprintf(buf, "\t\t\tpanic(err)\n")
 				fmt.Fprintf(buf, "\t\t}\n")
-			} else {
-				_ = expr
 			}
 		}
 		fmt.Fprintf(buf, "\t\treturn []any{")
@@ -567,14 +559,14 @@ func collectionItemExpr(s plan.Service, recv string) string {
 			return recv + ".New" + s.Name + "()"
 		}
 		return recv + ".f_" + s.Name
-	case "s":
+	case "s", "ns":
 		switch s.Lifetime {
 		case plan.Singleton:
-			return "s.root.f_" + s.Name
+			return recv + ".root.f_" + s.Name
 		case plan.Scoped:
-			return "s.f_" + s.Name
+			return recv + ".f_" + s.Name
 		case plan.Transient:
-			return "s.New" + s.Name + "()"
+			return recv + ".New" + s.Name + "()"
 		}
 	}
 	return recv + ".f_" + s.Name
@@ -686,7 +678,7 @@ func emitClose(buf *bytes.Buffer, disposables bool) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool, multiImpl bool) {
+func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool) {
 	if !hasLifetimes {
 		emitScopeLegacy(buf)
 		return
@@ -696,7 +688,7 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	emitScopeGetService(buf, singletons, scoped, transients)
 	emitScopeIsService(buf, singletons, scoped, transients)
 	emitScopeGetKeyedService(buf)
-	emitScopeGetKeyedServices(buf, singletons, scoped, transients, multiImpl)
+	emitScopeGetKeyedServices(buf, singletons, scoped, transients)
 	emitScopeCreateScope(buf, reg.ScopedTopo(), reg, disposables)
 	emitScopeClose(buf, disposables)
 	emitTransientMethods(buf, transients, "s", "*scope", reg, disposables)
@@ -810,29 +802,26 @@ func emitScopeGetKeyedService(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScopeGetKeyedServices(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, multiImpl bool) {
+func emitScopeGetKeyedServices(buf *bytes.Buffer, singletons, scoped, transients []plan.Service) {
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {\n")
-	if !multiImpl {
-		fmt.Fprintf(buf, "\treturn nil\n")
-		fmt.Fprintf(buf, "}\n\n")
-		return
-	}
 	fmt.Fprintf(buf, "\tif key != nil {\n")
 	fmt.Fprintf(buf, "\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t}\n")
 	all := concatServices(singletons, scoped, transients)
-	seen := make(map[string]struct{})
-	fmt.Fprintf(buf, "\tswitch t {\n")
-	for _, s := range all {
-		if _, dup := seen[s.GoType]; dup {
-			continue
+	if len(all) > 0 {
+		seen := make(map[string]struct{})
+		fmt.Fprintf(buf, "\tswitch t {\n")
+		for _, s := range all {
+			if _, dup := seen[s.GoType]; dup {
+				continue
+			}
+			seen[s.GoType] = struct{}{}
+			group := servicesByGoType(all, s.GoType)
+			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
+			emitCollectionReturn(buf, group, "s")
 		}
-		seen[s.GoType] = struct{}{}
-		group := servicesByGoType(all, s.GoType)
-		fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
-		emitCollectionReturn(buf, group, "s")
+		fmt.Fprintf(buf, "\t}\n")
 	}
-	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\treturn []any{}\n")
 	fmt.Fprintf(buf, "}\n\n")
 }
