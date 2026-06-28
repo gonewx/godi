@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.3 (AC1/AC2) — genlib emit: disposer
 // field, Track calls, CloseAll emit, hasDisposables guard, golden test.
 //

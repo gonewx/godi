@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.3 (AC1/AC3) — codegen conformance:
 // DependencyDirection relaxed for runtime import + Path γ strict tests.
 //

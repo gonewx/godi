@@ -2,17 +2,23 @@
 package codegen
 
 import (
+	"io"
 	"reflect"
 
 	"github.com/gonewx/godi"
 	"github.com/gonewx/godi/conformance/fakes"
+	"github.com/gonewx/godi/runtime"
 )
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_FakeService       fakes.IFakeService
-	f_FakeConsumer      fakes.IFakeConsumer
-	f_FakeScopedService fakes.IFakeScopedService
+	f_FakeService             fakes.IFakeService
+	f_FakeConsumer            fakes.IFakeConsumer
+	f_FakeDisposableSingleton fakes.IFakeDisposableSingleton
+	f_FakeScopedService       fakes.IFakeScopedService
+	f_FakeDisposableScoped    fakes.IFakeDisposableScoped
+	disp                      *runtime.Disposer
+	closed                    bool
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -20,9 +26,14 @@ var _ godi.Provider = (*Root)(nil)
 // NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
 func NewRoot() (*Root, error) {
 	r := &Root{}
+	r.disp = runtime.NewDisposer()
 	r.f_FakeService = fakes.NewFakeService()
 	r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService)
+	r.f_FakeDisposableSingleton = fakes.NewFakeDisposableSingleton()
+	r.disp.Track(r.f_FakeDisposableSingleton.(io.Closer))
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
+	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
+	r.disp.Track(r.f_FakeDisposableScoped.(io.Closer))
 	return r, nil
 }
 
@@ -34,6 +45,12 @@ func (r *Root) NewFakeTransientWithScopedDep() fakes.IFakeTransientWithScopedDep
 	return fakes.NewFakeTransientWithScopedDep(r.f_FakeScopedService)
 }
 
+func (r *Root) NewFakeDisposableTransient() fakes.IFakeDisposableTransient {
+	v := fakes.NewFakeDisposableTransient()
+	r.disp.Track(v)
+	return v
+}
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -41,12 +58,18 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_FakeService
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return r.f_FakeConsumer
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return r.f_FakeDisposableSingleton
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+		return r.f_FakeDisposableScoped
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return r.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 		return r.NewFakeTransientWithScopedDep()
+	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
+		return r.NewFakeDisposableTransient()
 	}
 	return nil
 }
@@ -62,6 +85,12 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 		return true
 	}
 	return false
@@ -80,17 +109,27 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 
 func (r *Root) CreateScope() godi.Scope {
 	s := &scope{root: r}
+	s.disp = runtime.NewDisposer()
 	s.f_FakeScopedService = fakes.NewFakeScopedService()
+	s.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
+	s.disp.Track(s.f_FakeDisposableScoped.(io.Closer))
 	return s
 }
 
 func (r *Root) Close() error {
-	return nil
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	return r.disp.CloseAll()
 }
 
 type scope struct {
-	root                *Root
-	f_FakeScopedService fakes.IFakeScopedService
+	root                   *Root
+	f_FakeScopedService    fakes.IFakeScopedService
+	f_FakeDisposableScoped fakes.IFakeDisposableScoped
+	disp                   *runtime.Disposer
+	closed                 bool
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -101,12 +140,18 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_FakeService
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return s.root.f_FakeConsumer
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return s.root.f_FakeDisposableSingleton
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+		return s.f_FakeDisposableScoped
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return s.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 		return s.NewFakeTransientWithScopedDep()
+	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
+		return s.NewFakeDisposableTransient()
 	}
 	return nil
 }
@@ -117,11 +162,17 @@ func (s *scope) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return true
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
 		return true
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 		return true
 	}
 	return false
@@ -140,11 +191,20 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 
 func (s *scope) CreateScope() godi.Scope {
 	ns := &scope{root: s.root}
+	ns.disp = runtime.NewDisposer()
 	ns.f_FakeScopedService = fakes.NewFakeScopedService()
+	ns.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
+	ns.disp.Track(ns.f_FakeDisposableScoped.(io.Closer))
 	return ns
 }
 
-func (s *scope) Close() error { return nil }
+func (s *scope) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.disp.CloseAll()
+}
 
 func (s *scope) NewFakeTransientService() fakes.IFakeTransientService {
 	return fakes.NewFakeTransientService()
@@ -152,4 +212,10 @@ func (s *scope) NewFakeTransientService() fakes.IFakeTransientService {
 
 func (s *scope) NewFakeTransientWithScopedDep() fakes.IFakeTransientWithScopedDep {
 	return fakes.NewFakeTransientWithScopedDep(s.f_FakeScopedService)
+}
+
+func (s *scope) NewFakeDisposableTransient() fakes.IFakeDisposableTransient {
+	v := fakes.NewFakeDisposableTransient()
+	s.disp.Track(v)
+	return v
 }

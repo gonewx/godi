@@ -103,3 +103,59 @@ func (f *FakeTransientWithScopedDep) ScopedDep() IFakeScopedService { return f.d
 func NewFakeTransientWithScopedDep(dep IFakeScopedService) *FakeTransientWithScopedDep {
 	return &FakeTransientWithScopedDep{dep: dep}
 }
+
+// --- Disposable fakes (Story 2.3) -------------------------------------------
+
+// IFakeDisposableSingleton is a disposable singleton — implements io.Closer.
+type IFakeDisposableSingleton interface {
+	isFakeDisposableSingleton()
+	IsDisposed() bool
+}
+
+// IFakeDisposableScoped is a disposable scoped service.
+type IFakeDisposableScoped interface {
+	isFakeDisposableScoped()
+	IsDisposed() bool
+}
+
+// IFakeDisposableTransient is a disposable transient service.
+type IFakeDisposableTransient interface {
+	isFakeDisposableTransient()
+	IsDisposed() bool
+}
+
+// FakeDisposableSingleton is the singleton disposable implementation.
+type FakeDisposableSingleton struct {
+	disposed bool
+	_        int
+}
+
+func (f *FakeDisposableSingleton) Close() error    { f.disposed = true; return nil }
+func (f *FakeDisposableSingleton) IsDisposed() bool { return f.disposed }
+func (*FakeDisposableSingleton) isFakeDisposableSingleton() {}
+
+func NewFakeDisposableSingleton() *FakeDisposableSingleton { return &FakeDisposableSingleton{} }
+
+// FakeDisposableScoped is the scoped disposable implementation.
+type FakeDisposableScoped struct {
+	disposed bool
+	_        int
+}
+
+func (f *FakeDisposableScoped) Close() error    { f.disposed = true; return nil }
+func (f *FakeDisposableScoped) IsDisposed() bool { return f.disposed }
+func (*FakeDisposableScoped) isFakeDisposableScoped() {}
+
+func NewFakeDisposableScoped() *FakeDisposableScoped { return &FakeDisposableScoped{} }
+
+// FakeDisposableTransient is the transient disposable implementation.
+type FakeDisposableTransient struct {
+	disposed bool
+	_        int
+}
+
+func (f *FakeDisposableTransient) Close() error    { f.disposed = true; return nil }
+func (f *FakeDisposableTransient) IsDisposed() bool { return f.disposed }
+func (*FakeDisposableTransient) isFakeDisposableTransient() {}
+
+func NewFakeDisposableTransient() *FakeDisposableTransient { return &FakeDisposableTransient{} }

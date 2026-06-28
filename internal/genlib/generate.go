@@ -41,15 +41,16 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	singletonWiring := reg.SingletonsTopo()
 	scopedWiring := reg.ScopedTopo()
 	hasLifetimes := len(scoped) > 0 || len(transients) > 0
+	disposables := hasDisposables(services)
 
 	emitHeader(&buf, pkgName)
-	emitImports(&buf, reg.Imports)
-	emitRootStruct(&buf, singletons, scoped)
+	emitImports(&buf, reg.Imports, disposables)
+	emitRootStruct(&buf, singletons, scoped, disposables)
 	emitProviderAssertion(&buf)
-	emitNewRoot(&buf, singletonWiring, scopedWiring, reg)
+	emitNewRoot(&buf, singletonWiring, scopedWiring, reg, disposables)
 
 	if hasLifetimes {
-		emitTransientMethods(&buf, transients, "r", "*Root", reg)
+		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
 		emitGetServiceLifetimes(&buf, singletons, scoped, transients)
 		emitIsServiceLifetimes(&buf, services)
 	} else {
@@ -59,9 +60,9 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 
 	emitGetKeyedService(&buf)
 	emitGetKeyedServices(&buf)
-	emitCreateScope(&buf, scopedWiring, reg, hasLifetimes)
-	emitClose(&buf)
-	emitScope(&buf, singletons, scoped, transients, reg, hasLifetimes)
+	emitCreateScope(&buf, scopedWiring, reg, hasLifetimes, disposables)
+	emitClose(&buf, disposables)
+	emitScope(&buf, singletons, scoped, transients, reg, hasLifetimes, disposables)
 
 	src, fmtErr := format.Source(buf.Bytes())
 	if fmtErr != nil {
@@ -89,10 +90,14 @@ func emitHeader(buf *bytes.Buffer, pkgName string) {
 // always required (six-method contract uses reflect.Type and godi.Provider /
 // godi.Scope); userImports carries service-package paths. Paths are deduped and
 // service packages sorted for stable output.
-func emitImports(buf *bytes.Buffer, userImports []string) {
-	uniq := make(map[string]struct{}, len(userImports)+2)
+func emitImports(buf *bytes.Buffer, userImports []string, disposables bool) {
+	uniq := make(map[string]struct{}, len(userImports)+3)
 	uniq["reflect"] = struct{}{}
 	uniq["github.com/gonewx/godi"] = struct{}{}
+	if disposables {
+		uniq["github.com/gonewx/godi/runtime"] = struct{}{}
+		uniq["io"] = struct{}{}
+	}
 	sorted := make([]string, 0, len(userImports))
 	for _, p := range userImports {
 		if p == "" {
@@ -107,15 +112,21 @@ func emitImports(buf *bytes.Buffer, userImports []string) {
 	sort.Strings(sorted)
 
 	fmt.Fprintf(buf, "import (\n")
+	if disposables {
+		fmt.Fprintf(buf, "\t\"io\"\n")
+	}
 	fmt.Fprintf(buf, "\t\"reflect\"\n\n")
 	fmt.Fprintf(buf, "\t\"github.com/gonewx/godi\"\n")
+	if disposables {
+		fmt.Fprintf(buf, "\t\"github.com/gonewx/godi/runtime\"\n")
+	}
 	for _, p := range sorted {
 		fmt.Fprintf(buf, "\t%q\n", p)
 	}
 	fmt.Fprintf(buf, ")\n\n")
 }
 
-func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service) {
+func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "// Root is the generated singleton container (AD-1: singleton = Root field).\n")
 	fmt.Fprintf(buf, "type Root struct {\n")
 	for _, s := range singletons {
@@ -123,6 +134,10 @@ func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service) {
 	}
 	for _, s := range scoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", s.Name, s.GoType)
+	}
+	if disposables {
+		fmt.Fprintf(buf, "\tdisp   *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tclosed bool\n")
 	}
 	fmt.Fprintf(buf, "}\n\n")
 }
@@ -135,7 +150,7 @@ func emitProviderAssertion(buf *bytes.Buffer) {
 }
 
 // emitNewRoot writes the eager singleton + root-level scoped wiring (AD-1, D-2).
-func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service, reg *plan.Registry) {
+func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service, reg *plan.Registry, disposables bool) {
 	needsErr := false
 	for _, s := range singletonWiring {
 		if s.CtorErr && s.FactoryExpr == "" {
@@ -155,6 +170,9 @@ func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service
 	fmt.Fprintf(buf, "// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).\n")
 	fmt.Fprintf(buf, "func NewRoot() (*Root, error) {\n")
 	fmt.Fprintf(buf, "\tr := &Root{}\n")
+	if disposables {
+		fmt.Fprintf(buf, "\tr.disp = runtime.NewDisposer()\n")
+	}
 	if needsErr {
 		fmt.Fprintf(buf, "\tvar err error\n")
 	}
@@ -170,6 +188,9 @@ func emitWiringBlock(buf *bytes.Buffer, services []plan.Service, recv string, re
 	for _, s := range services {
 		if s.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\t%s.f_%s = (%s)(%s)\n", recv, s.Name, s.FactoryExpr, recv)
+			if s.Disposable {
+				fmt.Fprintf(buf, "\t%s.disp.Track(%s.f_%s.(io.Closer))\n", recv, recv, s.Name)
+			}
 			continue
 		}
 		emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
@@ -179,9 +200,15 @@ func emitWiringBlock(buf *bytes.Buffer, services []plan.Service, recv string, re
 			fmt.Fprintf(buf, "\tif err != nil {\n")
 			fmt.Fprintf(buf, "\t\treturn nil, err\n")
 			fmt.Fprintf(buf, "\t}\n")
+			if s.Disposable {
+				fmt.Fprintf(buf, "\t%s.disp.Track(%s.f_%s.(io.Closer))\n", recv, recv, s.Name)
+			}
 			continue
 		}
 		fmt.Fprintf(buf, "\t%s.f_%s = %s(%s)\n", recv, s.Name, s.Ctor, args)
+		if s.Disposable {
+			fmt.Fprintf(buf, "\t%s.disp.Track(%s.f_%s.(io.Closer))\n", recv, recv, s.Name)
+		}
 	}
 }
 
@@ -242,23 +269,44 @@ func emitErrTransientDeps(buf *bytes.Buffer, deps []string, recv string, reg *pl
 	}
 }
 
-func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, typeName string, reg *plan.Registry) {
+func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, typeName string, reg *plan.Registry, disposables bool) {
 	for _, s := range transients {
 		if s.FactoryExpr != "" {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, s.Name, s.GoType)
-			fmt.Fprintf(buf, "\treturn (%s)(%s)\n", s.FactoryExpr, recv)
+			if s.Disposable {
+				fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
+				fmt.Fprintf(buf, "\t%s.disp.Track(v.(io.Closer))\n", recv)
+				fmt.Fprintf(buf, "\treturn v\n")
+			} else {
+				fmt.Fprintf(buf, "\treturn (%s)(%s)\n", s.FactoryExpr, recv)
+			}
 			fmt.Fprintf(buf, "}\n\n")
 		} else if s.CtorErr {
 			fmt.Fprintf(buf, "func (%s %s) New%s() (%s, error) {\n", recv, typeName, s.Name, s.GoType)
 			emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
 			args := depArgsForCtx(s.Deps, recv, reg)
-			fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
+			if s.Disposable {
+				fmt.Fprintf(buf, "\tv, err := %s(%s)\n", s.Ctor, args)
+				fmt.Fprintf(buf, "\tif err != nil {\n")
+				fmt.Fprintf(buf, "\t\treturn nil, err\n")
+				fmt.Fprintf(buf, "\t}\n")
+				fmt.Fprintf(buf, "\t%s.disp.Track(v)\n", recv)
+				fmt.Fprintf(buf, "\treturn v, nil\n")
+			} else {
+				fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
+			}
 			fmt.Fprintf(buf, "}\n\n")
 		} else {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, s.Name, s.GoType)
 			emitErrTransientDeps(buf, s.Deps, recv, reg, "panic(err)")
 			args := depArgsForCtx(s.Deps, recv, reg)
-			fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
+			if s.Disposable {
+				fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
+				fmt.Fprintf(buf, "\t%s.disp.Track(v)\n", recv)
+				fmt.Fprintf(buf, "\treturn v\n")
+			} else {
+				fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
+			}
 			fmt.Fprintf(buf, "}\n\n")
 		}
 	}
@@ -358,12 +406,15 @@ func emitGetKeyedServices(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, hasLifetimes bool) {
+func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) CreateScope() godi.Scope {\n")
 	if !hasLifetimes {
 		fmt.Fprintf(buf, "\treturn &scope{root: r}\n")
 	} else {
 		fmt.Fprintf(buf, "\ts := &scope{root: r}\n")
+		if disposables {
+			fmt.Fprintf(buf, "\ts.disp = runtime.NewDisposer()\n")
+		}
 		needsErr := false
 		for _, svc := range scopedWiring {
 			if svc.CtorErr && svc.FactoryExpr == "" {
@@ -377,6 +428,9 @@ func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.R
 		for _, svc := range scopedWiring {
 			if svc.FactoryExpr != "" {
 				fmt.Fprintf(buf, "\ts.f_%s = (%s)(s)\n", svc.Name, svc.FactoryExpr)
+				if svc.Disposable {
+					fmt.Fprintf(buf, "\ts.disp.Track(s.f_%s.(io.Closer))\n", svc.Name)
+				}
 			} else {
 				emitErrTransientDeps(buf, svc.Deps, "s", reg, "panic(err)")
 				args := depArgsForCreateScope(svc.Deps, reg)
@@ -387,6 +441,9 @@ func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.R
 					fmt.Fprintf(buf, "\t}\n")
 				} else {
 					fmt.Fprintf(buf, "\ts.f_%s = %s(%s)\n", svc.Name, svc.Ctor, args)
+				}
+				if svc.Disposable {
+					fmt.Fprintf(buf, "\ts.disp.Track(s.f_%s.(io.Closer))\n", svc.Name)
 				}
 			}
 		}
@@ -424,27 +481,34 @@ func depArgsForCreateScope(deps []string, reg *plan.Registry) string {
 	return strings.Join(parts, ", ")
 }
 
-// emitClose is an idempotent no-op this epoch (LIFO disposer lands in Story 2.3).
-func emitClose(buf *bytes.Buffer) {
+func emitClose(buf *bytes.Buffer, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) Close() error {\n")
-	fmt.Fprintf(buf, "\treturn nil\n")
+	if disposables {
+		fmt.Fprintf(buf, "\tif r.closed {\n")
+		fmt.Fprintf(buf, "\t\treturn nil\n")
+		fmt.Fprintf(buf, "\t}\n")
+		fmt.Fprintf(buf, "\tr.closed = true\n")
+		fmt.Fprintf(buf, "\treturn r.disp.CloseAll()\n")
+	} else {
+		fmt.Fprintf(buf, "\treturn nil\n")
+	}
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool) {
+func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool) {
 	if !hasLifetimes {
 		emitScopeLegacy(buf)
 		return
 	}
-	emitScopeStruct(buf, scoped)
+	emitScopeStruct(buf, scoped, disposables)
 	emitScopeAssertion(buf)
 	emitScopeGetService(buf, singletons, scoped, transients)
 	emitScopeIsService(buf, singletons, scoped, transients)
 	emitScopeGetKeyedService(buf)
 	emitScopeGetKeyedServices(buf)
-	emitScopeCreateScope(buf, reg.ScopedTopo(), reg)
-	emitScopeClose(buf)
-	emitTransientMethods(buf, transients, "s", "*scope", reg)
+	emitScopeCreateScope(buf, reg.ScopedTopo(), reg, disposables)
+	emitScopeClose(buf, disposables)
+	emitTransientMethods(buf, transients, "s", "*scope", reg, disposables)
 }
 
 func emitScopeLegacy(buf *bytes.Buffer) {
@@ -462,11 +526,15 @@ func emitScopeLegacy(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "func (s *scope) Close() error { return nil }\n")
 }
 
-func emitScopeStruct(buf *bytes.Buffer, scoped []plan.Service) {
+func emitScopeStruct(buf *bytes.Buffer, scoped []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "type scope struct {\n")
 	fmt.Fprintf(buf, "\troot *Root\n")
 	for _, s := range scoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", s.Name, s.GoType)
+	}
+	if disposables {
+		fmt.Fprintf(buf, "\tdisp   *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tclosed bool\n")
 	}
 	fmt.Fprintf(buf, "}\n\n")
 }
@@ -536,9 +604,12 @@ func emitScopeGetKeyedServices(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry) {
+func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, disposables bool) {
 	fmt.Fprintf(buf, "func (s *scope) CreateScope() godi.Scope {\n")
 	fmt.Fprintf(buf, "\tns := &scope{root: s.root}\n")
+	if disposables {
+		fmt.Fprintf(buf, "\tns.disp = runtime.NewDisposer()\n")
+	}
 	needsErr := false
 	for _, svc := range scopedWiring {
 		if svc.CtorErr && svc.FactoryExpr == "" {
@@ -552,6 +623,9 @@ func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *p
 	for _, svc := range scopedWiring {
 		if svc.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\tns.f_%s = (%s)(ns)\n", svc.Name, svc.FactoryExpr)
+			if svc.Disposable {
+				fmt.Fprintf(buf, "\tns.disp.Track(ns.f_%s.(io.Closer))\n", svc.Name)
+			}
 		} else {
 			emitErrTransientDeps(buf, svc.Deps, "ns", reg, "panic(err)")
 			args := depArgsForNestedScope(svc.Deps, reg)
@@ -562,6 +636,9 @@ func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *p
 				fmt.Fprintf(buf, "\t}\n")
 			} else {
 				fmt.Fprintf(buf, "\tns.f_%s = %s(%s)\n", svc.Name, svc.Ctor, args)
+			}
+			if svc.Disposable {
+				fmt.Fprintf(buf, "\tns.disp.Track(ns.f_%s.(io.Closer))\n", svc.Name)
 			}
 		}
 	}
@@ -598,8 +675,18 @@ func depArgsForNestedScope(deps []string, reg *plan.Registry) string {
 	return strings.Join(parts, ", ")
 }
 
-func emitScopeClose(buf *bytes.Buffer) {
-	fmt.Fprintf(buf, "func (s *scope) Close() error { return nil }\n\n")
+func emitScopeClose(buf *bytes.Buffer, disposables bool) {
+	if disposables {
+		fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
+		fmt.Fprintf(buf, "\tif s.closed {\n")
+		fmt.Fprintf(buf, "\t\treturn nil\n")
+		fmt.Fprintf(buf, "\t}\n")
+		fmt.Fprintf(buf, "\ts.closed = true\n")
+		fmt.Fprintf(buf, "\treturn s.disp.CloseAll()\n")
+		fmt.Fprintf(buf, "}\n\n")
+	} else {
+		fmt.Fprintf(buf, "func (s *scope) Close() error { return nil }\n\n")
+	}
 }
 
 func concatServices(slices ...[]plan.Service) []plan.Service {
@@ -612,4 +699,13 @@ func concatServices(slices ...[]plan.Service) []plan.Service {
 		out = append(out, s...)
 	}
 	return out
+}
+
+func hasDisposables(services []plan.Service) bool {
+	for _, s := range services {
+		if s.Disposable {
+			return true
+		}
+	}
+	return false
 }

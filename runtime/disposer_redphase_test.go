@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.3 (AC2) — runtime Disposer unit tests:
 // LIFO release order, first-error-continue, idempotent CloseAll.
 //

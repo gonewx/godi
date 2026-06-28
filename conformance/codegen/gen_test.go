@@ -62,6 +62,27 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Deps:     []string{"FakeScopedService"},
 	})
+	reg.Service(plan.Service{
+		Name:       "FakeDisposableSingleton",
+		GoType:     "fakes.IFakeDisposableSingleton",
+		Ctor:       "fakes.NewFakeDisposableSingleton",
+		Lifetime:   plan.Singleton,
+		Disposable: true,
+	})
+	reg.Service(plan.Service{
+		Name:       "FakeDisposableScoped",
+		GoType:     "fakes.IFakeDisposableScoped",
+		Ctor:       "fakes.NewFakeDisposableScoped",
+		Lifetime:   plan.Scoped,
+		Disposable: true,
+	})
+	reg.Service(plan.Service{
+		Name:       "FakeDisposableTransient",
+		GoType:     "fakes.IFakeDisposableTransient",
+		Ctor:       "fakes.NewFakeDisposableTransient",
+		Lifetime:   plan.Transient,
+		Disposable: true,
+	})
 	return reg
 }
 
@@ -144,8 +165,8 @@ func TestCodegen_SingletonSharedNotReconstructed(t *testing.T) {
 // --- 2.1-CG-003 (AC3, P1) ----------------------------------------------------
 
 // TestCodegen_DependencyDirection: the generated container must NOT import plan,
-// genlib, runtime, or cmd (AD-2 dependency direction) — a regression guard that
-// the richer dependency wiring did not pull in the generator's packages.
+// genlib, or cmd (AD-2 dependency direction). Runtime IS allowed — generated
+// containers depend on runtime for the Disposer (AD-2: generated --> runtime).
 func TestCodegen_DependencyDirection(t *testing.T) {
 	deps := goListDeps(t, "github.com/gonewx/godi/conformance/codegen")
 	for _, dep := range deps {
@@ -153,8 +174,6 @@ func TestCodegen_DependencyDirection(t *testing.T) {
 			"codegen container must not import genlib (AD-2)")
 		testutil.True(t, !strings.Contains(dep, "godi/plan"),
 			"codegen container must not import plan (AD-2)")
-		testutil.True(t, !strings.Contains(dep, "godi/runtime"),
-			"codegen container must not import runtime (AD-2)")
 		testutil.True(t, !strings.Contains(dep, "godi-gen"),
 			"codegen container must not import cmd/godi-gen (AD-2)")
 	}

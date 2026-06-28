@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.3 (AC2/AC3) — runtime provider dispose:
 // root/scope track, Close releases disposables, singleton not released on
 // scope.Close, LIFO order through provider, Close idempotent with disposables.

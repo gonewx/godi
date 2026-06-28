@@ -170,7 +170,7 @@ func TestClose_DoesNotDoubleRelease(t *testing.T) {
 	_ = p.Close()
 	_ = p.Close()
 
-	testutil.True(t, closeCount <= 1, "Close must not double-release (LIFO disposer is Story 2.3)")
+	testutil.Equal(t, closeCount, 1)
 }
 
 // --- 1.3-UNIT-006 (AC4, P0) -------------------------------------------------

@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.3 (AC1/AC2/AC3) — conformance suite:
 // dual-provider dispose spec cases + cross-provider LIFO differential
 // equivalence + singleton dispose state.

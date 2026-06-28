@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"io"
 	"maps"
 	"reflect"
 	"sync"
@@ -29,7 +30,9 @@ type root struct {
 	singletons map[reflect.Type]any
 	rootScoped map[reflect.Type]any
 
+	disp      *Disposer
 	closeOnce sync.Once
+	closeErr  error
 }
 
 var _ godi.Provider = (*root)(nil)
@@ -46,6 +49,9 @@ func (r *root) GetService(t reflect.Type) any {
 	if factory, ok := r.singletonFactories[t]; ok {
 		v := factory(r)
 		r.singletons[t] = v
+		if c, ok := v.(io.Closer); ok {
+			r.disp.Track(c)
+		}
 		return v
 	}
 	if v, ok := r.rootScoped[t]; ok {
@@ -54,10 +60,17 @@ func (r *root) GetService(t reflect.Type) any {
 	if factory, ok := r.scopedFactories[t]; ok {
 		v := factory(r)
 		r.rootScoped[t] = v
+		if c, ok := v.(io.Closer); ok {
+			r.disp.Track(c)
+		}
 		return v
 	}
 	if factory, ok := r.transientFactories[t]; ok {
-		return factory(r)
+		v := factory(r)
+		if c, ok := v.(io.Closer); ok {
+			r.disp.Track(c)
+		}
+		return v
 	}
 	return nil
 }
@@ -90,22 +103,26 @@ func (r *root) CreateScope() godi.Scope {
 	return &scope{
 		root:   r,
 		scoped: make(map[reflect.Type]any),
+		disp:   NewDisposer(),
 	}
 }
 
 func (r *root) Close() error {
 	r.closeOnce.Do(func() {
-		// LIFO disposer / track / closeAll lands in Story 2.3 (AD-11 / AD-12).
+		r.closeErr = r.disp.CloseAll()
 	})
-	return nil
+	return r.closeErr
 }
 
 // scope is a child scope with its own scoped cache. Singletons are shared via
 // root; scoped services are independently lazy-memoized per scope (D-2);
 // transients are created fresh every time (AD-14).
 type scope struct {
-	root   *root
-	scoped map[reflect.Type]any
+	root      *root
+	scoped    map[reflect.Type]any
+	disp      *Disposer
+	closeOnce sync.Once
+	closeErr  error
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -121,6 +138,9 @@ func (s *scope) GetService(t reflect.Type) any {
 	if factory, ok := s.root.singletonFactories[t]; ok {
 		v := factory(s.root)
 		s.root.singletons[t] = v
+		if c, ok := v.(io.Closer); ok {
+			s.root.disp.Track(c)
+		}
 		return v
 	}
 	if v, ok := s.scoped[t]; ok {
@@ -129,10 +149,17 @@ func (s *scope) GetService(t reflect.Type) any {
 	if factory, ok := s.root.scopedFactories[t]; ok {
 		v := factory(s)
 		s.scoped[t] = v
+		if c, ok := v.(io.Closer); ok {
+			s.disp.Track(c)
+		}
 		return v
 	}
 	if factory, ok := s.root.transientFactories[t]; ok {
-		return factory(s)
+		v := factory(s)
+		if c, ok := v.(io.Closer); ok {
+			s.disp.Track(c)
+		}
+		return v
 	}
 	return nil
 }
@@ -154,10 +181,16 @@ func (s *scope) CreateScope() godi.Scope {
 	return &scope{
 		root:   s.root,
 		scoped: make(map[reflect.Type]any),
+		disp:   NewDisposer(),
 	}
 }
 
-func (s *scope) Close() error { return nil }
+func (s *scope) Close() error {
+	s.closeOnce.Do(func() {
+		s.closeErr = s.disp.CloseAll()
+	})
+	return s.closeErr
+}
 
 // Builder accumulates form-B closure registrations for all three lifetimes
 // and materializes them into a runtime provider.
@@ -220,6 +253,7 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 		transientFactories: tf,
 		singletons:         make(map[reflect.Type]any, len(sf)),
 		rootScoped:         make(map[reflect.Type]any, len(scf)),
+		disp:               NewDisposer(),
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
