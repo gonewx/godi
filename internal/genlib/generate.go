@@ -95,6 +95,10 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 		emitIsServiceSingletonsOnly(&buf, singletons)
 	}
 
+	// IsKeyedService is an interface method (AD-16 face revised 6→7, Story 3.4), so
+	// EVERY container must implement it — including unkeyed ones, where the switch
+	// body is empty and only the nil/AnyKey/false lines remain. Emit unconditionally.
+	emitIsKeyedService(&buf, keyedSingletons, keyedScoped, keyedTransients)
 	emitGetKeyedServiceFull(&buf, reg, keyedSingletons, keyedScoped, keyedTransients)
 	emitGetKeyedServicesRootFull(&buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients)
 	emitCreateScope(&buf, scopedWiring, reg, hasLifetimes, disposables, reg.KeyedScopedTopo())
@@ -542,6 +546,56 @@ func emitIsServiceSingletonsOnly(buf *bytes.Buffer, singletons []plan.Service) {
 	fmt.Fprintf(buf, "}\n\n")
 }
 
+// emitIsKeyedService writes the Root IsKeyedService (AD-16 face revised 6→7 in
+// Story 3.4). It is a PURE QUERY counterpart of IsService: nil key routes to the
+// unkeyed IsService, AnyKey returns false (NOT a panic — the deliberate contrast
+// with GetKeyedService(AnyKey), Story 3.4 D-3), and a concrete (type, key) hit
+// returns true. It is emitted UNCONDITIONALLY (D-6): IsKeyedService is part of the
+// Provider contract, so EVERY generated container — including unkeyed ones — must
+// implement it; with no keyed registration the type switch body is empty and only
+// the nil/AnyKey/false routing remains. The type+key switch reuses the same
+// keyedServicesByGoType / distinctKeys grouping as emitGetKeyedServiceFull so the
+// two methods agree on which (type, key) pairs exist.
+func emitIsKeyedService(buf *bytes.Buffer, keyedSingletons, keyedScoped, keyedTransients []plan.Service) {
+	fmt.Fprintf(buf, "func (r *Root) IsKeyedService(t reflect.Type, key any) bool {\n")
+	fmt.Fprintf(buf, "\tif key == nil {\n")
+	fmt.Fprintf(buf, "\t\treturn r.IsService(t)\n")
+	fmt.Fprintf(buf, "\t}\n")
+	fmt.Fprintf(buf, "\tif key == godi.AnyKey {\n")
+	fmt.Fprintf(buf, "\t\treturn false\n")
+	fmt.Fprintf(buf, "\t}\n")
+
+	allKeyed := concatServices(keyedSingletons, keyedScoped, keyedTransients)
+	if len(allKeyed) > 0 {
+		goTypes := distinctGoTypes(allKeyed)
+		fmt.Fprintf(buf, "\tswitch t {\n")
+		for _, goType := range goTypes {
+			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", goType)
+			fmt.Fprintf(buf, "\t\tswitch key {\n")
+			group := keyedServicesByGoType(allKeyed, goType)
+			keys := distinctKeys(group)
+			for _, key := range keys {
+				fmt.Fprintf(buf, "\t\tcase %s:\n", key)
+				fmt.Fprintf(buf, "\t\t\treturn true\n")
+			}
+			fmt.Fprintf(buf, "\t\t}\n")
+		}
+		fmt.Fprintf(buf, "\t}\n")
+	}
+
+	fmt.Fprintf(buf, "\treturn false\n")
+	fmt.Fprintf(buf, "}\n\n")
+}
+
+// emitScopeIsKeyedService writes the scope IsKeyedService delegate (root holds the
+// keyed registry; the scope only adds scoped-instance storage, so the query
+// delegates, mirroring emitScopeIsService).
+func emitScopeIsKeyedService(buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "func (s *scope) IsKeyedService(t reflect.Type, key any) bool {\n")
+	fmt.Fprintf(buf, "\treturn s.root.IsKeyedService(t, key)\n")
+	fmt.Fprintf(buf, "}\n\n")
+}
+
 // emitGetKeyedService is no longer used — replaced by emitGetKeyedServiceFull.
 // Kept as a compile-time assertion that the old signature was emitGetKeyedService(*bytes.Buffer).
 
@@ -725,6 +779,7 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	emitScopeAssertion(buf)
 	emitScopeGetService(buf, singletons, scoped, transients)
 	emitScopeIsService(buf, singletons, scoped, transients)
+	emitScopeIsKeyedService(buf)
 	emitScopeGetKeyedServiceFull(buf, reg, keyedSingletons, keyedScoped, keyedTransients)
 	emitScopeGetKeyedServicesFull(buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients)
 	emitScopeCreateScope(buf, reg.ScopedTopo(), reg, disposables, reg.KeyedScopedTopo())
@@ -739,6 +794,9 @@ func emitScopeLegacy(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "var _ godi.Scope = (*scope)(nil)\n\n")
 	fmt.Fprintf(buf, "func (s *scope) GetService(t reflect.Type) any { return s.root.GetService(t) }\n\n")
 	fmt.Fprintf(buf, "func (s *scope) IsService(t reflect.Type) bool { return s.root.IsService(t) }\n\n")
+	fmt.Fprintf(buf, "func (s *scope) IsKeyedService(t reflect.Type, key any) bool {\n")
+	fmt.Fprintf(buf, "\treturn s.root.IsKeyedService(t, key)\n")
+	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedService(t reflect.Type, key any) any {\n")
 	fmt.Fprintf(buf, "\treturn s.root.GetKeyedService(t, key)\n")
 	fmt.Fprintf(buf, "}\n\n")

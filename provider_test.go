@@ -1,6 +1,7 @@
 // Unit tests for Story 1.2 (AC1) — the AD-16 Provider / Scope interface contract.
-// These assertions pin godi.Provider's method face to exactly the six AD-16
-// methods and godi.Scope to interface{ Provider }.
+// These assertions pin godi.Provider's method face to exactly the seven AD-16
+// methods (face revised 6 → 7 in Story 3.4: IsKeyedService added) and godi.Scope
+// to interface{ Provider }.
 package godi_test
 
 import (
@@ -11,14 +12,16 @@ import (
 	"github.com/gonewx/godi/internal/testutil"
 )
 
-// wantProviderMethods is the canonical AD-16 method face: EXACTLY these six
-// methods, each with the pinned signature. A method renamed, dropped, added, or
-// drifting in signature breaks 1.2-UNIT-001. Interface methods report their type
-// without a receiver, so each value here is the bare func signature.
+// wantProviderMethods is the canonical AD-16 method face: EXACTLY these seven
+// methods (face revised 6 → 7 in Story 3.4: IsKeyedService added), each with the
+// pinned signature. A method renamed, dropped, added, or drifting in signature
+// breaks 1.2-UNIT-001. Interface methods report their type without a receiver, so
+// each value here is the bare func signature.
 func wantProviderMethods() map[string]reflect.Type {
 	return map[string]reflect.Type{
 		"GetService":       reflect.TypeOf(func(reflect.Type) any { return nil }),
 		"IsService":        reflect.TypeOf(func(reflect.Type) bool { return false }),
+		"IsKeyedService":   reflect.TypeOf(func(reflect.Type, any) bool { return false }),
 		"GetKeyedService":  reflect.TypeOf(func(reflect.Type, any) any { return nil }),
 		"GetKeyedServices": reflect.TypeOf(func(reflect.Type, any) []any { return nil }),
 		"CreateScope":      reflect.TypeOf(func() godi.Scope { return nil }),
@@ -29,7 +32,8 @@ func wantProviderMethods() map[string]reflect.Type {
 // TestProvider_MethodFaceIsExactlyAD16 (1.2-UNIT-001, AC1, P0): godi.Provider is
 // a NON-generic interface (AD-5: an interface method may not declare type
 // parameters, so Get[T] is deliberately absent) whose method set is exactly the
-// six AD-16 methods with the pinned signatures.
+// seven AD-16 methods with the pinned signatures (face revised 6 → 7 in Story
+// 3.4, adding IsKeyedService).
 func TestProvider_MethodFaceIsExactlyAD16(t *testing.T) {
 	pt := reflect.TypeOf((*godi.Provider)(nil)).Elem()
 	if pt.Kind() != reflect.Interface {

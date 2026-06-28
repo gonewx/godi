@@ -2,10 +2,11 @@ package godi
 
 import "reflect"
 
-// Provider is the single shared runtime contract pinned by AD-16. It is the ONLY
-// surface the two providers (the reflect-free runtime oracle and the codegen
-// provider) and every generated container have in common, so its method set and
-// semantics are fixed here once and never forked.
+// Provider is the single shared runtime contract pinned by AD-16 (method face
+// revised 6 → 7 in Story 3.4, see below). It is the ONLY surface the two
+// providers (the reflect-free runtime oracle and the codegen provider) and every
+// generated container have in common, so its method set and semantics are fixed
+// here once and never forked.
 //
 // The method face mirrors dotnet's IServiceProvider family. Unmet-lookup
 // semantics are part of the contract: GetService / GetKeyedService /
@@ -29,6 +30,22 @@ type Provider interface {
 	GetService(t reflect.Type) any
 	// IsService reports whether t can be resolved by this provider (CAP-6).
 	IsService(t reflect.Type) bool
+	// IsKeyedService reports whether (t, key) can be resolved by this provider
+	// (CAP-5/6). It is the keyed counterpart of IsService and, like it, is a PURE
+	// QUERY that never panics: an unregistered (type, key) pair returns false.
+	//
+	// Key routing mirrors GetKeyedService (AD-17), with one deliberate divergence:
+	//   - A nil key routes to the unkeyed namespace — IsKeyedService(t, nil) ==
+	//     IsService(t) (null == unkeyed).
+	//   - AnyKey returns false and NEVER panics. This is the key contrast with
+	//     GetKeyedService(t, AnyKey), which always panics (AnyKey is a query-only
+	//     sentinel for single-value resolution): a question about resolvability must
+	//     not itself throw. AnyKey is never accepted as a registration key (both
+	//     providers reject it), so an AnyKey query can never hit — hence false. The
+	//     dotnet catch-all hit-row (a concrete-key query returning true because an
+	//     AnyKey registration exists) is N/A in godi — there is no AnyKey
+	//     registration, a Go mechanism wall (AD-17, Story 3.3 D-3).
+	IsKeyedService(t reflect.Type, key any) bool
 	// GetKeyedService returns the service registered for (t, key), or nil if
 	// none. A nil key routes to the unkeyed service (AD-17).
 	GetKeyedService(t reflect.Type, key any) any

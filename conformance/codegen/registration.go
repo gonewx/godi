@@ -89,6 +89,12 @@ func register() {
 	godi.AddKeyedSingletonFactory[fakes.IAnyKeyService](&r, "alpha", func(p godi.Provider) fakes.IAnyKeyService {
 		return fakes.NewAnyKeyServiceA()
 	})
+
+	// Story 3-4: closed-generic keyed registration for IsKeyedService (AC4). A
+	// closed generic is an ordinary registered type in godi (Story 2-5 D-3); keying
+	// it is no different from keying any concrete type, so IsKeyedService(closed, key)
+	// must report true. Reuses the Story 2-5 open-generic fakes; NO AnyKey key.
+	godi.AddKeyedSingleton[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r, "gen-key")
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

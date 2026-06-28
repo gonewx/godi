@@ -30,6 +30,7 @@ type Root struct {
 	f_AnyKeyServiceA__alpha_                           fakes.IAnyKeyService
 	f_AnyKeyServiceB__beta_                            fakes.IAnyKeyService
 	f_IAnyKeyService__alpha_                           fakes.IAnyKeyService
+	f_FakeOpenGenericService__gen_key_                 fakes.IFakeOpenGenericService[fakes.IFakeService]
 	f_KeyedServiceOne__scoped_                         fakes.IKeyedService
 	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
 	disp                                               *runtime.Disposer
@@ -80,6 +81,7 @@ func NewRoot() (*Root, error) {
 	r.f_IAnyKeyService__alpha_ = (func(p godi.Provider) fakes.IAnyKeyService {
 		return fakes.NewAnyKeyServiceA()
 	})(r)
+	r.f_FakeOpenGenericService__gen_key_ = fakes.NewFakeOpenGenericService[fakes.IFakeService]()
 	r.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
 	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
 		return fakes.NewKeyedServiceWithProvider(p)
@@ -202,6 +204,66 @@ func (r *Root) IsService(t reflect.Type) bool {
 	return false
 }
 
+func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
+	if key == nil {
+		return r.IsService(t)
+	}
+	if key == godi.AnyKey {
+		return false
+	}
+	switch t {
+	case reflect.TypeFor[fakes.IKeyedService]():
+		switch key {
+		case "service1":
+			return true
+		case "service2":
+			return true
+		case "both":
+			return true
+		case "singleton-factory":
+			return true
+		case "scoped":
+			return true
+		case "transient":
+			return true
+		case "transient-factory":
+			return true
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
+		switch key {
+		case "with-dep":
+			return true
+		case "missing-dep":
+			return true
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
+		switch key {
+		case "injected-key":
+			return true
+		}
+	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
+		switch key {
+		case "with-provider":
+			return true
+		case "scoped-with-provider":
+			return true
+		}
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		switch key {
+		case "alpha":
+			return true
+		case "beta":
+			return true
+		}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		switch key {
+		case "gen-key":
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return r.GetService(t)
@@ -253,6 +315,11 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 		case "beta":
 			return r.f_AnyKeyServiceB__beta_
 		}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		switch key {
+		case "gen-key":
+			return r.f_FakeOpenGenericService__gen_key_
+		}
 	}
 	return nil
 }
@@ -299,6 +366,8 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_IKeyedServiceWithProvider__with_provider_, r.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{r.f_AnyKeyServiceA__alpha_, r.f_AnyKeyServiceB__beta_, r.f_IAnyKeyService__alpha_}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+			return []any{r.f_FakeOpenGenericService__gen_key_}
 		}
 		return nil
 	}
@@ -345,6 +414,11 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_AnyKeyServiceA__alpha_, r.f_IAnyKeyService__alpha_}
 		case "beta":
 			return []any{r.f_AnyKeyServiceB__beta_}
+		}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		switch key {
+		case "gen-key":
+			return []any{r.f_FakeOpenGenericService__gen_key_}
 		}
 	}
 	return nil
@@ -443,6 +517,10 @@ func (s *scope) IsService(t reflect.Type) bool {
 	return false
 }
 
+func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
+	return s.root.IsKeyedService(t, key)
+}
+
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return s.GetService(t)
@@ -494,6 +572,11 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 		case "beta":
 			return s.root.f_AnyKeyServiceB__beta_
 		}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		switch key {
+		case "gen-key":
+			return s.root.f_FakeOpenGenericService__gen_key_
+		}
 	}
 	return nil
 }
@@ -540,6 +623,8 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_, s.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_AnyKeyServiceB__beta_, s.root.f_IAnyKeyService__alpha_}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+			return []any{s.root.f_FakeOpenGenericService__gen_key_}
 		}
 		return nil
 	}
@@ -586,6 +671,11 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_IAnyKeyService__alpha_}
 		case "beta":
 			return []any{s.root.f_AnyKeyServiceB__beta_}
+		}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		switch key {
+		case "gen-key":
+			return []any{s.root.f_FakeOpenGenericService__gen_key_}
 		}
 	}
 	return nil

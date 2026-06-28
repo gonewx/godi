@@ -232,6 +232,17 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime:    plan.Singleton,
 		Key:         "\"alpha\"",
 	})
+	// Story 3-4: closed-generic keyed registration (AC4). A closed generic is an
+	// ordinary registered type in godi, so keying it is no different from keying
+	// any concrete type — IsKeyedService(IFakeOpenGenericService[IFakeService],
+	// "gen-key") must return true (ClosedGenericsWithIsKeyedService).
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService#\"gen-key\"",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IFakeService]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IFakeService]",
+		Lifetime: plan.Singleton,
+		Key:      "\"gen-key\"",
+	})
 	return reg
 }
 

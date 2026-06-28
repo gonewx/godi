@@ -125,6 +125,33 @@ func (r *root) IsService(t reflect.Type) bool {
 	return false
 }
 
+// IsKeyedService reports whether (t, key) can be resolved (CAP-5/6, AD-16 face
+// revised 6→7 in Story 3.4). It is a PURE QUERY — never panics — and routes keys
+// like GetKeyedService EXCEPT for AnyKey: a nil key routes to the unkeyed
+// IsService, AnyKey returns false (NOT a panic, the deliberate contrast with
+// GetKeyedService(AnyKey)), and a concrete key hits when any of the three keyed
+// factory maps holds (t, key). AnyKey is never a registration key (both providers
+// reject it), so an AnyKey query can never hit — false (Story 3.4 D-3).
+func (r *root) IsKeyedService(t reflect.Type, key any) bool {
+	if key == nil {
+		return r.IsService(t)
+	}
+	if key == godi.AnyKey {
+		return false
+	}
+	ke := keyedEntry{t: t, key: key}
+	if _, ok := r.keyedSingletonFactories[ke]; ok {
+		return true
+	}
+	if _, ok := r.keyedScopedFactories[ke]; ok {
+		return true
+	}
+	if _, ok := r.keyedTransientFactories[ke]; ok {
+		return true
+	}
+	return false
+}
+
 func (r *root) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
 		return r.GetService(t)
@@ -292,6 +319,10 @@ func (s *scope) GetService(t reflect.Type) any {
 }
 
 func (s *scope) IsService(t reflect.Type) bool { return s.root.IsService(t) }
+
+func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
+	return s.root.IsKeyedService(t, key)
+}
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {

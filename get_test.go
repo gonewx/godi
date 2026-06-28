@@ -29,6 +29,12 @@ func newFake(services map[reflect.Type]any) *fakeProvider {
 
 func (f *fakeProvider) GetService(t reflect.Type) any { return f.services[t] }
 func (f *fakeProvider) IsService(t reflect.Type) bool { _, ok := f.services[t]; return ok }
+func (f *fakeProvider) IsKeyedService(t reflect.Type, key any) bool {
+	if key == nil {
+		return f.IsService(t) // AD-17: nil key routes to the unkeyed query
+	}
+	return false
+}
 
 func (f *fakeProvider) GetKeyedService(t reflect.Type, key any) any {
 	if key == nil {
