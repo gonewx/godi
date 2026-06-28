@@ -1,6 +1,9 @@
 package plan
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Validate checks the registry for structural errors. This story implements
 // the minimum slice: missing-dependency detection (AD-3). Captured-dependency
@@ -24,6 +27,16 @@ func (r *Registry) Validate() []error {
 
 	for _, s := range r.services {
 		for _, dep := range s.Deps {
+			if strings.HasPrefix(dep, "[]") {
+				goType := dep[2:]
+				if len(r.byGoType[goType]) == 0 {
+					errs = append(errs, fmt.Errorf(
+						"missing dependency: %s %q depends on unregistered slice %q",
+						s.Lifetime, s.Name, dep,
+					))
+				}
+				continue
+			}
 			if _, ok := r.byName[dep]; !ok {
 				errs = append(errs, fmt.Errorf(
 					"missing dependency: %s %q depends on unregistered %q",

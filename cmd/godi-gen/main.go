@@ -239,7 +239,7 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 
 		s.Ctor = implPkg.Name() + ".New" + implName
 		imports.addPackage(implPkg)
-		s.Deps = constructorDeps(sig, depIndex)
+		s.Deps = constructorDeps(sig, depIndex, imports)
 		s.CtorErr = hasTrailingError(sig)
 		s.Disposable = implementsCloser(rg.implType)
 
@@ -435,7 +435,7 @@ func serviceName(rg registration) string {
 // pkgB.Config would collide with a registered service named "Config"
 // (pkgA.Config) in Validate's by-name lookup and silently inject the wrong
 // instance instead of reporting the missing dependency.
-func constructorDeps(sig *types.Signature, depIndex map[string]string) []string {
+func constructorDeps(sig *types.Signature, depIndex map[string]string, imports *importSet) []string {
 	params := sig.Params()
 	if params.Len() == 0 {
 		return nil
@@ -443,6 +443,14 @@ func constructorDeps(sig *types.Signature, depIndex map[string]string) []string 
 	deps := make([]string, 0, params.Len())
 	for i := 0; i < params.Len(); i++ {
 		pt := params.At(i).Type()
+		if sliceType, ok := pt.(*types.Slice); ok {
+			elemType := sliceType.Elem()
+			if _, ok := depIndex[typeKey(elemType)]; ok {
+				goType := renderType(elemType, imports)
+				deps = append(deps, "[]"+goType)
+				continue
+			}
+		}
 		if name, ok := depIndex[typeKey(pt)]; ok {
 			deps = append(deps, name)
 			continue

@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.4 (AC5, Task 6) — codegen conformance:
 // Path γ strict tests for IEnumerable multi-impl on the pre-generated B2
 // container.
@@ -19,8 +17,8 @@ package codegen_test
 
 import (
 	"os"
-	goruntime "runtime"
 	"reflect"
+	goruntime "runtime"
 	"strings"
 	"testing"
 
@@ -35,27 +33,7 @@ import (
 // includes multi-impl services (Story 2.4 Task 6). Used by the
 // regeneration-comparison test.
 func conformanceRegistryMultiImpl() *plan.Registry {
-	reg := conformanceRegistry()
-	reg.Service(plan.Service{
-		Name:     "FakeOneMultipleService",
-		GoType:   "fakes.IFakeMultipleService",
-		Ctor:     "fakes.NewFakeOneMultipleService",
-		Lifetime: plan.Transient,
-	})
-	reg.Service(plan.Service{
-		Name:     "FakeTwoMultipleService",
-		GoType:   "fakes.IFakeMultipleService",
-		Ctor:     "fakes.NewFakeTwoMultipleService",
-		Lifetime: plan.Transient,
-	})
-	reg.Service(plan.Service{
-		Name:     "FakeOuterService",
-		GoType:   "fakes.IFakeOuterService",
-		Ctor:     "fakes.NewFakeOuterService",
-		Lifetime: plan.Transient,
-		Deps:     []string{"FakeService", "[]fakes.IFakeMultipleService"},
-	})
-	return reg
+	return conformanceRegistry()
 }
 
 // --- 2.4-CGPATH-001 (AC5, P0) — Path γ: collection resolution strict on B2 --

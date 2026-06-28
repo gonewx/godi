@@ -74,17 +74,22 @@ type Registry struct {
 
 	services []Service
 	byName   map[string]Service
+	byGoType map[string][]string
 }
 
 // NewRegistry returns an empty Registry.
 func NewRegistry() *Registry {
-	return &Registry{byName: make(map[string]Service)}
+	return &Registry{
+		byName:   make(map[string]Service),
+		byGoType: make(map[string][]string),
+	}
 }
 
 // Service registers s and returns the Registry for chaining.
 func (r *Registry) Service(s Service) *Registry {
 	r.services = append(r.services, s)
 	r.byName[s.Name] = s
+	r.byGoType[s.GoType] = append(r.byGoType[s.GoType], s.Name)
 	return r
 }
 
@@ -99,6 +104,18 @@ func (r *Registry) Services() []Service {
 func (r *Registry) Lookup(name string) (Service, bool) {
 	s, ok := r.byName[name]
 	return s, ok
+}
+
+// ServicesByGoType returns all services registered under the given GoType
+// string, in registration order. Returns an empty (non-nil) slice when no
+// services match.
+func (r *Registry) ServicesByGoType(goType string) []Service {
+	names := r.byGoType[goType]
+	out := make([]Service, 0, len(names))
+	for _, n := range names {
+		out = append(out, r.byName[n])
+	}
+	return out
 }
 
 // SingletonsTopo returns the registered singletons in dependency order: every

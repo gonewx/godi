@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.4 (AC1-AC6, Task 6) — conformance suite:
 // dual-provider multi-impl SpecCases + cross-provider differential equivalence
 // for IEnumerable registration-order axis.

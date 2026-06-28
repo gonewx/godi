@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.4 (AC1, Task 1) — plan registry:
 // ServicesByGoType index for same-GoType multi-registration.
 //

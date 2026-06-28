@@ -83,6 +83,25 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime:   plan.Transient,
 		Disposable: true,
 	})
+	reg.Service(plan.Service{
+		Name:     "FakeOneMultipleService",
+		GoType:   "fakes.IFakeMultipleService",
+		Ctor:     "fakes.NewFakeOneMultipleService",
+		Lifetime: plan.Transient,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeTwoMultipleService",
+		GoType:   "fakes.IFakeMultipleService",
+		Ctor:     "fakes.NewFakeTwoMultipleService",
+		Lifetime: plan.Transient,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOuterService",
+		GoType:   "fakes.IFakeOuterService",
+		Ctor:     "fakes.NewFakeOuterService",
+		Lifetime: plan.Transient,
+		Deps:     []string{"FakeService", "[]fakes.IFakeMultipleService"},
+	})
 	return reg
 }
 

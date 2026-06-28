@@ -3,32 +3,35 @@ package runtime
 import (
 	"fmt"
 	"io"
-	"maps"
 	"reflect"
 	"sync"
 
 	"github.com/gonewx/godi"
 )
 
-// root is the reflect-free runtime provider — the compliance oracle (AD-14).
-// It supports three lifetimes (AD-1):
-//   - Singleton: cached once in root, shared across all scopes
-//   - Scoped: cached per scope layer (root = rootScoped, child = scope.scoped)
-//   - Transient: factory executed every time, never cached (AD-14)
-//
-// reflect.Type is used ONLY as a dispatch key (Tier B, AD-13); construction
-// is performed by the closure, never by reflect.New / reflect.Value.Call.
-//
-// Materialization is lazy-memoize (D-3): GetService builds on first access
-// and caches (singletons in root, scoped in the resolving layer). Transients
-// never cache.
-type root struct {
-	singletonFactories map[reflect.Type]func(godi.Provider) any
-	scopedFactories    map[reflect.Type]func(godi.Provider) any
-	transientFactories map[reflect.Type]func(godi.Provider) any
+func materializeInto(cache map[reflect.Type][]any, t reflect.Type, factories []func(godi.Provider) any, provider godi.Provider, disp *Disposer) []any {
+	if instances, ok := cache[t]; ok {
+		return instances
+	}
+	instances := make([]any, len(factories))
+	for i, f := range factories {
+		v := f(provider)
+		if c, ok := v.(io.Closer); ok {
+			disp.Track(c)
+		}
+		instances[i] = v
+	}
+	cache[t] = instances
+	return instances
+}
 
-	singletons map[reflect.Type]any
-	rootScoped map[reflect.Type]any
+type root struct {
+	singletonFactories map[reflect.Type][]func(godi.Provider) any
+	scopedFactories    map[reflect.Type][]func(godi.Provider) any
+	transientFactories map[reflect.Type][]func(godi.Provider) any
+
+	singletons map[reflect.Type][]any
+	rootScoped map[reflect.Type][]any
 
 	disp      *Disposer
 	closeOnce sync.Once
@@ -37,36 +40,17 @@ type root struct {
 
 var _ godi.Provider = (*root)(nil)
 
-// GetService returns the service registered for t, or nil on a miss (AD-16).
-// Dispatch by lifetime (D-5):
-//   - Singleton: lazy-memoize in root (shared across scopes)
-//   - Scoped: lazy-memoize in rootScoped (root acts as root scope, D-2)
-//   - Transient: factory every time, never cached (AD-14)
 func (r *root) GetService(t reflect.Type) any {
-	if v, ok := r.singletons[t]; ok {
-		return v
+	if factories, ok := r.singletonFactories[t]; ok {
+		instances := materializeInto(r.singletons, t, factories, r, r.disp)
+		return instances[len(instances)-1]
 	}
-	if factory, ok := r.singletonFactories[t]; ok {
-		v := factory(r)
-		r.singletons[t] = v
-		if c, ok := v.(io.Closer); ok {
-			r.disp.Track(c)
-		}
-		return v
+	if factories, ok := r.scopedFactories[t]; ok {
+		instances := materializeInto(r.rootScoped, t, factories, r, r.disp)
+		return instances[len(instances)-1]
 	}
-	if v, ok := r.rootScoped[t]; ok {
-		return v
-	}
-	if factory, ok := r.scopedFactories[t]; ok {
-		v := factory(r)
-		r.rootScoped[t] = v
-		if c, ok := v.(io.Closer); ok {
-			r.disp.Track(c)
-		}
-		return v
-	}
-	if factory, ok := r.transientFactories[t]; ok {
-		v := factory(r)
+	if factories, ok := r.transientFactories[t]; ok {
+		v := factories[len(factories)-1](r)
 		if c, ok := v.(io.Closer); ok {
 			r.disp.Track(c)
 		}
@@ -96,13 +80,39 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
-	return nil
+	if key != nil {
+		return nil
+	}
+	if factories, ok := r.singletonFactories[t]; ok {
+		instances := materializeInto(r.singletons, t, factories, r, r.disp)
+		out := make([]any, len(instances))
+		copy(out, instances)
+		return out
+	}
+	if factories, ok := r.scopedFactories[t]; ok {
+		instances := materializeInto(r.rootScoped, t, factories, r, r.disp)
+		out := make([]any, len(instances))
+		copy(out, instances)
+		return out
+	}
+	if factories, ok := r.transientFactories[t]; ok {
+		instances := make([]any, len(factories))
+		for i, f := range factories {
+			v := f(r)
+			if c, ok := v.(io.Closer); ok {
+				r.disp.Track(c)
+			}
+			instances[i] = v
+		}
+		return instances
+	}
+	return []any{}
 }
 
 func (r *root) CreateScope() godi.Scope {
 	return &scope{
 		root:   r,
-		scoped: make(map[reflect.Type]any),
+		scoped: make(map[reflect.Type][]any),
 		disp:   NewDisposer(),
 	}
 }
@@ -114,12 +124,9 @@ func (r *root) Close() error {
 	return r.closeErr
 }
 
-// scope is a child scope with its own scoped cache. Singletons are shared via
-// root; scoped services are independently lazy-memoized per scope (D-2);
-// transients are created fresh every time (AD-14).
 type scope struct {
 	root      *root
-	scoped    map[reflect.Type]any
+	scoped    map[reflect.Type][]any
 	disp      *Disposer
 	closeOnce sync.Once
 	closeErr  error
@@ -127,35 +134,17 @@ type scope struct {
 
 var _ godi.Scope = (*scope)(nil)
 
-// GetService dispatches by lifetime from the scope's perspective (D-5):
-//   - Singleton: delegate to root (shared)
-//   - Scoped: lazy-memoize in THIS scope's cache (independent from root/siblings)
-//   - Transient: factory every time, passing THIS scope as provider (AC2)
 func (s *scope) GetService(t reflect.Type) any {
-	if v, ok := s.root.singletons[t]; ok {
-		return v
+	if factories, ok := s.root.singletonFactories[t]; ok {
+		instances := materializeInto(s.root.singletons, t, factories, s.root, s.root.disp)
+		return instances[len(instances)-1]
 	}
-	if factory, ok := s.root.singletonFactories[t]; ok {
-		v := factory(s.root)
-		s.root.singletons[t] = v
-		if c, ok := v.(io.Closer); ok {
-			s.root.disp.Track(c)
-		}
-		return v
+	if factories, ok := s.root.scopedFactories[t]; ok {
+		instances := materializeInto(s.scoped, t, factories, s, s.disp)
+		return instances[len(instances)-1]
 	}
-	if v, ok := s.scoped[t]; ok {
-		return v
-	}
-	if factory, ok := s.root.scopedFactories[t]; ok {
-		v := factory(s)
-		s.scoped[t] = v
-		if c, ok := v.(io.Closer); ok {
-			s.disp.Track(c)
-		}
-		return v
-	}
-	if factory, ok := s.root.transientFactories[t]; ok {
-		v := factory(s)
+	if factories, ok := s.root.transientFactories[t]; ok {
+		v := factories[len(factories)-1](s)
 		if c, ok := v.(io.Closer); ok {
 			s.disp.Track(c)
 		}
@@ -174,13 +163,39 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
-	return nil
+	if key != nil {
+		return nil
+	}
+	if factories, ok := s.root.singletonFactories[t]; ok {
+		instances := materializeInto(s.root.singletons, t, factories, s.root, s.root.disp)
+		out := make([]any, len(instances))
+		copy(out, instances)
+		return out
+	}
+	if factories, ok := s.root.scopedFactories[t]; ok {
+		instances := materializeInto(s.scoped, t, factories, s, s.disp)
+		out := make([]any, len(instances))
+		copy(out, instances)
+		return out
+	}
+	if factories, ok := s.root.transientFactories[t]; ok {
+		instances := make([]any, len(factories))
+		for i, f := range factories {
+			v := f(s)
+			if c, ok := v.(io.Closer); ok {
+				s.disp.Track(c)
+			}
+			instances[i] = v
+		}
+		return instances
+	}
+	return []any{}
 }
 
 func (s *scope) CreateScope() godi.Scope {
 	return &scope{
 		root:   s.root,
-		scoped: make(map[reflect.Type]any),
+		scoped: make(map[reflect.Type][]any),
 		disp:   NewDisposer(),
 	}
 }
@@ -195,64 +210,64 @@ func (s *scope) Close() error {
 // Builder accumulates form-B closure registrations for all three lifetimes
 // and materializes them into a runtime provider.
 type Builder struct {
-	singletonFactories map[reflect.Type]func(godi.Provider) any
-	scopedFactories    map[reflect.Type]func(godi.Provider) any
-	transientFactories map[reflect.Type]func(godi.Provider) any
+	singletonFactories map[reflect.Type][]func(godi.Provider) any
+	scopedFactories    map[reflect.Type][]func(godi.Provider) any
+	transientFactories map[reflect.Type][]func(godi.Provider) any
 }
 
 func NewBuilder() *Builder {
 	return &Builder{
-		singletonFactories: make(map[reflect.Type]func(godi.Provider) any),
-		scopedFactories:    make(map[reflect.Type]func(godi.Provider) any),
-		transientFactories: make(map[reflect.Type]func(godi.Provider) any),
+		singletonFactories: make(map[reflect.Type][]func(godi.Provider) any),
+		scopedFactories:    make(map[reflect.Type][]func(godi.Provider) any),
+		transientFactories: make(map[reflect.Type][]func(godi.Provider) any),
 	}
 }
 
-// AddSingleton registers a singleton of type T built by factory (form B).
 func AddSingleton[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	b.singletonFactories[reflect.TypeFor[T]()] = func(p godi.Provider) any {
+	t := reflect.TypeFor[T]()
+	b.singletonFactories[t] = append(b.singletonFactories[t], func(p godi.Provider) any {
 		return factory(p)
-	}
+	})
 	return b
 }
 
-// AddScoped registers a scoped service of type T built by factory (form B).
-// Scoped instances are cached per scope — same within a scope, distinct across
-// scopes (AD-1, D-2).
 func AddScoped[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	b.scopedFactories[reflect.TypeFor[T]()] = func(p godi.Provider) any {
+	t := reflect.TypeFor[T]()
+	b.scopedFactories[t] = append(b.scopedFactories[t], func(p godi.Provider) any {
 		return factory(p)
-	}
+	})
 	return b
 }
 
-// AddTransient registers a transient service of type T built by factory (form B).
-// Transient instances are never cached — each resolution creates a new instance
-// (AD-14).
 func AddTransient[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	b.transientFactories[reflect.TypeFor[T]()] = func(p godi.Provider) any {
+	t := reflect.TypeFor[T]()
+	b.transientFactories[t] = append(b.transientFactories[t], func(p godi.Provider) any {
 		return factory(p)
-	}
+	})
 	return b
 }
 
-// Build materializes the registered services and returns the runtime provider.
-// Singletons are eagerly materialized (D-3 lazy-memoize forced by Build);
-// scoped and transient factories are stored for later lazy use.
+func copyFactoryMap(m map[reflect.Type][]func(godi.Provider) any) map[reflect.Type][]func(godi.Provider) any {
+	out := make(map[reflect.Type][]func(godi.Provider) any, len(m))
+	for t, fns := range m {
+		cp := make([]func(godi.Provider) any, len(fns))
+		copy(cp, fns)
+		out[t] = cp
+	}
+	return out
+}
+
 func (b *Builder) Build() (provider godi.Provider, err error) {
-	sf := make(map[reflect.Type]func(godi.Provider) any, len(b.singletonFactories))
-	maps.Copy(sf, b.singletonFactories)
-	scf := make(map[reflect.Type]func(godi.Provider) any, len(b.scopedFactories))
-	maps.Copy(scf, b.scopedFactories)
-	tf := make(map[reflect.Type]func(godi.Provider) any, len(b.transientFactories))
-	maps.Copy(tf, b.transientFactories)
+	sf := copyFactoryMap(b.singletonFactories)
+	scf := copyFactoryMap(b.scopedFactories)
+	tf := copyFactoryMap(b.transientFactories)
 
 	r := &root{
 		singletonFactories: sf,
 		scopedFactories:    scf,
 		transientFactories: tf,
-		singletons:         make(map[reflect.Type]any, len(sf)),
-		rootScoped:         make(map[reflect.Type]any, len(scf)),
+		singletons:         make(map[reflect.Type][]any, len(sf)),
+		rootScoped:         make(map[reflect.Type][]any, len(scf)),
 		disp:               NewDisposer(),
 	}
 	defer func() {

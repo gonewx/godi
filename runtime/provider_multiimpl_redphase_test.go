@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.4 (AC1-AC4/AC6, Task 2) — runtime
 // provider: multi-registration append semantics, GetService last-wins,
 // GetKeyedServices(t, nil) collection resolution, empty collection for
@@ -54,7 +52,7 @@ type outerSvc struct {
 	multi  []iMulti
 }
 
-func (*outerSvc) outerSeal()          {}
+func (*outerSvc) outerSeal()           {}
 func (o *outerSvc) Single() iSingleSvc { return o.single }
 func (o *outerSvc) Multi() []iMulti    { return o.multi }
 

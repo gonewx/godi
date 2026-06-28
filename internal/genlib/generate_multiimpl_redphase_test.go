@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.4 (AC1/AC2, Task 3) — genlib emit:
 // same-GoType multi-registration handling in GetService (last-wins case),
 // IsService (dedup case), GetKeyedServices (collection case), and golden test.
@@ -96,7 +94,7 @@ func TestEmitMultiImpl_GetService_LastWinsCase(t *testing.T) {
 	if nextFunc > 0 {
 		gsSection = gsSection[:nextFunc+1]
 	}
-	testutil.True(t, strings.Contains(gsSection, "f_FakeTwoMultipleService"),
+	testutil.True(t, strings.Contains(gsSection, "FakeTwoMultipleService"),
 		"GetService must return the LAST registered service (last-wins, D-3)")
 
 	// Must not have duplicate case — count across the whole file, but each
