@@ -9,13 +9,9 @@
 // This test verifies that the existing CreateInstance mechanism correctly handles
 // keyed service instances as explicit arguments — no new activator code is needed.
 //
-// RED PHASE — this scaffold is behind //go:build atdd_redphase because:
-//   - New Fake types (IKeyedServiceWithDep, KeyedServiceWithDep) may not exist
-//   - Once Fakes are created, this test should pass immediately (existing
-//     activator code handles it — no changes needed)
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-3-2-keyed-lifetime-injection.md.
+// This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
+// that constraint was removed once the keyed injection Fakes landed. It passes
+// with the existing activator.CreateInstance — no activator code changes needed.
 package activator_test
 
 import (

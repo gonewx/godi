@@ -81,7 +81,7 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	emitImports(&buf, reg.Imports, disposables)
 	emitRootStruct(&buf, singletons, scoped, disposables, keyedSingletons, keyedScoped)
 	emitProviderAssertion(&buf)
-	emitNewRoot(&buf, singletonWiring, scopedWiring, reg, disposables, keyedSingletonWiring)
+	emitNewRoot(&buf, singletonWiring, scopedWiring, reg, disposables, keyedSingletonWiring, reg.KeyedScopedTopo())
 
 	if hasLifetimes {
 		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
@@ -212,8 +212,11 @@ func emitProviderAssertion(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "var _ godi.Provider = (*Root)(nil)\n\n")
 }
 
-// emitNewRoot writes the eager singleton + root-level scoped wiring (AD-1, D-2).
-func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service, reg *plan.Registry, disposables bool, keyedSingletonWiring []plan.Service) {
+// emitNewRoot writes the eager singleton + root-level scoped wiring, plus keyed
+// singleton and root-level keyed scoped wiring (AD-1, D-2). Root acts as the root
+// scope, so keyed scoped services are materialized on Root just like unkeyed scoped
+// — keeping keyed/unkeyed and codegen/runtime consistent (AC1, AD-15).
+func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service, reg *plan.Registry, disposables bool, keyedSingletonWiring, keyedScopedWiring []plan.Service) {
 	needsErr := false
 	for _, s := range singletonWiring {
 		if s.CtorErr && s.FactoryExpr == "" {
@@ -243,6 +246,7 @@ func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service
 	emitWiringBlock(buf, singletonWiring, "r", reg)
 	emitWiringBlock(buf, scopedWiring, "r", reg)
 	emitKeyedWiringBlock(buf, keyedSingletonWiring, "r", reg)
+	emitKeyedWiringBlock(buf, keyedScopedWiring, "r", reg)
 
 	fmt.Fprintf(buf, "\treturn r, nil\n")
 	fmt.Fprintf(buf, "}\n\n")

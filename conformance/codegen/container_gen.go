@@ -52,6 +52,9 @@ func NewRoot() (*Root, error) {
 	r.f_KeyedServiceOne__singleton_factory_ = fakes.NewKeyedServiceOne()
 	r.f_IKeyedServiceWithDep__with_dep_ = (func(p godi.Provider) fakes.IKeyedServiceWithDep {
 		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
 		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
 	})(r)
 	r.f_IKeyedServiceWithKey__injected_key_ = (func(p godi.Provider) fakes.IKeyedServiceWithKey {
@@ -65,6 +68,10 @@ func NewRoot() (*Root, error) {
 		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
 	})(r)
 	r.f_IKeyedServiceWithProvider__with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(r)
+	r.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
+	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
 		return fakes.NewKeyedServiceWithProvider(p)
 	})(r)
 	return r, nil

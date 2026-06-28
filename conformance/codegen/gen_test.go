@@ -169,7 +169,7 @@ func conformanceRegistry() *plan.Registry {
 	reg.Service(plan.Service{
 		Name:        "IKeyedServiceWithDep#\"with-dep\"",
 		GoType:      "fakes.IKeyedServiceWithDep",
-		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithDep {\n\tdep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), \"service1\")\n\treturn fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))\n}",
+		FactoryExpr: "func(p godi.Provider) fakes.IKeyedServiceWithDep {\n\tdep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), \"service1\")\n\tif dep == nil {\n\t\treturn fakes.NewKeyedServiceWithDep(nil)\n\t}\n\treturn fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))\n}",
 		Lifetime:    plan.Singleton,
 		Key:         "\"with-dep\"",
 	})

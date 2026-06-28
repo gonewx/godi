@@ -6,13 +6,9 @@
 // they must run STRICTLY on the pre-generated B2 container, not just via
 // differential equivalence. This verifies the codegen output directly.
 //
-// RED PHASE — this scaffold fails because:
-//   - container_gen.go does NOT have injection registrations
-//   - registration.go does not include injection DSL calls
-//   - GetKeyedService for IKeyedServiceWithDep etc returns nil
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-3-2-keyed-lifetime-injection.md.
+// This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
+// that constraint was removed once registration.go gained the injection DSL calls
+// and container_gen.go was regenerated with the injection registrations.
 package codegen_test
 
 import (
@@ -51,15 +47,37 @@ func TestCodegen_PathGamma_Keyed_SingletonViaScope(t *testing.T) {
 	testutil.Equal(t, rootResult, scopeResult)
 }
 
+// --- 3.2-CGPATH-004 (AC1, review P0) — Path γ: scoped keyed from root on B2 --
+
+// TestCodegen_PathGamma_Keyed_ScopedFromRoot: on the pre-generated B2 container,
+// a keyed scoped service resolved directly from root must return a real, non-nil
+// instance (root acts as the root scope), distinct from a child scope's instance.
+// Regression guard for review P0: NewRoot must materialize keyed scoped fields,
+// mirroring non-keyed scoped and the runtime oracle.
+func TestCodegen_PathGamma_Keyed_ScopedFromRoot(t *testing.T) {
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+
+	st := reflect.TypeFor[fakes.IKeyedService]()
+
+	rootScoped := root.GetKeyedService(st, "scoped")
+	testutil.NotNil(t, rootScoped)
+
+	scope := root.CreateScope()
+	t.Cleanup(func() { _ = scope.Close() })
+	scopeScoped := scope.GetKeyedService(st, "scoped")
+	testutil.NotNil(t, scopeScoped)
+
+	testutil.True(t, rootScoped != scopeScoped,
+		"child scope keyed scoped must be isolated from the root-scope instance")
+}
+
 // --- 3.2-CGPATH-002 (AC2, P0) — Path γ: keyed dependency injection on B2 ----
 
 // TestCodegen_PathGamma_Keyed_InjectionViaFormB: on the pre-generated B2
 // container, a keyed service registered with form-B closure that calls
 // GetKeyedService must correctly inject the keyed dependency.
-//
-// RED PHASE: this test fails because container_gen.go does not include
-// IKeyedServiceWithDep registration. Once registration.go is updated and
-// container regenerated, this should pass.
 func TestCodegen_PathGamma_Keyed_InjectionViaFormB(t *testing.T) {
 	root, err := codegen.NewRoot()
 	testutil.NoError(t, err)
@@ -82,10 +100,9 @@ func TestCodegen_PathGamma_Keyed_InjectionViaFormB(t *testing.T) {
 // must be byte-identical to a fresh genlib.Generate run with the registry that
 // includes injection registrations. This guards deterministic output (AD-14).
 //
-// RED PHASE: this test uses conformanceRegistry() which includes Story 3-2
-// registrations once registration.go is updated. Until then, the registry
-// matches the current container_gen.go (both lack injection entries), so this
-// test may PASS even in red phase — it guards against drift, not completeness.
+// Note: this guards against drift (committed output ≠ fresh generation), not
+// completeness — that the injection registrations behave correctly is covered by
+// the Path γ and SpecCase tests above.
 func TestCodegen_RegenComparison_WithInjection(t *testing.T) {
 	reg := conformanceRegistry()
 	freshSrc, err := genlib.Generate(reg, "codegen")

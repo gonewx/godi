@@ -1,23 +1,15 @@
-// ATDD scaffold for Story 3.2 (AC1-AC5, AC7) — conformance suite:
-// dual-provider keyed lifecycle-via-scope + keyed dependency injection
-// SpecCases + cross-provider differential equivalence.
+// Conformance suite for Story 3.2 (AC1-AC5, AC7): dual-provider keyed
+// lifecycle-via-scope + keyed dependency injection SpecCases plus cross-provider
+// differential equivalence.
 //
-// This file extends the conformance suite with keyed DI injection spec cases
-// ported from dotnet KeyedDependencyInjectionSpecificationTests (12 methods,
+// Ported from dotnet KeyedDependencyInjectionSpecificationTests (12 methods,
 // Story 3-2 slice). Each case runs against BOTH providers (runtime oracle +
-// codegen B2).
+// codegen B2). The keyed injection Fakes (IKeyedServiceWithDep,
+// IKeyedServiceWithKey, IKeyedServiceWithProvider) live in fakes_keyed.go.
 //
-// New Fakes needed (Task 1): IKeyedServiceWithDep + KeyedServiceWithDep,
-// IKeyedServiceWithKey + KeyedServiceWithKey, IKeyedServiceWithProvider +
-// KeyedServiceWithProvider — all in fakes_keyed.go.
-//
-// RED PHASE — this scaffold is behind //go:build atdd_redphase because:
-//   - New Fake types may not yet exist (compile error if Task 1 not done)
-//   - Codegen container does not include injection registrations
-//   - Runtime injection tests should pass once Task 1 Fakes are created
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-3-2-keyed-lifetime-injection.md.
+// This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
+// that constraint was removed (and the suite joined the default build) once the
+// Task 1 Fakes and the codegen injection registrations landed.
 package conformance
 
 import (
@@ -107,6 +99,31 @@ var keyedLifecycleSpecCases = []SpecCase{
 				"scoped keyed must be isolated across scopes")
 		},
 	},
+	// --- 3.2-SPEC-010 (AC1, review P0) — Scoped keyed resolved from ROOT -------
+	//
+	// Review finding (P0): the root provider acts as the root scope, so a keyed
+	// scoped service resolved directly from root must return a real, non-nil
+	// instance — same conclusion as non-keyed scoped (AC1) and as the runtime
+	// oracle. Regression guard for the codegen NewRoot keyed-scoped materialization
+	// (previously the codegen Root returned an unmaterialized nil field here).
+	{
+		Name: "keyed: scoped resolved from root — non-nil, stable, isolated from child scope (AC1, review P0)",
+		Run: func(t *testing.T, p Provider) {
+			st := reflect.TypeFor[fakes.IKeyedService]()
+
+			rootR1 := p.GetKeyedService(st, "scoped")
+			testutil.NotNil(t, rootR1)
+			rootR2 := p.GetKeyedService(st, "scoped")
+			testutil.Equal(t, rootR1, rootR2) // root is a single (root) scope
+
+			scope := p.CreateScope()
+			t.Cleanup(func() { _ = scope.Close() })
+			scopeR := scope.GetKeyedService(st, "scoped")
+			testutil.NotNil(t, scopeR)
+			testutil.True(t, rootR1 != scopeR,
+				"child scope keyed scoped must be isolated from the root-scope instance")
+		},
+	},
 }
 
 func TestConformanceKeyedLifecycle_RuntimeProvider(t *testing.T) {
@@ -124,8 +141,10 @@ func TestConformanceKeyedLifecycle_CodegenProvider(t *testing.T) {
 // rtFactoryKeyedInjection builds the runtime provider with keyed injection
 // registrations for Story 3-2. It includes the "service1" base registration
 // from Story 3-1 (needed as dependency target for AC2) plus the new injection
-// Fakes. This factory is self-contained for the ATDD scaffold; during dev-story,
-// these registrations merge into the existing rtFactoryKeyed.
+// Fakes. It is kept as a dedicated runtime factory (parallel to cgFactoryKeyed on
+// the codegen side) rather than folded into rtFactoryKeyed: the injection axis is
+// a self-contained registration set, and both providers' differential equivalence
+// is asserted on the same logical keys below (AD-15).
 var rtFactoryKeyedInjection = ProviderFactory{
 	Name: "runtime",
 	Build: func(t *testing.T) Provider {
@@ -141,6 +160,9 @@ var rtFactoryKeyedInjection = ProviderFactory{
 		// (Go equivalent of [FromKeyedServices("service1")])
 		runtime.AddKeyedSingleton[fakes.IKeyedServiceWithDep](b, "with-dep", func(p godi.Provider) fakes.IKeyedServiceWithDep {
 			dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+			if dep == nil {
+				return fakes.NewKeyedServiceWithDep(nil)
+			}
 			return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
 		})
 
@@ -293,6 +315,19 @@ var keyedInjectionSpecCases = []SpecCase{
 
 			rootSingleton := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
 			testutil.Equal(t, singleton, rootSingleton)
+
+			// AC5 (review): the injected provider IS this scope — resolving the
+			// scoped service through it yields THIS scope's instance, while the root
+			// provider resolves a distinct root-scope instance (relies on P0 making
+			// the root keyed-scoped non-nil). This pins "scope-level provider
+			// resolves scope-level service" beyond the singleton-only assertion.
+			scopedViaInjected := injectedProvider.GetKeyedService(st, "scoped-with-provider")
+			testutil.Equal(t, scopedViaInjected, result)
+
+			rootScoped := p.GetKeyedService(st, "scoped-with-provider")
+			testutil.NotNil(t, rootScoped)
+			testutil.True(t, rootScoped != result,
+				"scope-injected provider must resolve a scope-level instance, distinct from the root-scope instance")
 		},
 	},
 }
@@ -342,12 +377,22 @@ func TestConformanceKeyedLifecycle_DifferentialEquivalence(t *testing.T) {
 		r2 := scope.GetKeyedService(st, "scoped")
 		return r1 == r2
 	})
+
+	// AC1 (review P0): scoped keyed resolved from ROOT — non-nil conclusion in
+	// both providers (root acts as the root scope). This is the differential that
+	// pins the codegen/runtime alignment fixed in review P0: before the fix the
+	// codegen root returned an unmaterialized nil while runtime returned a real
+	// instance, so this assertion would have failed equivalence.
+	AssertEquivalent(t, rtFactoryKeyed, cgFactoryKeyed, func(p Provider) bool {
+		st := reflect.TypeFor[fakes.IKeyedService]()
+		return p.GetKeyedService(st, "scoped") != nil
+	})
 }
 
 // TestConformanceKeyedInjection_DifferentialEquivalence: AD-15 cross-provider
 // differential for the keyed injection axis. Uses rtFactoryKeyedInjection and
-// cgFactoryKeyed. In the red phase, cgFactoryKeyed lacks injection registrations
-// so these will show mismatches (expected).
+// cgFactoryKeyed, which register the same logical injection keys; both providers
+// must reach the same conclusion for each axis.
 func TestConformanceKeyedInjection_DifferentialEquivalence(t *testing.T) {
 	// AC2: keyed dependency type name equivalence
 	AssertEquivalent(t, rtFactoryKeyedInjection, cgFactoryKeyed, func(p Provider) string {

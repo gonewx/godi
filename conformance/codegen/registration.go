@@ -52,6 +52,9 @@ func register() {
 	// Story 3-2: Keyed injection registrations (AC2-AC5)
 	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithDep](&r, "with-dep", func(p godi.Provider) fakes.IKeyedServiceWithDep {
 		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
 		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
 	})
 	godi.AddKeyedSingletonFactory[fakes.IKeyedServiceWithKey](&r, "injected-key", func(p godi.Provider) fakes.IKeyedServiceWithKey {
