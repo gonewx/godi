@@ -168,6 +168,45 @@ func TestValidate_DuplicateServiceName_ReturnsError(t *testing.T) {
 	testutil.True(t, found, "error must describe the duplicate service name")
 }
 
+// --- 2.5-REVIEW (F1) — reserved service name collides with Provider method ------
+
+func TestValidate_ReservedServiceName_ReturnsError(t *testing.T) {
+	for _, name := range []string{"GetService", "IsService", "GetKeyedService", "GetKeyedServices", "CreateScope", "Close"} {
+		t.Run(name, func(t *testing.T) {
+			reg := plan.NewRegistry()
+			reg.Service(plan.Service{
+				Name:     name,
+				GoType:   "svc.I" + name,
+				Ctor:     "svc.New" + name,
+				Lifetime: plan.Singleton,
+			})
+			errs := reg.Validate()
+			testutil.True(t, len(errs) > 0, "reserved name must produce validation error")
+
+			found := false
+			for _, e := range errs {
+				if strings.Contains(e.Error(), "reserved") && strings.Contains(e.Error(), name) {
+					found = true
+					break
+				}
+			}
+			testutil.True(t, found, "error must mention the reserved name")
+		})
+	}
+}
+
+func TestValidate_NonReservedServiceName_NoError(t *testing.T) {
+	reg := plan.NewRegistry()
+	reg.Service(plan.Service{
+		Name:     "Logger",
+		GoType:   "*logger.Logger",
+		Ctor:     "logger.NewLogger",
+		Lifetime: plan.Singleton,
+	})
+	errs := reg.Validate()
+	testutil.True(t, len(errs) == 0, "non-reserved name must not produce errors")
+}
+
 // --- 1.4-PLAN-006 (AC2/AC4, P1) -----------------------------------------------
 
 // TestRegistry_ChainableRegistration: the Service() method returns *Registry for
