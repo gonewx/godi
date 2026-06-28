@@ -33,3 +33,72 @@ type KeyedServiceTwo struct{ _ int }
 func (*KeyedServiceTwo) isKeyedService() {}
 
 func NewKeyedServiceTwo() *KeyedServiceTwo { return &KeyedServiceTwo{} }
+
+// --- Story 3-2: Keyed injection fakes ----------------------------------------
+//
+// These fakes exercise keyed dependency injection patterns (AC2-AC5). Each
+// corresponds to a dotnet KeyedDependencyInjectionSpecificationTests inner class:
+//   - IKeyedServiceWithDep → [FromKeyedServices] via form-B closure (AC2)
+//   - IKeyedServiceWithKey → [ServiceKey] via closure capture (AC3)
+//   - IKeyedServiceWithProvider → IServiceProvider injection via closure param (AC5)
+
+// IKeyedServiceWithDep is a keyed service that depends on another keyed service.
+// The Go equivalent of dotnet's [FromKeyedServices("key")] attribute is a form-B
+// factory closure calling p.GetKeyedService (D-1 from Story 3-2).
+type IKeyedServiceWithDep interface {
+	Dep() IKeyedService
+}
+
+// KeyedServiceWithDep implements IKeyedServiceWithDep. The dep field stores the
+// keyed dependency injected via the form-B closure.
+type KeyedServiceWithDep struct {
+	dep IKeyedService
+	_   int
+}
+
+func (s *KeyedServiceWithDep) Dep() IKeyedService { return s.dep }
+
+func NewKeyedServiceWithDep(dep IKeyedService) *KeyedServiceWithDep {
+	return &KeyedServiceWithDep{dep: dep}
+}
+
+// IKeyedServiceWithKey is a keyed service that receives its own registration key.
+// The Go equivalent of dotnet's [ServiceKey] attribute is closure capture of the
+// key variable (D-2 from Story 3-2).
+type IKeyedServiceWithKey interface {
+	Key() any
+}
+
+// KeyedServiceWithKey implements IKeyedServiceWithKey. The key field stores the
+// registration key injected via closure capture.
+type KeyedServiceWithKey struct {
+	key any
+	_   int
+}
+
+func (s *KeyedServiceWithKey) Key() any { return s.key }
+
+func NewKeyedServiceWithKey(key any) *KeyedServiceWithKey {
+	return &KeyedServiceWithKey{key: key}
+}
+
+// IKeyedServiceWithProvider is a keyed service that receives the provider itself.
+// The Go equivalent of dotnet's IServiceProvider constructor injection is the
+// form-B closure parameter p (D-3 from Story 3-2). The provider is stored as any
+// to avoid importing godi in the fakes package.
+type IKeyedServiceWithProvider interface {
+	ServiceProvider() any
+}
+
+// KeyedServiceWithProvider implements IKeyedServiceWithProvider. The provider
+// field stores the injected provider reference as any.
+type KeyedServiceWithProvider struct {
+	provider any
+	_        int
+}
+
+func (s *KeyedServiceWithProvider) ServiceProvider() any { return s.provider }
+
+func NewKeyedServiceWithProvider(p any) *KeyedServiceWithProvider {
+	return &KeyedServiceWithProvider{provider: p}
+}
