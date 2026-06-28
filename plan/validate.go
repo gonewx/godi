@@ -10,12 +10,12 @@ import (
 // produce a typed accessor that redeclares the method with a different
 // signature, breaking compilation.
 var reservedMethodNames = map[string]struct{}{
-	"GetService":      {},
-	"IsService":       {},
-	"GetKeyedService": {},
+	"GetService":       {},
+	"IsService":        {},
+	"GetKeyedService":  {},
 	"GetKeyedServices": {},
-	"CreateScope":     {},
-	"Close":           {},
+	"CreateScope":      {},
+	"Close":            {},
 }
 
 // Validate checks the registry for structural errors. This story implements
@@ -27,8 +27,9 @@ var reservedMethodNames = map[string]struct{}{
 func (r *Registry) Validate() []error {
 	var errs []error
 
-	seen := make(map[string]struct{}, len(r.services))
-	for _, s := range r.services {
+	seen := make(map[string]struct{}, len(r.services)+len(r.keyedServices))
+	allServices := append(r.services[:len(r.services):len(r.services)], r.keyedServices...)
+	for _, s := range allServices {
 		if _, dup := seen[s.Name]; dup {
 			errs = append(errs, fmt.Errorf(
 				"duplicate service name: %q registered more than once",
@@ -44,7 +45,7 @@ func (r *Registry) Validate() []error {
 		seen[s.Name] = struct{}{}
 	}
 
-	for _, s := range r.services {
+	for _, s := range allServices {
 		for _, dep := range s.Deps {
 			if strings.HasPrefix(dep, "[]") {
 				goType := dep[2:]

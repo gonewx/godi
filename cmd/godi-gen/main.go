@@ -126,6 +126,9 @@ type registration struct {
 	iType    types.Type    // service type (first type argument)
 	implType types.Type    // form A only: implementation type (second type argument)
 	factory  ast.Expr      // form B only: the factory argument expression
+	keyed    bool          // true for AddKeyed* markers
+	keyExpr  ast.Expr      // keyed only: the key argument expression
+	keyText  string        // keyed only: rendered key expression source text
 }
 
 // buildRegistry turns the package's DSL markers into a validated-input
@@ -150,9 +153,13 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 	// Pass 1: index every service's type(s) -> its service Name, so a
 	// constructor parameter type can be resolved to the dependency it names. Both
 	// the service interface (I) and the implementation (Impl, and *Impl) are
-	// indexed so a constructor may inject either form.
+	// indexed so a constructor may inject either form. Keyed services are NOT
+	// indexed here — keyed and unkeyed are independent namespaces (D-3).
 	depIndex := make(map[string]string, len(regs)*2)
 	for _, rg := range regs {
+		if rg.keyed {
+			continue
+		}
 		name := serviceName(rg)
 		depIndex[typeKey(rg.iType)] = name
 		if rg.form == "A" && rg.implType != nil {
@@ -170,6 +177,9 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			Name:     serviceName(rg),
 			GoType:   renderType(rg.iType, imports),
 			Lifetime: rg.lifetime,
+		}
+		if rg.keyed && rg.keyText != "" {
+			s.Key = rg.keyText
 		}
 
 		if rg.form == "B" {
@@ -329,6 +339,40 @@ func collectRegistrations(pkg *packages.Package) []registration {
 					form: "B", lifetime: lifetimeFromName(fn.Name()), pos: call.Pos(),
 					iType: ta.At(0), factory: factory,
 				})
+			case "AddKeyedSingleton", "AddKeyedScoped", "AddKeyedTransient":
+				if ta.Len() != 2 {
+					return true
+				}
+				var keyArg ast.Expr
+				var keyTxt string
+				if len(call.Args) >= 2 {
+					keyArg = call.Args[1]
+					keyTxt = renderExpr(pkg.Fset, keyArg)
+				}
+				out = append(out, registration{
+					form: "A", lifetime: lifetimeFromName(fn.Name()), pos: call.Pos(),
+					iType: ta.At(0), implType: ta.At(1),
+					keyed: true, keyExpr: keyArg, keyText: keyTxt,
+				})
+			case "AddKeyedSingletonFactory", "AddKeyedScopedFactory", "AddKeyedTransientFactory":
+				if ta.Len() != 1 {
+					return true
+				}
+				var keyArg ast.Expr
+				var keyTxt string
+				if len(call.Args) >= 2 {
+					keyArg = call.Args[1]
+					keyTxt = renderExpr(pkg.Fset, keyArg)
+				}
+				var factory ast.Expr
+				if len(call.Args) >= 3 {
+					factory = call.Args[2]
+				}
+				out = append(out, registration{
+					form: "B", lifetime: lifetimeFromName(fn.Name()), pos: call.Pos(),
+					iType: ta.At(0), factory: factory,
+					keyed: true, keyExpr: keyArg, keyText: keyTxt,
+				})
 			}
 			return true
 		})
@@ -391,7 +435,10 @@ func isDSLName(name string) bool {
 	switch name {
 	case "AddSingleton", "AddSingletonFactory",
 		"AddScoped", "AddScopedFactory",
-		"AddTransient", "AddTransientFactory":
+		"AddTransient", "AddTransientFactory",
+		"AddKeyedSingleton", "AddKeyedSingletonFactory",
+		"AddKeyedScoped", "AddKeyedScopedFactory",
+		"AddKeyedTransient", "AddKeyedTransientFactory":
 		return true
 	}
 	return false
@@ -400,9 +447,9 @@ func isDSLName(name string) bool {
 // lifetimeFromName maps a DSL marker function name to its plan.Lifetime.
 func lifetimeFromName(name string) plan.Lifetime {
 	switch {
-	case strings.HasPrefix(name, "AddTransient"):
+	case strings.Contains(name, "Transient"):
 		return plan.Transient
-	case strings.HasPrefix(name, "AddScoped"):
+	case strings.Contains(name, "Scoped"):
 		return plan.Scoped
 	default:
 		return plan.Singleton
@@ -425,13 +472,22 @@ func warnUnrecognized(pkg *packages.Package, call *ast.CallExpr, suspected bool,
 // serviceName is the f_<Name> field name and dependency key for a registration.
 // Form A names the service after its implementation (FakeService, Consumer);
 // form B has no implementation, so it names the service after its interface.
+// Keyed services append #keyExpr for uniqueness (D-2).
 func serviceName(rg registration) string {
+	var base string
 	if rg.form == "A" && rg.implType != nil {
 		if named, ok := rg.implType.(*types.Named); ok {
-			return named.Obj().Name()
+			base = named.Obj().Name()
+		} else {
+			base = shortTypeName(rg.iType)
 		}
+	} else {
+		base = shortTypeName(rg.iType)
 	}
-	return shortTypeName(rg.iType)
+	if rg.keyed && rg.keyText != "" {
+		return base + "#" + rg.keyText
+	}
+	return base
 }
 
 // constructorDeps reads a constructor's parameters left to right and maps each

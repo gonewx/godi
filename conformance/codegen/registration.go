@@ -34,6 +34,14 @@ func register() {
 	godi.AddTransient[fakes.IFakeMultipleService, fakes.FakeTwoMultipleService](&r)
 	godi.AddTransient[fakes.IFakeOuterService, fakes.FakeOuterService](&r)
 	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r)
+
+	// Keyed registrations (Story 3-1, AD-17)
+	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "service1")
+	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceTwo](&r, "service2")
+	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "both")
+	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceTwo](&r, "both")
+	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "singleton-factory")
+	godi.AddKeyedTransient[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "transient")
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

@@ -55,6 +55,10 @@ type Service struct {
 	// statically via types.Implements (AD-11). Story 2.1 only fills this field;
 	// the LIFO disposer that consumes it is Story 2.3.
 	Disposable bool
+	// Key holds the key expression source text for keyed registrations (AD-17).
+	// Empty = unkeyed service. The generator reads this from the AST via
+	// format.Node and emits it as a case expression in the keyed switch.
+	Key string
 }
 
 // Registry accumulates Service registrations and exposes them for
@@ -75,21 +79,36 @@ type Registry struct {
 	services []Service
 	byName   map[string]Service
 	byGoType map[string][]string
+
+	keyedServices []Service
+	byKeyedGoType map[keyedEntry][]string
+}
+
+type keyedEntry struct {
+	GoType string
+	Key    string
 }
 
 // NewRegistry returns an empty Registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		byName:   make(map[string]Service),
-		byGoType: make(map[string][]string),
+		byName:        make(map[string]Service),
+		byGoType:      make(map[string][]string),
+		byKeyedGoType: make(map[keyedEntry][]string),
 	}
 }
 
 // Service registers s and returns the Registry for chaining.
 func (r *Registry) Service(s Service) *Registry {
-	r.services = append(r.services, s)
 	r.byName[s.Name] = s
-	r.byGoType[s.GoType] = append(r.byGoType[s.GoType], s.Name)
+	if s.Key != "" {
+		r.keyedServices = append(r.keyedServices, s)
+		ke := keyedEntry{GoType: s.GoType, Key: s.Key}
+		r.byKeyedGoType[ke] = append(r.byKeyedGoType[ke], s.Name)
+	} else {
+		r.services = append(r.services, s)
+		r.byGoType[s.GoType] = append(r.byGoType[s.GoType], s.Name)
+	}
 	return r
 }
 
@@ -202,7 +221,7 @@ func (r *Registry) ScopedTopo() []Service {
 	return out
 }
 
-// Transients returns all registered transient services in registration order.
+// Transients returns all registered unkeyed transient services in registration order.
 // Transients have no dependency-ordering need (each New*() is independent), but
 // a stable enumeration order is required for deterministic code generation (AD-14).
 func (r *Registry) Transients() []Service {
@@ -211,6 +230,129 @@ func (r *Registry) Transients() []Service {
 		if s.Lifetime == Transient {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// KeyedServices returns all keyed registrations in registration order.
+func (r *Registry) KeyedServices() []Service {
+	out := make([]Service, len(r.keyedServices))
+	copy(out, r.keyedServices)
+	return out
+}
+
+// KeyedServicesByGoType returns all keyed services registered under the given
+// GoType and Key, in registration order.
+func (r *Registry) KeyedServicesByGoType(goType, key string) []Service {
+	names := r.byKeyedGoType[keyedEntry{GoType: goType, Key: key}]
+	out := make([]Service, 0, len(names))
+	for _, n := range names {
+		out = append(out, r.byName[n])
+	}
+	return out
+}
+
+// KeyedSingletonsTopo returns keyed singletons in dependency order, mirroring
+// SingletonsTopo for keyed services.
+func (r *Registry) KeyedSingletonsTopo() []Service {
+	visited := make(map[string]struct{}, len(r.keyedServices))
+	out := make([]Service, 0, len(r.keyedServices))
+
+	var visit func(s Service)
+	visit = func(s Service) {
+		if _, done := visited[s.Name]; done {
+			return
+		}
+		visited[s.Name] = struct{}{}
+		for _, dep := range s.Deps {
+			d, ok := r.byName[dep]
+			if !ok || d.Lifetime != Singleton {
+				continue
+			}
+			visit(d)
+		}
+		out = append(out, s)
+	}
+
+	for _, s := range r.keyedServices {
+		if s.Lifetime != Singleton {
+			continue
+		}
+		visit(s)
+	}
+	return out
+}
+
+// KeyedScopedTopo returns keyed scoped services in dependency order.
+func (r *Registry) KeyedScopedTopo() []Service {
+	visited := make(map[string]struct{}, len(r.keyedServices))
+	out := make([]Service, 0, len(r.keyedServices))
+
+	var visit func(s Service)
+	visit = func(s Service) {
+		if _, done := visited[s.Name]; done {
+			return
+		}
+		visited[s.Name] = struct{}{}
+		for _, dep := range s.Deps {
+			d, ok := r.byName[dep]
+			if !ok || d.Lifetime != Scoped {
+				continue
+			}
+			visit(d)
+		}
+		out = append(out, s)
+	}
+
+	for _, s := range r.keyedServices {
+		if s.Lifetime != Scoped {
+			continue
+		}
+		visit(s)
+	}
+	return out
+}
+
+// KeyedTransients returns keyed transient services in registration order.
+func (r *Registry) KeyedTransients() []Service {
+	out := make([]Service, 0)
+	for _, s := range r.keyedServices {
+		if s.Lifetime == Transient {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// KeyedGoTypes returns the distinct GoType values that have keyed registrations,
+// in first-seen order.
+func (r *Registry) KeyedGoTypes() []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, s := range r.keyedServices {
+		if _, ok := seen[s.GoType]; ok {
+			continue
+		}
+		seen[s.GoType] = struct{}{}
+		out = append(out, s.GoType)
+	}
+	return out
+}
+
+// KeyedKeysForGoType returns the distinct Key values registered under a GoType,
+// in first-seen order.
+func (r *Registry) KeyedKeysForGoType(goType string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, s := range r.keyedServices {
+		if s.GoType != goType {
+			continue
+		}
+		if _, ok := seen[s.Key]; ok {
+			continue
+		}
+		seen[s.Key] = struct{}{}
+		out = append(out, s.Key)
 	}
 	return out
 }

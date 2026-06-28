@@ -108,6 +108,49 @@ func conformanceRegistry() *plan.Registry {
 		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IFakeService]",
 		Lifetime: plan.Transient,
 	})
+	// Keyed registrations (Story 3-1)
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceOne#\"service1\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceOne",
+		Lifetime: plan.Singleton,
+		Key:      "\"service1\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceTwo#\"service2\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceTwo",
+		Lifetime: plan.Singleton,
+		Key:      "\"service2\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceOne#\"both\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceOne",
+		Lifetime: plan.Singleton,
+		Key:      "\"both\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceTwo#\"both\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceTwo",
+		Lifetime: plan.Singleton,
+		Key:      "\"both\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceOne#\"singleton-factory\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceOne",
+		Lifetime: plan.Singleton,
+		Key:      "\"singleton-factory\"",
+	})
+	reg.Service(plan.Service{
+		Name:     "KeyedServiceOne#\"transient\"",
+		GoType:   "fakes.IKeyedService",
+		Ctor:     "fakes.NewKeyedServiceOne",
+		Lifetime: plan.Transient,
+		Key:      "\"transient\"",
+	})
 	return reg
 }
 

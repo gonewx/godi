@@ -65,3 +65,27 @@ func AddTransient[I any, Impl any](r *Registry) *Registry { return r }
 func AddTransientFactory[I any](r *Registry, factory func(Provider) I) *Registry {
 	return r
 }
+
+// --- Keyed registration markers (AD-17 / CAP-5) ----------------------------
+//
+// Each is a PURE static marker (AD-7): the generator reads the type arguments
+// and key parameter from go/types and go/ast at generation time, never executes
+// these functions. key type = any (AD-17, not string).
+
+func AddKeyedSingleton[I any, Impl any](r *Registry, key any) *Registry { return r }
+
+func AddKeyedSingletonFactory[I any](r *Registry, key any, factory func(Provider) I) *Registry {
+	return r
+}
+
+func AddKeyedScoped[I any, Impl any](r *Registry, key any) *Registry { return r }
+
+func AddKeyedScopedFactory[I any](r *Registry, key any, factory func(Provider) I) *Registry {
+	return r
+}
+
+func AddKeyedTransient[I any, Impl any](r *Registry, key any) *Registry { return r }
+
+func AddKeyedTransientFactory[I any](r *Registry, key any, factory func(Provider) I) *Registry {
+	return r
+}
