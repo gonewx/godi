@@ -102,3 +102,36 @@ func (s *KeyedServiceWithProvider) ServiceProvider() any { return s.provider }
 func NewKeyedServiceWithProvider(p any) *KeyedServiceWithProvider {
 	return &KeyedServiceWithProvider{provider: p}
 }
+
+// --- Story 3-3: AnyKey / null-key boundary fakes -----------------------------
+//
+// IAnyKeyService is a DEDICATED marker interface for the AnyKey-query
+// (GetKeyedServices(AnyKey)) and null-key routing tests (AD-17, Story 3-3). It is
+// intentionally separate from IKeyedService so the AnyKey test registration set
+// stays small and decoupled from the 3-1/3-2 keys: GetKeyedServices(
+// reflect.TypeFor[IAnyKeyService](), AnyKey) returns EXACTLY the AnyKey test set
+// in registration order in BOTH providers, keeping the cross-provider
+// differential-equivalence assertion (AD-15) clean and order-exact.
+//
+// Two type-distinguishable impls (A, B) let the interleaved-key ordering test
+// (alpha→A, beta→B, alpha→A) assert registration order [A, B, A] versus the wrong
+// grouped-by-key order [A, A, B] using dynamic type names alone — no per-instance
+// identity tag is needed (ResolveKeyedServicesAnyKeyOrdering, AC2).
+type IAnyKeyService interface{ isAnyKeyService() }
+
+// AnyKeyServiceA is the first AnyKey impl. The padding field forces distinct heap
+// allocations so pointer identities differ (Go zero-sized structs may share one
+// address).
+type AnyKeyServiceA struct{ _ int }
+
+func (*AnyKeyServiceA) isAnyKeyService() {}
+
+func NewAnyKeyServiceA() *AnyKeyServiceA { return &AnyKeyServiceA{} }
+
+// AnyKeyServiceB is the second AnyKey impl, the type-distinguishable middle
+// element in the interleaved-key registration-order test (AC2).
+type AnyKeyServiceB struct{ _ int }
+
+func (*AnyKeyServiceB) isAnyKeyService() {}
+
+func NewAnyKeyServiceB() *AnyKeyServiceB { return &AnyKeyServiceB{} }
