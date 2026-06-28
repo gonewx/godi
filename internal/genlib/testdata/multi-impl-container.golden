@@ -34,6 +34,8 @@ func (r *Root) NewFakeOuterService() fakes.IFakeOuterService {
 	return fakes.NewFakeOuterService(r.f_FakeService, []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
 }
 
+func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -160,3 +162,5 @@ func (s *scope) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 func (s *scope) NewFakeOuterService() fakes.IFakeOuterService {
 	return fakes.NewFakeOuterService(s.root.f_FakeService, []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
 }
+
+func (s *scope) FakeService() fakes.IFakeService { return s.root.f_FakeService }

@@ -37,6 +37,10 @@ func (r *Root) NewTempFile() svc.ITempFile {
 	return v
 }
 
+func (r *Root) DBConn() svc.IDBConn { return r.f_DBConn }
+
+func (r *Root) Session() svc.ISession { return r.f_Session }
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -176,3 +180,7 @@ func (s *scope) NewTempFile() svc.ITempFile {
 	s.disp.Track(v)
 	return v
 }
+
+func (s *scope) DBConn() svc.IDBConn { return s.root.f_DBConn }
+
+func (s *scope) Session() svc.ISession { return s.f_Session }

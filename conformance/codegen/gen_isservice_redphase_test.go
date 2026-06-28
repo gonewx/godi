@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.5 (AC8, Task 5) — codegen conformance:
+// ATDD scaffold for Story 2.5 (AC8, Task 5) — codegen conformance:
 // Path γ strict tests for IsService 覆盖義務 + typed accessor verification
 // on the pre-generated B2 container.
 //
@@ -8,18 +6,6 @@
 // be verified on the codegen path with ≥1 scenario + cross-provider
 // differential equivalence. Typed accessor verification runs STRICTLY on the
 // B2 container (codegen.NewRoot() direct calls).
-//
-// Cross-provider differential equivalence for the IsService axis is covered
-// by conformance/spec_isservice_redphase_test.go (SPEC-009). This file
-// focuses on STRICT B2-only verification (Path γ).
-//
-// The "red" comes from:
-//   - container_gen.go does NOT have closed generic type registration
-//   - container_gen.go does NOT have typed accessor methods
-//   - conformanceRegistry() does not include closed generic service
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-2-5-typed-resolve-isservice.md.
 package codegen_test
 
 import (
@@ -144,7 +130,7 @@ func TestCodegen_PathGamma_ClosedGeneric_Resolution(t *testing.T) {
 		return
 	}
 	testutil.Equal(t, reflect.TypeOf(got).String(),
-		"*fakes.FakeOpenGenericService[fakes.IFakeService]")
+		"*fakes.FakeOpenGenericService[github.com/gonewx/godi/conformance/fakes.IFakeService]")
 }
 
 // --- 2.5-CG-006 (AC8, P0) — Regen byte-identical ----------------------------

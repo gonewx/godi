@@ -34,6 +34,9 @@ var (
 				dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
 				return fakes.NewFakeConsumer(dep)
 			})
+			runtime.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, func(godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
+				return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+			})
 			p, err := b.Build()
 			testutil.NoError(t, err)
 			return p

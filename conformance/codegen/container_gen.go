@@ -63,6 +63,22 @@ func (r *Root) NewFakeOuterService() fakes.IFakeOuterService {
 	return fakes.NewFakeOuterService(r.f_FakeService, []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
 }
 
+func (r *Root) NewFakeOpenGenericService() fakes.IFakeOpenGenericService[fakes.IFakeService] {
+	return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+}
+
+func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
+
+func (r *Root) FakeConsumer() fakes.IFakeConsumer { return r.f_FakeConsumer }
+
+func (r *Root) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
+	return r.f_FakeDisposableSingleton
+}
+
+func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
+
+func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -86,6 +102,8 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.NewFakeTwoMultipleService()
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return r.NewFakeOuterService()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		return r.NewFakeOpenGenericService()
 	}
 	return nil
 }
@@ -111,6 +129,8 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOuterService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		return true
 	}
 	return false
@@ -148,6 +168,8 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		return []any{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()}
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return []any{r.NewFakeOuterService()}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		return []any{r.NewFakeOpenGenericService()}
 	}
 	return []any{}
 }
@@ -201,6 +223,8 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.NewFakeTwoMultipleService()
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return s.NewFakeOuterService()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		return s.NewFakeOpenGenericService()
 	}
 	return nil
 }
@@ -226,6 +250,8 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOuterService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		return true
 	}
 	return false
@@ -263,6 +289,8 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		return []any{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()}
 	case reflect.TypeFor[fakes.IFakeOuterService]():
 		return []any{s.NewFakeOuterService()}
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
+		return []any{s.NewFakeOpenGenericService()}
 	}
 	return []any{}
 }
@@ -309,3 +337,19 @@ func (s *scope) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 func (s *scope) NewFakeOuterService() fakes.IFakeOuterService {
 	return fakes.NewFakeOuterService(s.root.f_FakeService, []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
 }
+
+func (s *scope) NewFakeOpenGenericService() fakes.IFakeOpenGenericService[fakes.IFakeService] {
+	return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+}
+
+func (s *scope) FakeService() fakes.IFakeService { return s.root.f_FakeService }
+
+func (s *scope) FakeConsumer() fakes.IFakeConsumer { return s.root.f_FakeConsumer }
+
+func (s *scope) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
+	return s.root.f_FakeDisposableSingleton
+}
+
+func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
+
+func (s *scope) FakeDisposableScoped() fakes.IFakeDisposableScoped { return s.f_FakeDisposableScoped }

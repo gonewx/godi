@@ -238,6 +238,13 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		}
 
 		s.Ctor = implPkg.Name() + ".New" + implName
+		if typeArgs := impl.TypeArgs(); typeArgs != nil && typeArgs.Len() > 0 {
+			args := make([]string, typeArgs.Len())
+			for i := range args {
+				args[i] = renderType(typeArgs.At(i), imports)
+			}
+			s.Ctor += "[" + strings.Join(args, ", ") + "]"
+		}
 		imports.addPackage(implPkg)
 		s.Deps = constructorDeps(sig, depIndex, imports)
 		s.CtorErr = hasTrailingError(sig)

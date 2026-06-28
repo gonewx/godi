@@ -33,6 +33,7 @@ func register() {
 	godi.AddTransient[fakes.IFakeMultipleService, fakes.FakeOneMultipleService](&r)
 	godi.AddTransient[fakes.IFakeMultipleService, fakes.FakeTwoMultipleService](&r)
 	godi.AddTransient[fakes.IFakeOuterService, fakes.FakeOuterService](&r)
+	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r)
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

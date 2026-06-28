@@ -28,6 +28,10 @@ func (r *Root) NewWidget() svc.IWidget {
 	return svc.NewWidget(r.f_Request)
 }
 
+func (r *Root) Logger() *svc.Logger { return r.f_Logger }
+
+func (r *Root) Request() svc.IRequest { return r.f_Request }
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -149,3 +153,7 @@ func (s *scope) Close() error { return nil }
 func (s *scope) NewWidget() svc.IWidget {
 	return svc.NewWidget(s.f_Request)
 }
+
+func (s *scope) Logger() *svc.Logger { return s.root.f_Logger }
+
+func (s *scope) Request() svc.IRequest { return s.f_Request }

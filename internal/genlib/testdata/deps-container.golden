@@ -24,6 +24,10 @@ func NewRoot() (*Root, error) {
 	return r, nil
 }
 
+func (r *Root) Dep() *svc.Dep { return r.f_Dep }
+
+func (r *Root) Consumer() *svc.Consumer { return r.f_Consumer }
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	switch t {
@@ -91,4 +95,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 
 func (s *scope) CreateScope() godi.Scope { return &scope{root: s.root} }
 
-func (s *scope) Close() error { return nil }
+func (s *scope) Close() error  { return nil }
+func (s *scope) Dep() *svc.Dep { return s.root.f_Dep }
+
+func (s *scope) Consumer() *svc.Consumer { return s.root.f_Consumer }

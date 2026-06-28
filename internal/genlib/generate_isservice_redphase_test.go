@@ -1,20 +1,9 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 2.5 (AC1, Task 1) — genlib emit:
 // typed accessor methods for non-transient services on Root and scope.
 //
-// The "red" comes from:
-//   - genlib currently does NOT emit typed accessor methods for non-transient
-//     services (only New{Name}() for transients exists)
-//   - No golden file reflects typed accessor shape
-//   - Existing goldens will diverge once typed accessors are added
+// Tests verify the emitted code CONTAINS typed accessor methods.
 //
-// Tests verify the emitted code CONTAINS typed accessor methods. Until
-// emitTypedAccessors is implemented in genlib, these tests fail at runtime
-// (string assertions on generated code miss the accessor signatures).
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-2-5-typed-resolve-isservice.md.
+// See _bmad-output/test-artifacts/atdd-checklist-2-5-typed-resolve-isservice.md.
 package genlib_test
 
 import (
@@ -147,7 +136,7 @@ func TestEmitTypedAccessors_TransientNoAccessor(t *testing.T) {
 // Since we're using the lifetimes-container golden (which has all three
 // lifetimes), this test verifies the golden updates correctly.
 func TestEmitTypedAccessors_Golden(t *testing.T) {
-	src, err := genlib.Generate(typedAccessorRegistry(), "codegen")
+	src, err := genlib.Generate(lifetimesRegistry(), "codegen")
 	testutil.NoError(t, err)
 	testutil.Golden(t, "lifetimes-container", src)
 }

@@ -1,29 +1,10 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 2.5 (AC1-AC8, Task 4) — conformance suite:
+// ATDD scaffold for Story 2.5 (AC1-AC8, Task 4) — conformance suite:
 // dual-provider IsService SpecCases + Get[T]/GetRequired[T] verification +
 // closed-generic IsService + Go difference annotations + cross-provider
 // differential equivalence for the IsService axis.
 //
-// This file extends the conformance suite with IsService-specific SpecCases
-// that run against BOTH providers (runtime oracle + codegen B2). AD-15 mandates
-// that the IsService axis be covered in codegen with ≥1 scenario + cross-
-// provider differential equivalence (覆盖义务).
-//
-// New fakes needed (Task 2): IFakeOpenGenericService[T] / FakeOpenGenericService[T]
-// in conformance/fakes/fakes_opengeneric.go.
-//
-// The "red" comes from:
-//   - container_gen.go does NOT have typed accessor methods
-//   - container_gen.go does NOT have closed generic type registration
-//   - rtFactoryIsService registers closed generic → works IF runtime supports it
-//   - Typed accessor test only runs for codegen provider (runtime has no accessors)
-//
 // Test standard R4: pointer identity within one provider only; across
 // providers use provider-stable observables (IsService booleans, type names).
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-2-5-typed-resolve-isservice.md.
 package conformance
 
 import (

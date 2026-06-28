@@ -51,9 +51,11 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 
 	if hasLifetimes {
 		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
+		emitTypedAccessors(&buf, singletons, scoped, "r", "*Root")
 		emitGetServiceLifetimes(&buf, singletons, scoped, transients)
 		emitIsServiceLifetimes(&buf, services)
 	} else {
+		emitTypedAccessors(&buf, singletons, nil, "r", "*Root")
 		emitGetServiceSingletonsOnly(&buf, singletons)
 		emitIsServiceSingletonsOnly(&buf, singletons)
 	}
@@ -681,6 +683,7 @@ func emitClose(buf *bytes.Buffer, disposables bool) {
 func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool) {
 	if !hasLifetimes {
 		emitScopeLegacy(buf)
+		emitTypedAccessors(buf, singletons, nil, "s", "*scope")
 		return
 	}
 	emitScopeStruct(buf, scoped, disposables)
@@ -692,6 +695,7 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	emitScopeCreateScope(buf, reg.ScopedTopo(), reg, disposables)
 	emitScopeClose(buf, disposables)
 	emitTransientMethods(buf, transients, "s", "*scope", reg, disposables)
+	emitTypedAccessors(buf, singletons, scoped, "s", "*scope")
 }
 
 func emitScopeLegacy(buf *bytes.Buffer) {
@@ -912,6 +916,20 @@ func emitScopeClose(buf *bytes.Buffer, disposables bool) {
 		fmt.Fprintf(buf, "}\n\n")
 	} else {
 		fmt.Fprintf(buf, "func (s *scope) Close() error { return nil }\n\n")
+	}
+}
+
+func emitTypedAccessors(buf *bytes.Buffer, singletons, scoped []plan.Service, recv, typeName string) {
+	for _, s := range singletons {
+		expr := recv + ".f_" + s.Name
+		if recv == "s" {
+			expr = "s.root.f_" + s.Name
+		}
+		fmt.Fprintf(buf, "func (%s %s) %s() %s { return %s }\n\n", recv, typeName, s.Name, s.GoType, expr)
+	}
+	for _, s := range scoped {
+		expr := recv + ".f_" + s.Name
+		fmt.Fprintf(buf, "func (%s %s) %s() %s { return %s }\n\n", recv, typeName, s.Name, s.GoType, expr)
 	}
 }
 
