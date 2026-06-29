@@ -316,6 +316,11 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		// args instantiate the ctor signature directly (single type parameter in
 		// Story 4.1; multi/permuted parameters are deferred).
 		if typeArgs := impl.TypeArgs(); typeArgs != nil && typeArgs.Len() > 0 {
+			if typeArgs.Len() > 1 {
+				fmt.Fprintf(os.Stderr, "godi-gen: warning: form-A service %q has %d type arguments — "+
+					"multi-type-parameter closed generics are deferred; skipping ctor "+
+					"instantiation (only single type parameter is supported)\n", s.Name, typeArgs.Len())
+			}
 			targs := make([]types.Type, typeArgs.Len())
 			for i := range targs {
 				targs[i] = typeArgs.At(i)
@@ -600,6 +605,13 @@ func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.
 			"per-service helper type-parameter / type-argument count mismatch")
 		return nil, true
 	}
+	if tparams.Len() > 1 {
+		warnUnrecognized(pkg, call, true, fmt.Sprintf(
+			"per-service helper has %d type parameters — multi-type-parameter "+
+				"helpers are deferred (only single type parameter is supported)",
+			tparams.Len()))
+		return nil, true
+	}
 
 	markerName := innerFn.Name()
 	switch markerName {
@@ -668,7 +680,11 @@ func helperForwardMarker(pkg *packages.Package, decl *ast.FuncDecl) (*ast.Ident,
 	if !ok || len(ret.Results) != 1 {
 		return nil, nil
 	}
-	inner, ok := ret.Results[0].(*ast.CallExpr)
+	result := ret.Results[0]
+	if paren, ok := result.(*ast.ParenExpr); ok {
+		result = paren.X
+	}
+	inner, ok := result.(*ast.CallExpr)
 	if !ok {
 		return nil, nil
 	}
@@ -736,6 +752,10 @@ func substituteTypeParams(t types.Type, tparams *types.TypeParamList, targs *typ
 			return t, nil
 		}
 		return types.NewSlice(elem), nil
+	}
+	if hasTypeParam(t) {
+		return nil, fmt.Errorf("unsupported type shape %T containing a type parameter — "+
+			"only Named, Pointer, and Slice wrappers are handled (map/chan/func/array are deferred)", t)
 	}
 	return t, nil
 }
