@@ -19,15 +19,9 @@
 // 4.3 — the slot order is reproduced purely by the 4.3 registration block (Task 2)
 // reusing the 4.2 multi-impl × closed-generic aggregation pipeline.
 //
-// The "red" comes from:
-//   - fakes.IGenSlotA/IGenSlotB + ClosedFakeOpenGenericService[T] +
-//     InstanceFakeOpenGenericService[T] do not exist yet (Task 1) → compile failure.
-//   - container_gen.go has no slot-order cases until registration.go gains the 4.3
-//     block and the container is regenerated (Task 2) → CGPATH-001/002/003 resolve
-//     nil. (CGPATH-004 pins idempotency regardless of registry content.)
-//
-// Activation: delete the //go:build line and the blank line below it to join the
-// default build (after Task 1/2 land the fakes + registration + regen).
+// This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
+// that constraint was removed (and the suite joined the default build) once the
+// Task 1 Fakes and the Task 2 registration + regen landed.
 package codegen_test
 
 import (
@@ -144,4 +138,44 @@ func TestCodegen_PathGamma_OpenGenericSlot_RegenIdempotent(t *testing.T) {
 	second, err := genlib.Generate(reg, "codegen")
 	testutil.NoError(t, err)
 	testutil.Equal(t, string(first), string(second))
+}
+
+// --- 4.3-CGPATH-005 (AC5, review patch) — B2 scope/root slot-order symmetry ----
+
+// TestCodegen_PathGamma_OpenGenericSlot_ScopeSymmetry: the generator emits
+// dedicated scope-side slot-order branches (scope GetService / scope
+// GetKeyedServices nil / scope IsService). Resolving the slot-order types through
+// a child scope on the B2 container must match the root observables: single
+// [IGenSlotA] == closed, enumerable [IGenSlotA] count=2 (both types), single
+// [IGenSlotB] == instance (last-wins), enumerable [IGenSlotB] count=3 ORDERED
+// [closed#1, open, instance]. The root-only CGPATH-001..003 cannot catch a
+// root/scope asymmetry in the generated container.
+func TestCodegen_PathGamma_OpenGenericSlot_ScopeSymmetry(t *testing.T) {
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+
+	sc := root.CreateScope()
+	t.Cleanup(func() { _ = sc.Close() })
+
+	// touch-point 6/7 (IGenSlotA): single == closed, enumerable count=2 (both).
+	testutil.Equal(t, reflect.TypeOf(sc.GetService(cgSlotServiceA())).String(), dynCGSlotClosedA)
+	allA := sc.GetKeyedServices(cgSlotServiceA(), nil)
+	testutil.Equal(t, len(allA), 2)
+	testutil.True(t, cgContainsType(allA, dynCGSlotOpenA),
+		"scope enumerable must contain the open-produced impl")
+	testutil.True(t, cgContainsType(allA, dynCGSlotClosedA),
+		"scope enumerable must contain the closed-specific impl")
+
+	// touch-point 8 (IGenSlotB): single == instance (last-wins), enumerable
+	// count=3 ORDERED [closed#1, open, instance] — identical to root.
+	testutil.Equal(t, reflect.TypeOf(sc.GetService(cgSlotServiceB())).String(), dynCGSlotInstanceB)
+	allB := sc.GetKeyedServices(cgSlotServiceB(), nil)
+	testutil.Equal(t, len(allB), 3)
+	if len(allB) != 3 {
+		return
+	}
+	testutil.Equal(t, reflect.TypeOf(allB[0]).String(), dynCGSlotClosedB)
+	testutil.Equal(t, reflect.TypeOf(allB[1]).String(), dynCGSlotOpenB)
+	testutil.Equal(t, reflect.TypeOf(allB[2]).String(), dynCGSlotInstanceB)
 }

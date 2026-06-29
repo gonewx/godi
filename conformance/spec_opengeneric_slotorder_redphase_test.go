@@ -24,12 +24,9 @@
 // 2.4 mixed-lifetime unhandled axis) entirely from the registration source — a
 // deliberate AD-4/AD-10 tradeoff, NOT a defect, explicitly annotated below.
 //
-// The "red" comes from:
-//   - fakes.IGenSlotA/IGenSlotB + ClosedFakeOpenGenericService[T] +
-//     InstanceFakeOpenGenericService[T] do not exist yet (Task 1: new file
-//     conformance/fakes/fakes_opengeneric_slotorder.go) → compile failure.
-//   - codegen container_gen.go has no slot-order registrations (Task 2: append
-//     the 4.3 block to registration.go + regen) → cgFactory cases return nil.
+// This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
+// that constraint was removed (and the suite joined the default build) once the
+// Task 1 Fakes and the Task 2 registration + regen landed.
 //
 // Reused from the same package (do NOT redefine): addOpenGenericRT[T]
 // (spec_opengeneric_redphase_test.go, the 4.1 injected open helper), dynTypeName
@@ -37,10 +34,6 @@
 //
 // Test standard R4: pointer identity WITHIN one provider only; ACROSS providers
 // use provider-stable observables (int counts, ordered dynamic-type-name strings).
-//
-// Activation: delete the //go:build line and the blank line below it to join the
-// default build (after Task 1/2 land the fakes + registration + regen).
-// See _bmad-output/test-artifacts/atdd-checklist-4-3-closed-over-open-slot-order.md.
 package conformance
 
 import (
@@ -170,6 +163,14 @@ var openGenericSlotSpecCases = []SpecCase{
 				return
 			}
 			testutil.Equal(t, dynTypeName(svc), dynSlotClosedA)
+			// Scope parity: child scope must resolve identically.
+			sc := p.CreateScope()
+			t.Cleanup(func() { _ = sc.Close() })
+			scSvc := sc.GetService(slotServiceA())
+			testutil.NotNil(t, scSvc)
+			if scSvc != nil {
+				testutil.Equal(t, dynTypeName(scSvc), dynSlotClosedA)
+			}
 		},
 	},
 	// --- 4.3-SPEC-002 (AC2, P0) — touch-point 7: enumerable contains both, count=2
@@ -190,6 +191,16 @@ var openGenericSlotSpecCases = []SpecCase{
 			single := p.GetService(slotServiceA())
 			testutil.NotNil(t, single)
 			testutil.Equal(t, dynTypeName(single), dynSlotClosedA)
+			// Scope parity: enumerable count + membership.
+			sc := p.CreateScope()
+			t.Cleanup(func() { _ = sc.Close() })
+			scAll := sc.GetKeyedServices(slotServiceA(), nil)
+			testutil.NotNil(t, scAll)
+			testutil.Equal(t, len(scAll), 2)
+			testutil.True(t, containsDynType(scAll, dynSlotOpenA),
+				"scope enumerable must contain the open-produced impl")
+			testutil.True(t, containsDynType(scAll, dynSlotClosedA),
+				"scope enumerable must contain the closed-specific impl")
 		},
 	},
 	// --- 4.3-SPEC-003 (AC3, P0) — touch-point 8: mixed enumerable, count=3, ORDERED
@@ -213,6 +224,20 @@ var openGenericSlotSpecCases = []SpecCase{
 			// Order-SENSITIVE: the registration-order slot sequence must be exact.
 			testutil.Equal(t, join(names, ","),
 				join([]string{dynSlotClosedB, dynSlotOpenB, dynSlotInstanceB}, ","))
+			// Scope parity: count=3 ordered.
+			sc := p.CreateScope()
+			t.Cleanup(func() { _ = sc.Close() })
+			scAll := sc.GetKeyedServices(slotServiceB(), nil)
+			testutil.NotNil(t, scAll)
+			testutil.Equal(t, len(scAll), 3)
+			if len(scAll) == 3 {
+				var scNames []string
+				for _, v := range scAll {
+					scNames = append(scNames, dynTypeName(v))
+				}
+				testutil.Equal(t, join(scNames, ","),
+					join([]string{dynSlotClosedB, dynSlotOpenB, dynSlotInstanceB}, ","))
+			}
 		},
 	},
 	// --- 4.3-SPEC-004 (AC3 suppl., P1) — godi-internal invariant: single resolve = last
@@ -228,6 +253,14 @@ var openGenericSlotSpecCases = []SpecCase{
 				return
 			}
 			testutil.Equal(t, dynTypeName(single), dynSlotInstanceB)
+			// Scope parity: single resolve = last.
+			sc := p.CreateScope()
+			t.Cleanup(func() { _ = sc.Close() })
+			scSingle := sc.GetService(slotServiceB())
+			testutil.NotNil(t, scSingle)
+			if scSingle != nil {
+				testutil.Equal(t, dynTypeName(scSingle), dynSlotInstanceB)
+			}
 		},
 	},
 }
