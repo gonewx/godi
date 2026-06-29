@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 4.2 (AC2/AC5, Task 4) — codegen conformance:
 // Path γ STRICT tests for constrained open-generic closed materialization on
 // the pre-generated B2 container (codegen.NewRoot() direct calls, not just
@@ -16,13 +14,14 @@
 //	4.2-CGPATH-004 (AC2) — B2 abstract constraint [IClassInheritingAbstract] returns 2 impls
 //	4.2-CGPATH-005 (AC5) — regen byte-identical (consecutive generate idempotent, AD-14)
 //
-// RED PHASE: excluded from default build by the atdd_redphase tag until Task 2
-// (registration + regen) is complete. Delete the build tag and the blank line
-// below it to activate.
+// ACTIVATED (Story 4.2): the build tag was removed once Task 2 regenerated the
+// B2 container with the constrained instantiations — these Path γ tests now run
+// STRICTLY on the generated codegen.NewRoot() and are GREEN.
 package codegen_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gonewx/godi/conformance/codegen"
@@ -58,6 +57,14 @@ func TestCodegen_PathGamma_ConstrainedOpenGeneric_SatisfyingCount2(t *testing.T)
 		gen := svc.(fakes.IFakeOpenGenericService[fakes.IPocoClass])
 		testutil.Equal(t, gen.Value(), singleton)
 	}
+	// P1 fix: the two impls must be distinct dynamic types (unconstrained +
+	// ConstrainedFakeOpenGenericService) — count==2 alone would pass a generator
+	// that duplicated one impl, missing Story 4-2's core invariant.
+	testutil.NotEqual(t, reflect.TypeOf(all[0]).String(), reflect.TypeOf(all[1]).String())
+	testutil.True(t,
+		strings.Contains(reflect.TypeOf(all[0]).String(), "ConstrainedFakeOpenGenericService") ||
+			strings.Contains(reflect.TypeOf(all[1]).String(), "ConstrainedFakeOpenGenericService"),
+		"one impl must be ConstrainedFakeOpenGenericService")
 }
 
 // --- 4.2-CGPATH-002 (AC2 reverse, P0) ---------------------------------------
@@ -104,6 +111,13 @@ func TestCodegen_PathGamma_ConstrainedOpenGeneric_InterfaceConstraintCount2(t *t
 		gen := svc.(fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable])
 		testutil.Equal(t, gen.Value(), singleton)
 	}
+	// P1 fix: the two impls must be distinct dynamic types (unconstrained +
+	// ClassWithInterfaceConstraint).
+	testutil.NotEqual(t, reflect.TypeOf(all[0]).String(), reflect.TypeOf(all[1]).String())
+	testutil.True(t,
+		strings.Contains(reflect.TypeOf(all[0]).String(), "ClassWithInterfaceConstraint") ||
+			strings.Contains(reflect.TypeOf(all[1]).String(), "ClassWithInterfaceConstraint"),
+		"one impl must be ClassWithInterfaceConstraint")
 }
 
 // --- 4.2-CGPATH-004 (AC2, P0, touch-point 5) --------------------------------
@@ -131,6 +145,13 @@ func TestCodegen_PathGamma_ConstrainedOpenGeneric_AbstractConstraintCount2(t *te
 		gen := svc.(fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract])
 		testutil.Equal(t, gen.Value(), singleton)
 	}
+	// P1 fix: the two impls must be distinct dynamic types (unconstrained +
+	// ClassWithAbstractClassConstraint).
+	testutil.NotEqual(t, reflect.TypeOf(all[0]).String(), reflect.TypeOf(all[1]).String())
+	testutil.True(t,
+		strings.Contains(reflect.TypeOf(all[0]).String(), "ClassWithAbstractClassConstraint") ||
+			strings.Contains(reflect.TypeOf(all[1]).String(), "ClassWithAbstractClassConstraint"),
+		"one impl must be ClassWithAbstractClassConstraint")
 }
 
 // --- 4.2-CGPATH-005 (AC5, P0) — regen idempotent ----------------------------

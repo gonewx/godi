@@ -44,6 +44,24 @@ func register() {
 	AddFakeOpenGenericService[fakes.IFakeService](&r)
 	AddFakeOpenGenericService[fakes.IFakeConsumer](&r)
 
+	// Story 4.2 (AC1/AC2): candidate service types as singletons — injected into
+	// constrained open-generic implementations via value T dependency.
+	godi.AddSingleton[fakes.IPocoClass, fakes.PocoClass](&r)
+	godi.AddSingleton[fakes.IClassImplementingIterable, fakes.ClassImplementingIterable](&r)
+	godi.AddSingleton[fakes.IClassInheritingAbstract, fakes.ClassInheritingAbstract](&r)
+
+	// Story 4.2: unconstrained open-generic instantiations for each candidate type
+	AddFakeOpenGenericService[fakes.IPocoClass](&r)
+	AddFakeOpenGenericService[fakes.IClassImplementingIterable](&r)
+	AddFakeOpenGenericService[fakes.IClassInheritingAbstract](&r)
+
+	// Story 4.2 (AC2): constrained open-generic instantiations — only types
+	// satisfying the Go type constraint can be passed. The generator is transparent
+	// to constraints (AD-10); Mechanism A pipeline handles these identically.
+	AddConstrainedOpenGenericService[fakes.IPocoClass](&r)
+	AddInterfaceConstrainedService[fakes.IClassImplementingIterable](&r)
+	AddAbstractConstrainedService[fakes.IClassInheritingAbstract](&r)
+
 	// Keyed registrations (Story 3-1, AD-17)
 	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "service1")
 	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceTwo](&r, "service2")
@@ -115,6 +133,26 @@ func register() {
 // scope; cross-package helpers are deferred).
 func AddFakeOpenGenericService[T any](r *godi.Registry) *godi.Registry {
 	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.FakeOpenGenericService[T]](r)
+}
+
+// AddConstrainedOpenGenericService is the Story 4.2 constrained per-service
+// helper (Mechanism A): mirrors dotnet ConstrainedFakeOpenGenericService<T>
+// where T : PocoClass. The Go type constraint [T PocoClassLike] rejects
+// non-conforming types at compile time (AD-10).
+func AddConstrainedOpenGenericService[T fakes.PocoClassLike](r *godi.Registry) *godi.Registry {
+	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.ConstrainedFakeOpenGenericService[T]](r)
+}
+
+// AddInterfaceConstrainedService mirrors dotnet ClassWithInterfaceConstraint<T>
+// where T : IEnumerable.
+func AddInterfaceConstrainedService[T fakes.IterableLike](r *godi.Registry) *godi.Registry {
+	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.ClassWithInterfaceConstraint[T]](r)
+}
+
+// AddAbstractConstrainedService mirrors dotnet ClassWithAbstractClassConstraint<T>
+// where T : AbstractClass.
+func AddAbstractConstrainedService[T fakes.AbstractClassLike](r *godi.Registry) *godi.Registry {
+	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.ClassWithAbstractClassConstraint[T]](r)
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

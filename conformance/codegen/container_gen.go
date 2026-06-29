@@ -15,6 +15,9 @@ type Root struct {
 	f_FakeService                                         fakes.IFakeService
 	f_FakeConsumer                                        fakes.IFakeConsumer
 	f_FakeDisposableSingleton                             fakes.IFakeDisposableSingleton
+	f_PocoClass                                           fakes.IPocoClass
+	f_ClassImplementingIterable                           fakes.IClassImplementingIterable
+	f_ClassInheritingAbstract                             fakes.IClassInheritingAbstract
 	f_AnyKeyServiceA                                      fakes.IAnyKeyService
 	f_FakeScopedService                                   fakes.IFakeScopedService
 	f_FakeDisposableScoped                                fakes.IFakeDisposableScoped
@@ -47,6 +50,9 @@ func NewRoot() (*Root, error) {
 	r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService)
 	r.f_FakeDisposableSingleton = fakes.NewFakeDisposableSingleton()
 	r.disp.Track(r.f_FakeDisposableSingleton.(io.Closer))
+	r.f_PocoClass = fakes.NewPocoClass()
+	r.f_ClassImplementingIterable = fakes.NewClassImplementingIterable()
+	r.f_ClassInheritingAbstract = fakes.NewClassInheritingAbstract()
 	r.f_AnyKeyServiceA = fakes.NewAnyKeyServiceA()
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
@@ -123,6 +129,30 @@ func (r *Root) NewFakeOpenGenericService_fakes_IFakeConsumer() fakes.IFakeOpenGe
 	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](r.f_FakeConsumer)
 }
 
+func (r *Root) NewFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
+	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](r.f_PocoClass)
+}
+
+func (r *Root) NewFakeOpenGenericService_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
+	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](r.f_ClassImplementingIterable)
+}
+
+func (r *Root) NewFakeOpenGenericService_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
+	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](r.f_ClassInheritingAbstract)
+}
+
+func (r *Root) NewConstrainedFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
+	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](r.f_PocoClass)
+}
+
+func (r *Root) NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
+	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](r.f_ClassImplementingIterable)
+}
+
+func (r *Root) NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
+	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](r.f_ClassInheritingAbstract)
+}
+
 func (r *Root) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -141,6 +171,16 @@ func (r *Root) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
 	return r.f_FakeDisposableSingleton
 }
 
+func (r *Root) PocoClass() fakes.IPocoClass { return r.f_PocoClass }
+
+func (r *Root) ClassImplementingIterable() fakes.IClassImplementingIterable {
+	return r.f_ClassImplementingIterable
+}
+
+func (r *Root) ClassInheritingAbstract() fakes.IClassInheritingAbstract {
+	return r.f_ClassInheritingAbstract
+}
+
 func (r *Root) AnyKeyServiceA() fakes.IAnyKeyService { return r.f_AnyKeyServiceA }
 
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
@@ -156,6 +196,12 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_FakeConsumer
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 		return r.f_FakeDisposableSingleton
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return r.f_PocoClass
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return r.f_ClassImplementingIterable
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return r.f_ClassInheritingAbstract
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return r.f_AnyKeyServiceA
 	case reflect.TypeFor[fakes.IFakeScopedService]():
@@ -176,6 +222,12 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.NewFakeOpenGenericService_fakes_IFakeService()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 		return r.NewFakeOpenGenericService_fakes_IFakeConsumer()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+		return r.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+		return r.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
+		return r.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()
 	}
 	return nil
 }
@@ -205,6 +257,18 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
+		return true
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return true
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return true
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 		return true
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return true
@@ -341,6 +405,12 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_FakeConsumer}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 			return []any{r.f_FakeDisposableSingleton}
+		case reflect.TypeFor[fakes.IPocoClass]():
+			return []any{r.f_PocoClass}
+		case reflect.TypeFor[fakes.IClassImplementingIterable]():
+			return []any{r.f_ClassImplementingIterable}
+		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+			return []any{r.f_ClassInheritingAbstract}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{r.f_AnyKeyServiceA}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
@@ -361,6 +431,12 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.NewFakeOpenGenericService_fakes_IFakeService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IFakeConsumer()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+			return []any{r.NewFakeOpenGenericService_fakes_IPocoClass(), r.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+			return []any{r.NewFakeOpenGenericService_fakes_IClassImplementingIterable(), r.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
+			return []any{r.NewFakeOpenGenericService_fakes_IClassInheritingAbstract(), r.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()}
 		}
 		return nil
 	}
@@ -475,6 +551,12 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_FakeConsumer
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 		return s.root.f_FakeDisposableSingleton
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return s.root.f_PocoClass
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return s.root.f_ClassImplementingIterable
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return s.root.f_ClassInheritingAbstract
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return s.root.f_AnyKeyServiceA
 	case reflect.TypeFor[fakes.IFakeScopedService]():
@@ -495,6 +577,12 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.NewFakeOpenGenericService_fakes_IFakeService()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 		return s.NewFakeOpenGenericService_fakes_IFakeConsumer()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+		return s.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+		return s.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
+		return s.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()
 	}
 	return nil
 }
@@ -506,6 +594,12 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return true
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return true
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return true
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return true
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
 		return true
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return true
@@ -526,6 +620,12 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 		return true
 	}
 	return false
@@ -604,6 +704,12 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_FakeConsumer}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
 			return []any{s.root.f_FakeDisposableSingleton}
+		case reflect.TypeFor[fakes.IPocoClass]():
+			return []any{s.root.f_PocoClass}
+		case reflect.TypeFor[fakes.IClassImplementingIterable]():
+			return []any{s.root.f_ClassImplementingIterable}
+		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+			return []any{s.root.f_ClassInheritingAbstract}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{s.root.f_AnyKeyServiceA}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
@@ -624,6 +730,12 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.NewFakeOpenGenericService_fakes_IFakeService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IFakeConsumer()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
+			return []any{s.NewFakeOpenGenericService_fakes_IPocoClass(), s.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
+			return []any{s.NewFakeOpenGenericService_fakes_IClassImplementingIterable(), s.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
+			return []any{s.NewFakeOpenGenericService_fakes_IClassInheritingAbstract(), s.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()}
 		}
 		return nil
 	}
@@ -752,6 +864,30 @@ func (s *scope) NewFakeOpenGenericService_fakes_IFakeConsumer() fakes.IFakeOpenG
 	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](s.root.f_FakeConsumer)
 }
 
+func (s *scope) NewFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
+	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](s.root.f_PocoClass)
+}
+
+func (s *scope) NewFakeOpenGenericService_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
+	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](s.root.f_ClassImplementingIterable)
+}
+
+func (s *scope) NewFakeOpenGenericService_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
+	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](s.root.f_ClassInheritingAbstract)
+}
+
+func (s *scope) NewConstrainedFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
+	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](s.root.f_PocoClass)
+}
+
+func (s *scope) NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
+	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](s.root.f_ClassImplementingIterable)
+}
+
+func (s *scope) NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
+	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](s.root.f_ClassInheritingAbstract)
+}
+
 func (s *scope) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -768,6 +904,16 @@ func (s *scope) FakeConsumer() fakes.IFakeConsumer { return s.root.f_FakeConsume
 
 func (s *scope) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
 	return s.root.f_FakeDisposableSingleton
+}
+
+func (s *scope) PocoClass() fakes.IPocoClass { return s.root.f_PocoClass }
+
+func (s *scope) ClassImplementingIterable() fakes.IClassImplementingIterable {
+	return s.root.f_ClassImplementingIterable
+}
+
+func (s *scope) ClassInheritingAbstract() fakes.IClassInheritingAbstract {
+	return s.root.f_ClassInheritingAbstract
 }
 
 func (s *scope) AnyKeyServiceA() fakes.IAnyKeyService { return s.root.f_AnyKeyServiceA }

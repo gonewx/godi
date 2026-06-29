@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD scaffold for Story 4.2 (AC1-AC5, Task 3) — conformance suite:
 // constrained open-generic CLOSED materialization across BOTH providers
 // (runtime oracle + codegen B2) with multi-implementation collection resolution,
@@ -21,9 +19,11 @@
 // Go compiler rejects non-satisfying types at COMPILE TIME — same observable
 // result (non-satisfying types are unresolvable), different mechanism.
 //
-// RED PHASE: excluded from the default build by the atdd_redphase tag until
-// Task 1 (fakes) and Task 2 (registration + regen) are complete. Delete the
-// build tag and the blank line below it to activate.
+// ACTIVATED (Story 4.2): the build tag was removed once Task 1 ported the
+// constrained fakes, Task 2 registered the 3 candidate singletons + unconstrained
+// + constrained instantiations and regenerated the codegen container with the
+// multi-implementation aggregation for the generic closed types — this suite is
+// now GREEN on both providers.
 //
 // Test standard R4: pointer identity within ONE provider only; across providers
 // use provider-stable observables (counts, dynamic type names).
@@ -31,6 +31,7 @@ package conformance
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gonewx/godi"
@@ -160,6 +161,17 @@ var constrainedOpenGenericSpecCases = []SpecCase{
 				testutil.NotNil(t, gen.Value())
 				testutil.Equal(t, gen.Value(), singleton)
 			}
+			// P1 fix: the two impls must be DISTINCT dynamic types — the
+			// unconstrained FakeOpenGenericService + the constrained
+			// ConstrainedFakeOpenGenericService. count==2 + Value()==singleton
+			// alone would pass even if a generator materialized one impl twice;
+			// this pins Story 4-2's core invariant (constrained materialization
+			// produces an INDEPENDENT impl).
+			testutil.NotEqual(t, dynTypeName(all[0]), dynTypeName(all[1]))
+			testutil.True(t,
+				strings.Contains(dynTypeName(all[0]), "ConstrainedFakeOpenGenericService") ||
+					strings.Contains(dynTypeName(all[1]), "ConstrainedFakeOpenGenericService"),
+				"one impl must be ConstrainedFakeOpenGenericService")
 		},
 	},
 	// --- 4.2-SPEC-002 (AC2 reverse, P0, touch-point 2) — Non-satisfying type count=1
@@ -219,6 +231,13 @@ var constrainedOpenGenericSpecCases = []SpecCase{
 				testutil.NotNil(t, gen.Value())
 				testutil.Equal(t, gen.Value(), singleton)
 			}
+			// P1 fix: the two impls must be distinct dynamic types (unconstrained
+			// + ClassWithInterfaceConstraint).
+			testutil.NotEqual(t, dynTypeName(all[0]), dynTypeName(all[1]))
+			testutil.True(t,
+				strings.Contains(dynTypeName(all[0]), "ClassWithInterfaceConstraint") ||
+					strings.Contains(dynTypeName(all[1]), "ClassWithInterfaceConstraint"),
+				"one impl must be ClassWithInterfaceConstraint")
 		},
 	},
 	// --- 4.2-SPEC-005 (AC2, P0, touch-point 5) — AbstractClassConstrainedOpenGenericServicesCanBeResolved
@@ -239,6 +258,28 @@ var constrainedOpenGenericSpecCases = []SpecCase{
 				testutil.NotNil(t, gen.Value())
 				testutil.Equal(t, gen.Value(), singleton)
 			}
+			// P1 fix: the two impls must be distinct dynamic types (unconstrained
+			// + ClassWithAbstractClassConstraint).
+			testutil.NotEqual(t, dynTypeName(all[0]), dynTypeName(all[1]))
+			testutil.True(t,
+				strings.Contains(dynTypeName(all[0]), "ClassWithAbstractClassConstraint") ||
+					strings.Contains(dynTypeName(all[1]), "ClassWithAbstractClassConstraint"),
+				"one impl must be ClassWithAbstractClassConstraint")
+		},
+	},
+	// --- 4.2-SPEC-006 (P2, last-wins) — GetService single-resolve ---------------
+	{
+		Name: "constrained-opengeneric: GetService([IPocoClass]) single-resolve returns last-registered (constrained) impl — last-wins consistent across providers",
+		Run: func(t *testing.T, p Provider) {
+			// .NET GetService (singular) returns the LAST registered impl. The
+			// constrained helper is registered after the unconstrained one, so both
+			// providers must return ConstrainedFakeOpenGenericService (codegen:
+			// container_gen.go GetService last case; runtime: transient last factory).
+			svc := p.GetService(openGenericOfPocoClassType())
+			testutil.NotNil(t, svc)
+			testutil.True(t,
+				strings.Contains(dynTypeName(svc), "ConstrainedFakeOpenGenericService"),
+				"GetService must return the last-registered (constrained) impl")
 		},
 	},
 }
@@ -307,9 +348,20 @@ func TestConformanceConstrainedOpenGeneric_DifferentialEquivalence(t *testing.T)
 	// Injected value dynamic type for satisfying type first element.
 	AssertEquivalent(t, rt, cg, func(p Provider) string {
 		all := p.GetKeyedServices(openGenericOfPocoClassType(), nil)
-		if all == nil || len(all) == 0 {
+		if len(all) == 0 {
 			return "<nil>"
 		}
 		return dynTypeName(all[0].(fakes.IFakeOpenGenericService[fakes.IPocoClass]).Value())
+	})
+	// P1 fix: ordered impl dynamic-type names for the satisfying type —
+	// distinguishes the two impls AND their order across providers (unlike the
+	// .Value() probe above, which folds both to the shared singleton's type).
+	AssertEquivalent(t, rt, cg, func(p Provider) string {
+		all := p.GetKeyedServices(openGenericOfPocoClassType(), nil)
+		names := make([]string, len(all))
+		for i, svc := range all {
+			names[i] = dynTypeName(svc)
+		}
+		return strings.Join(names, ",")
 	})
 }

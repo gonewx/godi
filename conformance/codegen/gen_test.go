@@ -120,6 +120,69 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Deps:     []string{"FakeConsumer"},
 	})
+	// Story 4.2: candidate service type singletons (constraint injection targets)
+	reg.Service(plan.Service{
+		Name:     "PocoClass",
+		GoType:   "fakes.IPocoClass",
+		Ctor:     "fakes.NewPocoClass",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "ClassImplementingIterable",
+		GoType:   "fakes.IClassImplementingIterable",
+		Ctor:     "fakes.NewClassImplementingIterable",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "ClassInheritingAbstract",
+		GoType:   "fakes.IClassInheritingAbstract",
+		Ctor:     "fakes.NewClassInheritingAbstract",
+		Lifetime: plan.Singleton,
+	})
+	// Story 4.2: unconstrained open-generic instantiations for candidate types
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IPocoClass",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IPocoClass]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IPocoClass]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"PocoClass"},
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IClassImplementingIterable",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"ClassImplementingIterable"},
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IClassInheritingAbstract",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"ClassInheritingAbstract"},
+	})
+	// Story 4.2: constrained open-generic instantiations
+	reg.Service(plan.Service{
+		Name:     "ConstrainedFakeOpenGenericService_fakes_IPocoClass",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IPocoClass]",
+		Ctor:     "fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"PocoClass"},
+	})
+	reg.Service(plan.Service{
+		Name:     "ClassWithInterfaceConstraint_fakes_IClassImplementingIterable",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]",
+		Ctor:     "fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"ClassImplementingIterable"},
+	})
+	reg.Service(plan.Service{
+		Name:     "ClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]",
+		Ctor:     "fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"ClassInheritingAbstract"},
+	})
 	// Keyed registrations (Story 3-1)
 	reg.Service(plan.Service{
 		Name:     "KeyedServiceOne#\"service1\"",
