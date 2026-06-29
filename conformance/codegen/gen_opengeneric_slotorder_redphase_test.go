@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 4.3 (AC3/AC5, Task 4) — codegen conformance:
+// ATDD scaffold for Story 4.3 (AC3/AC5, Task 4) — codegen conformance:
 // Path γ STRICT tests for open/closed priority and enumerable slot ORDER on the
 // pre-generated B2 container (codegen.NewRoot() direct calls, not just cross-
 // provider differential equivalence).

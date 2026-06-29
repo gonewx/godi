@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 4.3 (AC1-AC5, Task 3) — conformance suite:
+// ATDD scaffold for Story 4.3 (AC1-AC5, Task 3) — conformance suite:
 // open/closed PRIORITY and ENUMERABLE slot ORDER for generic services across
 // BOTH providers (runtime oracle + codegen B2), covering dotnet touch-points
 // 6/7/8 of the 9 open-generic contact points.

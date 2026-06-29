@@ -183,6 +183,58 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Deps:     []string{"ClassInheritingAbstract"},
 	})
+	// Story 4.3 (接触点 6/7): element singleton + open-produced (FIRST) + closed-
+	// specific (LAST → single-resolve last-wins = closed). The enumerable slot order
+	// is [open, closed] (registration order); single resolve returns the LAST. The
+	// closed-specific impl takes NO dependency → Deps=[] (D-2).
+	reg.Service(plan.Service{
+		Name:     "GenSlotA",
+		GoType:   "fakes.IGenSlotA",
+		Ctor:     "fakes.NewGenSlotA",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IGenSlotA",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IGenSlotA]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IGenSlotA]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"GenSlotA"},
+	})
+	reg.Service(plan.Service{
+		Name:     "ClosedFakeOpenGenericService_fakes_IGenSlotA",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IGenSlotA]",
+		Ctor:     "fakes.NewClosedFakeOpenGenericService[fakes.IGenSlotA]",
+		Lifetime: plan.Transient,
+	})
+	// Story 4.3 (接触点 8): mixed enumerable in dotnet slot order [closed#1, open,
+	// instance] (registration order). All transient (D-3); single resolve returns
+	// the LAST (instance). Instance slot uses a DISTINCT impl type to avoid the
+	// serviceName collision wall (D-4).
+	reg.Service(plan.Service{
+		Name:     "GenSlotB",
+		GoType:   "fakes.IGenSlotB",
+		Ctor:     "fakes.NewGenSlotB",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "ClosedFakeOpenGenericService_fakes_IGenSlotB",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IGenSlotB]",
+		Ctor:     "fakes.NewClosedFakeOpenGenericService[fakes.IGenSlotB]",
+		Lifetime: plan.Transient,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IGenSlotB",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IGenSlotB]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IGenSlotB]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"GenSlotB"},
+	})
+	reg.Service(plan.Service{
+		Name:     "InstanceFakeOpenGenericService_fakes_IGenSlotB",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IGenSlotB]",
+		Ctor:     "fakes.NewInstanceFakeOpenGenericService[fakes.IGenSlotB]",
+		Lifetime: plan.Transient,
+	})
 	// Keyed registrations (Story 3-1)
 	reg.Service(plan.Service{
 		Name:     "KeyedServiceOne#\"service1\"",

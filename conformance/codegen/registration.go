@@ -62,6 +62,24 @@ func register() {
 	AddInterfaceConstrainedService[fakes.IClassImplementingIterable](&r)
 	AddAbstractConstrainedService[fakes.IClassInheritingAbstract](&r)
 
+	// Story 4.3 (AC1/AC2, 接触点 6/7): closed-preferred-over-open via registration
+	// ORDER. godi has no open/closed runtime distinction (AD-4/AD-10); "closed
+	// preferred" is reproduced by registering the closed-specific impl LAST so
+	// GetService last-wins returns it. Enumerable [open, closed] is order-
+	// insensitive in dotnet (.Any), so the reversal is observable-equivalent.
+	godi.AddSingleton[fakes.IGenSlotA, fakes.GenSlotA](&r)                                                                     // element (injected into open-produced)
+	AddFakeOpenGenericService[fakes.IGenSlotA](&r)                                                                             // open-produced — FIRST
+	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IGenSlotA], fakes.ClosedFakeOpenGenericService[fakes.IGenSlotA]](&r) // closed — LAST → wins single resolve
+
+	// Story 4.3 (AC3, 接触点 8): mixed open/closed enumerable in dotnet slot order
+	// [closed#1, open-produced, instance]. ALL transient (D-3: mixed-lifetime
+	// multi-registration under one service type is an unhandled axis; same
+	// lifetime stays on the proven path; lifetime doesn't affect slot order).
+	godi.AddSingleton[fakes.IGenSlotB, fakes.GenSlotB](&r)                                                                       // element
+	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IGenSlotB], fakes.ClosedFakeOpenGenericService[fakes.IGenSlotB]](&r)   // closed#1 → enumerable[0]
+	AddFakeOpenGenericService[fakes.IGenSlotB](&r)                                                                               // open-produced → enumerable[1]
+	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IGenSlotB], fakes.InstanceFakeOpenGenericService[fakes.IGenSlotB]](&r) // instance → enumerable[2]
+
 	// Keyed registrations (Story 3-1, AD-17)
 	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "service1")
 	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceTwo](&r, "service2")
