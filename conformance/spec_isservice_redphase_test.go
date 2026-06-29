@@ -30,9 +30,11 @@ var rtFactoryIsService = ProviderFactory{
 		runtime.AddSingleton[fakes.IFakeService](b, func(godi.Provider) fakes.IFakeService {
 			return fakes.NewFakeService()
 		})
-		// Closed generic transient (AC7: ClosedGenericsWithIsService)
-		runtime.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, func(godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
-			return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+		// Closed generic transient (AC7: ClosedGenericsWithIsService). Story 4.1:
+		// the ctor injects `value T`; pass the registered IFakeService singleton.
+		runtime.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, func(p godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
+			dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
+			return fakes.NewFakeOpenGenericService[fakes.IFakeService](dep)
 		})
 		p, err := b.Build()
 		testutil.NoError(t, err)

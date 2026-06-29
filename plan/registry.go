@@ -254,6 +254,15 @@ func (r *Registry) KeyedServicesByGoType(goType, key string) []Service {
 
 // KeyedSingletonsTopo returns keyed singletons in dependency order, mirroring
 // SingletonsTopo for keyed services.
+//
+// Only KEYED services are emitted: a keyed singleton may depend on an UNKEYED
+// singleton (e.g. a closed open-generic keyed service injecting an unkeyed
+// dependency, Story 4.1), and that unkeyed dependency is already wired in the
+// unkeyed singleton block — which runs BEFORE the keyed block in NewRoot — and is
+// accessed via r.f_<Dep>. The recursion still descends through unkeyed deps so
+// keyed-on-keyed ordering holds, but appending an unkeyed dependency here would
+// re-wire it (constructing the singleton twice and breaking the shared-instance
+// invariant), so the append is filtered to keyed services.
 func (r *Registry) KeyedSingletonsTopo() []Service {
 	visited := make(map[string]struct{}, len(r.keyedServices))
 	out := make([]Service, 0, len(r.keyedServices))
@@ -271,7 +280,9 @@ func (r *Registry) KeyedSingletonsTopo() []Service {
 			}
 			visit(d)
 		}
-		out = append(out, s)
+		if s.Key != "" {
+			out = append(out, s)
+		}
 	}
 
 	for _, s := range r.keyedServices {
@@ -283,7 +294,11 @@ func (r *Registry) KeyedSingletonsTopo() []Service {
 	return out
 }
 
-// KeyedScopedTopo returns keyed scoped services in dependency order.
+// KeyedScopedTopo returns keyed scoped services in dependency order. As in
+// KeyedSingletonsTopo, only KEYED services are emitted: an unkeyed scoped
+// dependency is wired in the unkeyed scoped block and accessed via the scope
+// field, so appending it here would re-wire it (parallel to the keyed-singleton
+// fix, Story 4.1).
 func (r *Registry) KeyedScopedTopo() []Service {
 	visited := make(map[string]struct{}, len(r.keyedServices))
 	out := make([]Service, 0, len(r.keyedServices))
@@ -301,7 +316,9 @@ func (r *Registry) KeyedScopedTopo() []Service {
 			}
 			visit(d)
 		}
-		out = append(out, s)
+		if s.Key != "" {
+			out = append(out, s)
+		}
 	}
 
 	for _, s := range r.keyedServices {

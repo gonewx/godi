@@ -35,7 +35,14 @@ func register() {
 	godi.AddTransient[fakes.IFakeMultipleService, fakes.FakeOneMultipleService](&r)
 	godi.AddTransient[fakes.IFakeMultipleService, fakes.FakeTwoMultipleService](&r)
 	godi.AddTransient[fakes.IFakeOuterService, fakes.FakeOuterService](&r)
-	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r)
+	// Story 4.1 (AC1, Mechanism A): the open generic is enumerated through the
+	// per-service helper AddFakeOpenGenericService[T] (defined below) — the
+	// generator follows the forwarder, substitutes T, and materializes the closed
+	// implementation, injecting the closed ctor's `value T` dependency (AC2). Two
+	// instantiations [IFakeService] / [IFakeConsumer] prove serviceName
+	// disambiguation lets the two coexist without collision (AC4).
+	AddFakeOpenGenericService[fakes.IFakeService](&r)
+	AddFakeOpenGenericService[fakes.IFakeConsumer](&r)
 
 	// Keyed registrations (Story 3-1, AD-17)
 	godi.AddKeyedSingleton[fakes.IKeyedService, fakes.KeyedServiceOne](&r, "service1")
@@ -95,6 +102,19 @@ func register() {
 	// it is no different from keying any concrete type, so IsKeyedService(closed, key)
 	// must report true. Reuses the Story 2-5 open-generic fakes; NO AnyKey key.
 	godi.AddKeyedSingleton[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r, "gen-key")
+}
+
+// AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper
+// (Mechanism A, AC1): a single-statement forwarder to a godi marker. The
+// generator recognizes it, reads each call's type argument (e.g. IFakeService),
+// substitutes T, and reduces it to the closed form-A registration
+// (IFakeOpenGenericService[T], FakeOpenGenericService[T]) — which flows through
+// the same pipeline as a hand-written closed marker (AD-14). The inner template
+// marker's type args still mention T, so it is skipped (only the closed
+// instantiations above register). Defined IN this analyzed package (Story 4.1
+// scope; cross-package helpers are deferred).
+func AddFakeOpenGenericService[T any](r *godi.Registry) *godi.Registry {
+	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.FakeOpenGenericService[T]](r)
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

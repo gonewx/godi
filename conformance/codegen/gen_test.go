@@ -102,11 +102,23 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Deps:     []string{"FakeService", "[]fakes.IFakeMultipleService"},
 	})
+	// Story 4.1: the open generic is enumerated via the per-service helper
+	// AddFakeOpenGenericService[T] (Mechanism A) over TWO closed instantiations.
+	// serviceName folds the type arg into the name (disambiguation, AC4) and the
+	// closed ctor injects `value T` (AC2) — Deps wire the registered dependency.
 	reg.Service(plan.Service{
-		Name:     "FakeOpenGenericService",
+		Name:     "FakeOpenGenericService_fakes_IFakeService",
 		GoType:   "fakes.IFakeOpenGenericService[fakes.IFakeService]",
 		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IFakeService]",
 		Lifetime: plan.Transient,
+		Deps:     []string{"FakeService"},
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeOpenGenericService_fakes_IFakeConsumer",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.IFakeConsumer]",
+		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IFakeConsumer]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"FakeConsumer"},
 	})
 	// Keyed registrations (Story 3-1)
 	reg.Service(plan.Service{
@@ -237,11 +249,12 @@ func conformanceRegistry() *plan.Registry {
 	// any concrete type — IsKeyedService(IFakeOpenGenericService[IFakeService],
 	// "gen-key") must return true (ClosedGenericsWithIsKeyedService).
 	reg.Service(plan.Service{
-		Name:     "FakeOpenGenericService#\"gen-key\"",
+		Name:     "FakeOpenGenericService_fakes_IFakeService#\"gen-key\"",
 		GoType:   "fakes.IFakeOpenGenericService[fakes.IFakeService]",
 		Ctor:     "fakes.NewFakeOpenGenericService[fakes.IFakeService]",
 		Lifetime: plan.Singleton,
 		Key:      "\"gen-key\"",
+		Deps:     []string{"FakeService"},
 	})
 	return reg
 }

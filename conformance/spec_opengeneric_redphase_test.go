@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 4.1 (AC1-AC6, Task 5) — conformance suite:
+// ATDD scaffold for Story 4.1 (AC1-AC6, Task 5) — conformance suite:
 // open-generic CLOSED materialization across BOTH providers (runtime oracle +
 // codegen B2) with dependency injection, multi-instantiation disambiguation,
 // the unmaterialized-is-unresolvable tradeoff, and cross-provider differential
@@ -22,16 +20,10 @@
 // unresolvable at build time (AC3). This is a deliberate tradeoff (CAP-7), not a
 // defect.
 //
-// RED PHASE: behind //go:build atdd_redphase so the default build stays green.
-// On activation (tag removed) this is RED until:
-//   - Task 1 upgrades FakeOpenGenericService[T] to inject `value T` (the
-//     addOpenGenericRT helper below calls the injecting ctor → compile error
-//     until then), and
-//   - Task 3/4 teach the generator the per-service helper + serviceName
-//     disambiguation and regen the codegen container with the second
-//     instantiation.
-//
-// Remove the build tag to activate; implement Tasks 1-6 to GREEN.
+// ACTIVATED (Story 4.1): the build tag was removed once Task 1 upgraded
+// FakeOpenGenericService[T] to inject `value T` and Task 3/4 taught the generator
+// the per-service helper + serviceName disambiguation and regenerated the codegen
+// container with the second instantiation — this suite is now GREEN.
 //
 // Test standard R4: pointer identity within ONE provider only; across providers
 // use provider-stable observables (IsService booleans, dynamic type names).
@@ -57,9 +49,8 @@ import (
 // injected into the New{Impl} constructor (mirroring dotnet's
 // FakeOpenGenericService<TVal>(TVal value)).
 //
-// RED until Task 1: NewFakeOpenGenericService[T] is currently the no-arg minimal
-// ctor (Story 2.5); the injecting call below does not compile until the fake is
-// upgraded to NewFakeOpenGenericService[T any](value T).
+// Story 4.1: NewFakeOpenGenericService[T any](value T) injects the resolved
+// dependency, mirroring the codegen form-A wiring on the same logical closed set.
 func addOpenGenericRT[T any](b *runtime.Builder) {
 	runtime.AddTransient[fakes.IFakeOpenGenericService[T]](b, func(p godi.Provider) fakes.IFakeOpenGenericService[T] {
 		dep := p.GetService(reflect.TypeFor[T]()).(T)
@@ -98,10 +89,9 @@ var rtFactoryOpenGeneric = ProviderFactory{
 }
 
 // cgFactoryOpenGeneric builds the codegen provider from the regenerated
-// container_gen.go. RED until Task 4: the committed container resolves only the
-// no-arg closed generic [IFakeService] and lacks the second instantiation
-// [IFakeConsumer], so AC2's .Value() injection and AC4's second instantiation
-// fail until the codegen registration + regen land.
+// container_gen.go (Story 4.1): the committed container resolves BOTH closed
+// instantiations [IFakeService] / [IFakeConsumer] with the injected dependency
+// (AC2) and disambiguated fields/methods (AC4).
 var cgFactoryOpenGeneric = ProviderFactory{
 	Name: "codegen",
 	Build: func(t *testing.T) Provider {

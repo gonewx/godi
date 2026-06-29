@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 4.1 (AC2/AC4/AC6, Task 6) — codegen
+// ATDD scaffold for Story 4.1 (AC2/AC4/AC6, Task 6) — codegen
 // conformance: Path γ STRICT tests for open-generic closed materialization on
 // the pre-generated B2 container (codegen.NewRoot() direct calls, not just
 // differential equivalence).
@@ -15,14 +13,10 @@
 //	4.1-CGPATH-003 (AC3) — B2 reports unmaterialized closed type nil + IsService=false (no slot)
 //	4.1-CGPATH-004 (AC6) — regen byte-identical (consecutive generate idempotent, AD-14)
 //
-// RED PHASE: behind //go:build atdd_redphase so the default build stays green.
-// On activation (tag removed) this is RED until Task 4 lands the codegen
-// per-service helper registration + the second instantiation + regen:
-//   - CGPATH-001 .Value() is nil today (committed container uses the no-arg ctor)
-//     → injection assertion fails until Task 1+4.
-//   - CGPATH-002 [IFakeConsumer] is not registered today → GetService nil until Task 4.
-//
-// Remove the build tag to activate; implement Tasks 1-6 to GREEN.
+// ACTIVATED (Story 4.1): the build tag was removed once Task 4 landed the codegen
+// per-service helper registration + the second instantiation + regen, so the B2
+// container resolves both closed instantiations with injected dependencies — this
+// Path γ suite is now GREEN.
 package codegen_test
 
 import (

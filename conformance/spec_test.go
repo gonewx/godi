@@ -34,8 +34,12 @@ var (
 				dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
 				return fakes.NewFakeConsumer(dep)
 			})
-			runtime.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, func(godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
-				return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+			runtime.AddTransient[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, func(p godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
+				// Story 4.1: the open-generic ctor now injects `value T`; resolve the
+				// registered IFakeService singleton and pass it (mirrors codegen's
+				// form-A dependency wiring — AD-14 same logical closed set).
+				dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
+				return fakes.NewFakeOpenGenericService[fakes.IFakeService](dep)
 			})
 			p, err := b.Build()
 			testutil.NoError(t, err)

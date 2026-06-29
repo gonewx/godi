@@ -68,8 +68,10 @@ var rtFactoryKeyedIsService = ProviderFactory{
 			return fakes.NewFakeService()
 		})
 		// Closed-generic keyed — AC4 (closed generic is an ordinary registered type).
-		runtime.AddKeyedSingleton[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, "gen-key", func(godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
-			return fakes.NewFakeOpenGenericService[fakes.IFakeService]()
+		// Story 4.1: the ctor injects `value T`; pass the registered IFakeService.
+		runtime.AddKeyedSingleton[fakes.IFakeOpenGenericService[fakes.IFakeService]](b, "gen-key", func(p godi.Provider) fakes.IFakeOpenGenericService[fakes.IFakeService] {
+			dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
+			return fakes.NewFakeOpenGenericService[fakes.IFakeService](dep)
 		})
 
 		p, err := b.Build()
