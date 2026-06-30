@@ -1,14 +1,13 @@
-//go:build atdd_redphase
-
 // Story 5.4 (AC3) — M2 second-tier threshold gate assertion:
 // ServiceProviderValidationTests (26) + CircularDependencyTests (10) = 36
 // dotnet methods × godi coverage mapping.
 //
 // Counting convention (aligned with threshold_116_test.go):
-//   covered  — directly mapped to a godi test
-//   adapted  — rewritten for Go差異 but covers same semantic intent
-//   na       — Go mechanism wall (with mandatory justification)
-//   Formula: covered + adapted + na = 36 (no MISSING gap)
+//
+//	covered  — directly mapped to a godi test
+//	adapted  — rewritten for Go差異 but covers same semantic intent
+//	na       — Go mechanism wall (with mandatory justification)
+//	Formula: covered + adapted + na = 36 (no MISSING gap)
 //
 // Activation: delete the //go:build line and blank line to join the default build.
 package conformance

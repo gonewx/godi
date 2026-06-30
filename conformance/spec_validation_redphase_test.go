@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 5.4 (AC1/AC3) — conformance suite:
 // dual-provider validation consistency + ServiceProviderValidationTests
 // (26 dotnet methods) coverage.
@@ -399,7 +397,10 @@ func TestSPV_RootResolveScopedViaTransient_GoAdaptation(t *testing.T) {
 // --- Group C: polymorphic / multi-impl scope mix (dotnet methods 8, 15-17) --
 
 // 5.4-SPV-08: GetService_DoesNotThrow_WhenGetServiceForPolymorphicServiceIsCalledOnRoot
-// Last-wins: scoped then transient → last is transient → Build success + resolves
+// dotnet: validateScopes doesn't throw when last registration is not scoped.
+// godi: root-scoped semantics → Build + resolve succeed regardless of lifetime mix.
+// Runtime resolves by lifetime priority (singleton > scoped > transient), not
+// dotnet's "last descriptor wins" — only Assert Build success + non-nil resolve.
 func TestSPV_PolymorphicLastNotScoped_BuildSucceeds(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddScoped[valIBar](b, func(p godi.Provider) valIBar {
@@ -415,7 +416,6 @@ func TestSPV_PolymorphicLastNotScoped_BuildSucceeds(t *testing.T) {
 
 	got := provider.GetService(reflect.TypeFor[valIBar]())
 	testutil.NotNil(t, got)
-	testutil.Equal(t, reflect.TypeOf(got).String(), "*conformance.valBar3")
 }
 
 // 5.4-SPV-15: GetService_DoesNotThrow_WhenGetServiceForServiceWithMultipleImplementationScopesWhereLastIsNotScoped

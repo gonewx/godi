@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 5.4 (AC2) — conformance/codegen layer:
 // Path γ strict validation tests. Each test verifies that genlib.Generate
 // rejects a specific illegal graph category (missing/captive/cycle) by
