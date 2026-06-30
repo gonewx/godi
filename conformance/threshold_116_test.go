@@ -1,8 +1,5 @@
-//go:build atdd_redphase
-
-// ATDD scaffold for Story 4.5 (AC2) — one-level gate assertion:
+// Story 4.5 (AC2) — one-level gate assertion:
 // 116 dotnet specification methods × godi coverage mapping.
-// Remove the atdd_redphase build tag to activate after dev phase.
 
 package conformance
 
@@ -220,10 +217,10 @@ func TestFirstTierThreshold_116_CoverageAssertion(t *testing.T) {
 	t.Logf("  Effective:         %d / %d", effectiveCoverage, effectiveTarget)
 
 	expectedFileCounts := map[string]int{
-		"DISpec":            41,
-		"ActivatorUtils":    20,
-		"KeyedDISpec":       45,
-		"IsServiceSpec":     5,
+		"DISpec":             41,
+		"ActivatorUtils":     20,
+		"KeyedDISpec":        45,
+		"IsServiceSpec":      5,
 		"IsKeyedServiceSpec": 5,
 	}
 
