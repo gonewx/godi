@@ -634,8 +634,8 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 		keyedSingletons:         make(map[keyedEntry][]any, len(ksf)),
 		keyedRootScoped:         make(map[keyedEntry][]any, len(kscf)),
 		keyedOrder:              ko,
-		materializing:           make(map[reflect.Type]bool),
-		materializingKeyed:      make(map[keyedEntry]bool),
+		materializing:           make(map[reflect.Type]bool, len(sf)+len(scf)),
+		materializingKeyed:      make(map[keyedEntry]bool, len(ksf)+len(kscf)),
 		disp:                    NewDisposer(),
 	}
 	defer func() {
