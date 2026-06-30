@@ -180,9 +180,12 @@ func TestEmitDispose_DisposableGolden(t *testing.T) {
 // --- 2.3-GEN-008 (AC1, P1) ---------------------------------------------------
 
 // TestEmitDispose_NonDisposableContainerUnchanged: when NO services are
-// disposable, the emit must NOT include disp fields, Track calls, runtime
-// import, or closed guard. Existing goldens (single-service, deps-container,
-// lifetimes-container, formb-container) must stay byte-identical.
+// disposable, the emit must NOT include disp fields, Track calls, or the
+// runtime import. NOTE: the resolve-after-dispose `closed` guard IS now emitted
+// unconditionally (even with nothing to release) so both providers reject
+// post-Close resolution identically (AD-16, Story 6.1 review F1); only the
+// disposer machinery is gated on disposability. The golden anchors the stable
+// non-disposable shape (closed flag + guards, no disposer).
 func TestEmitDispose_NonDisposableContainerUnchanged(t *testing.T) {
 	// Lifetimes registry (no Disposable services) — must NOT have disp
 	reg := lifetimesRegistry()

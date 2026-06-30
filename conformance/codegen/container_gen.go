@@ -21,6 +21,10 @@ type Root struct {
 	f_GenSlotA                                            fakes.IGenSlotA
 	f_GenSlotB                                            fakes.IGenSlotB
 	f_AnyKeyServiceA                                      fakes.IAnyKeyService
+	f_StructFakeService                                   fakes.IStructFakeService
+	f_StructConsumer                                      fakes.IStructConsumer
+	f_StructFakeOne                                       fakes.IStructFakeMultipleService
+	f_StructFakeTwo                                       fakes.IStructFakeMultipleService
 	f_FakeScopedService                                   fakes.IFakeScopedService
 	f_FakeDisposableScoped                                fakes.IFakeDisposableScoped
 	f_KeyedServiceOne__service1_                          fakes.IKeyedService
@@ -40,6 +44,7 @@ type Root struct {
 	f_IKeyedServiceWithProvider__scoped_with_provider_    fakes.IKeyedServiceWithProvider
 	disp                                                  *runtime.Disposer
 	closed                                                bool
+	closeErr                                              error
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -58,6 +63,10 @@ func NewRoot() (*Root, error) {
 	r.f_GenSlotA = fakes.NewGenSlotA()
 	r.f_GenSlotB = fakes.NewGenSlotB()
 	r.f_AnyKeyServiceA = fakes.NewAnyKeyServiceA()
+	r.f_StructFakeService = fakes.NewStructFakeService()
+	r.f_StructConsumer = fakes.NewStructConsumer(r.f_StructFakeService)
+	r.f_StructFakeOne = fakes.NewStructFakeOne()
+	r.f_StructFakeTwo = fakes.NewStructFakeTwo()
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	r.disp.Track(r.f_FakeDisposableScoped.(io.Closer))
@@ -211,6 +220,14 @@ func (r *Root) GenSlotB() fakes.IGenSlotB { return r.f_GenSlotB }
 
 func (r *Root) AnyKeyServiceA() fakes.IAnyKeyService { return r.f_AnyKeyServiceA }
 
+func (r *Root) StructFakeService() fakes.IStructFakeService { return r.f_StructFakeService }
+
+func (r *Root) StructConsumer() fakes.IStructConsumer { return r.f_StructConsumer }
+
+func (r *Root) StructFakeOne() fakes.IStructFakeMultipleService { return r.f_StructFakeOne }
+
+func (r *Root) StructFakeTwo() fakes.IStructFakeMultipleService { return r.f_StructFakeTwo }
+
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
@@ -239,6 +256,12 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_GenSlotB
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return r.f_AnyKeyServiceA
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return r.f_StructFakeService
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return r.f_StructConsumer
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return r.f_StructFakeTwo
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -318,6 +341,12 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return true
 	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return true
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return true
 	}
 	return false
@@ -470,6 +499,12 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_GenSlotB}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{r.f_AnyKeyServiceA}
+		case reflect.TypeFor[fakes.IStructFakeService]():
+			return []any{r.f_StructFakeService}
+		case reflect.TypeFor[fakes.IStructConsumer]():
+			return []any{r.f_StructConsumer}
+		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+			return []any{r.f_StructFakeOne, r.f_StructFakeTwo}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -589,10 +624,11 @@ func (r *Root) CreateScope() godi.Scope {
 
 func (r *Root) Close() error {
 	if r.closed {
-		return nil
+		return r.closeErr
 	}
 	r.closed = true
-	return r.disp.CloseAll()
+	r.closeErr = r.disp.CloseAll()
+	return r.closeErr
 }
 
 type scope struct {
@@ -603,6 +639,7 @@ type scope struct {
 	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
 	disp                                               *runtime.Disposer
 	closed                                             bool
+	closeErr                                           error
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -630,6 +667,12 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_GenSlotB
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		return s.root.f_AnyKeyServiceA
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return s.root.f_StructFakeService
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return s.root.f_StructConsumer
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return s.root.f_StructFakeTwo
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -681,6 +724,12 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IGenSlotB]():
 		return true
 	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return true
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return true
@@ -805,6 +854,12 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_GenSlotB}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{s.root.f_AnyKeyServiceA}
+		case reflect.TypeFor[fakes.IStructFakeService]():
+			return []any{s.root.f_StructFakeService}
+		case reflect.TypeFor[fakes.IStructConsumer]():
+			return []any{s.root.f_StructConsumer}
+		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+			return []any{s.root.f_StructFakeOne, s.root.f_StructFakeTwo}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -924,10 +979,11 @@ func (s *scope) CreateScope() godi.Scope {
 
 func (s *scope) Close() error {
 	if s.closed {
-		return nil
+		return s.closeErr
 	}
 	s.closed = true
-	return s.disp.CloseAll()
+	s.closeErr = s.disp.CloseAll()
+	return s.closeErr
 }
 
 func (s *scope) NewFakeTransientService() fakes.IFakeTransientService {
@@ -1041,6 +1097,14 @@ func (s *scope) GenSlotA() fakes.IGenSlotA { return s.root.f_GenSlotA }
 func (s *scope) GenSlotB() fakes.IGenSlotB { return s.root.f_GenSlotB }
 
 func (s *scope) AnyKeyServiceA() fakes.IAnyKeyService { return s.root.f_AnyKeyServiceA }
+
+func (s *scope) StructFakeService() fakes.IStructFakeService { return s.root.f_StructFakeService }
+
+func (s *scope) StructConsumer() fakes.IStructConsumer { return s.root.f_StructConsumer }
+
+func (s *scope) StructFakeOne() fakes.IStructFakeMultipleService { return s.root.f_StructFakeOne }
+
+func (s *scope) StructFakeTwo() fakes.IStructFakeMultipleService { return s.root.f_StructFakeTwo }
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
 

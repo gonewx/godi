@@ -202,8 +202,15 @@ func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service, dispos
 	for _, s := range keyedScoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
 	}
+	// `closed` is declared UNCONDITIONALLY so resolve-after-dispose is identical
+	// across both providers (AD-16): even a container with nothing to release must
+	// reject post-Close resolution, matching the runtime oracle. `disp`/`closeErr`
+	// exist only when there is something to release.
 	if disposables {
-		fmt.Fprintf(buf, "\tdisp   *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tdisp     *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tclosed   bool\n")
+		fmt.Fprintf(buf, "\tcloseErr error\n")
+	} else {
 		fmt.Fprintf(buf, "\tclosed bool\n")
 	}
 	fmt.Fprintf(buf, "}\n\n")
@@ -441,7 +448,7 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "// GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.\n")
 	fmt.Fprintf(buf, "func (r *Root) GetService(t reflect.Type) any {\n")
-	emitClosedGuard(buf, "r", disposables)
+	emitClosedGuard(buf, "r")
 	all := concatServices(singletons, scoped, transients)
 	if len(all) > 0 {
 		seen := make(map[string]struct{})
@@ -491,7 +498,7 @@ func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients [
 func emitGetServiceSingletonsOnly(buf *bytes.Buffer, singletons []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "// GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.\n")
 	fmt.Fprintf(buf, "func (r *Root) GetService(t reflect.Type) any {\n")
-	emitClosedGuard(buf, "r", disposables)
+	emitClosedGuard(buf, "r")
 	if len(singletons) > 0 {
 		seen := make(map[string]struct{})
 		fmt.Fprintf(buf, "\tswitch t {\n")
@@ -666,7 +673,7 @@ func collectionItemExpr(s plan.Service, recv string) string {
 
 func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool, keyedScopedWiring []plan.Service) {
 	fmt.Fprintf(buf, "func (r *Root) CreateScope() godi.Scope {\n")
-	emitClosedGuard(buf, "r", disposables)
+	emitClosedGuard(buf, "r")
 	if !hasLifetimes {
 		fmt.Fprintf(buf, "\treturn &scope{root: r}\n")
 	} else {
@@ -759,18 +766,16 @@ func sliceDepExprScope(dep, recv string, reg *plan.Registry) string {
 }
 
 // emitClosedGuard writes the resolve-after-dispose guard at the top of a
-// resolution or scope-creation method. It is emitted ONLY when the container
-// tracks disposables — the `closed` field (and Close state machine) exists only
-// then, and a container with nothing to release has no dispose state to guard, so
-// the single-service golden stays guard-free. For root recv "r" the guard is
-// `if r.closed`; for a scope a closed ROOT also invalidates the live scope, so the
-// guard is `if s.closed || s.root.closed` (SPCT-12..15). Both providers panic with
-// godi.ProviderClosedError() so resolve-after-dispose is identical across the
-// runtime oracle and generated code (AD-16).
-func emitClosedGuard(buf *bytes.Buffer, recv string, disposables bool) {
-	if !disposables {
-		return
-	}
+// resolution or scope-creation method. It is emitted UNCONDITIONALLY: every
+// generated container carries a `closed` flag and Close marks it, so a closed
+// container rejects resolution EXACTLY like the runtime oracle does — whose guard
+// is also unconditional (AD-16: resolve-after-dispose identical across providers,
+// regardless of whether the container tracks any disposable). A container with
+// nothing to release still has a logical closed state to guard. For root recv "r"
+// the guard is `if r.closed`; for a scope a closed ROOT also invalidates the live
+// scope, so the guard is `if s.closed || s.root.closed` (SPCT-12..15). Both
+// providers panic with godi.ProviderClosedError().
+func emitClosedGuard(buf *bytes.Buffer, recv string) {
 	if recv == "s" {
 		fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
 	} else {
@@ -780,15 +785,24 @@ func emitClosedGuard(buf *bytes.Buffer, recv string, disposables bool) {
 	fmt.Fprintf(buf, "\t}\n")
 }
 
+// emitClose writes Root.Close. It is idempotent (AD-16): the second call returns
+// the SAME result as the first, matching the runtime oracle's sync.Once+closeErr
+// caching. When the container tracks disposables, the first call marks closed and
+// caches the CloseAll error in closeErr; subsequent calls return that cached err
+// (NOT nil — a swallowed error would diverge from runtime, F4). When there is
+// nothing to release, Close still marks closed so resolve-after-dispose trips the
+// guard, and returns nil (no disposer to fail).
 func emitClose(buf *bytes.Buffer, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) Close() error {\n")
 	if disposables {
 		fmt.Fprintf(buf, "\tif r.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn nil\n")
+		fmt.Fprintf(buf, "\t\treturn r.closeErr\n")
 		fmt.Fprintf(buf, "\t}\n")
 		fmt.Fprintf(buf, "\tr.closed = true\n")
-		fmt.Fprintf(buf, "\treturn r.disp.CloseAll()\n")
+		fmt.Fprintf(buf, "\tr.closeErr = r.disp.CloseAll()\n")
+		fmt.Fprintf(buf, "\treturn r.closeErr\n")
 	} else {
+		fmt.Fprintf(buf, "\tr.closed = true\n")
 		fmt.Fprintf(buf, "\treturn nil\n")
 	}
 	fmt.Fprintf(buf, "}\n\n")
@@ -841,8 +855,15 @@ func emitScopeStruct(buf *bytes.Buffer, scoped []plan.Service, disposables bool,
 	for _, s := range keyedScoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", keyedFieldName(s), s.GoType)
 	}
+	// `closed` is declared UNCONDITIONALLY (see emitRootStruct): a closed scope
+	// must reject resolution even with nothing to release, so resolve-after-dispose
+	// matches the runtime oracle (AD-16). `disp`/`closeErr` exist only when there is
+	// something to release.
 	if disposables {
-		fmt.Fprintf(buf, "\tdisp   *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tdisp     *runtime.Disposer\n")
+		fmt.Fprintf(buf, "\tclosed   bool\n")
+		fmt.Fprintf(buf, "\tcloseErr error\n")
+	} else {
 		fmt.Fprintf(buf, "\tclosed bool\n")
 	}
 	fmt.Fprintf(buf, "}\n\n")
@@ -854,7 +875,7 @@ func emitScopeAssertion(buf *bytes.Buffer) {
 
 func emitScopeGetService(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (s *scope) GetService(t reflect.Type) any {\n")
-	emitClosedGuard(buf, "s", disposables)
+	emitClosedGuard(buf, "s")
 	all := concatServices(singletons, scoped, transients)
 	if len(all) > 0 {
 		seen := make(map[string]struct{})
@@ -922,7 +943,7 @@ func emitScopeIsService(buf *bytes.Buffer, singletons, scoped, transients []plan
 
 func emitScopeGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedService(t reflect.Type, key any) any {\n")
-	emitClosedGuard(buf, "s", disposables)
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn s.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
@@ -957,7 +978,7 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 	unkeyedAll := concatServices(singletons, scoped, transients)
 
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {\n")
-	emitClosedGuard(buf, "s", disposables)
+	emitClosedGuard(buf, "s")
 
 	if len(allKeyed) == 0 {
 		fmt.Fprintf(buf, "\tif key != nil {\n")
@@ -1024,7 +1045,7 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 
 func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, disposables bool, keyedScopedWiring []plan.Service) {
 	fmt.Fprintf(buf, "func (s *scope) CreateScope() godi.Scope {\n")
-	emitClosedGuard(buf, "s", disposables)
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\tns := &scope{root: s.root}\n")
 	if disposables {
 		fmt.Fprintf(buf, "\tns.disp = runtime.NewDisposer()\n")
@@ -1113,17 +1134,25 @@ func depArgsForNestedScope(deps []string, reg *plan.Registry) string {
 	return strings.Join(parts, ", ")
 }
 
+// emitScopeClose writes scope.Close, idempotent and matching the runtime oracle
+// (AD-16). Like Root.Close, the second call returns the cached closeErr (not nil)
+// when there are disposables; when there is nothing to release Close still marks
+// the scope closed so resolve-after-dispose trips the guard.
 func emitScopeClose(buf *bytes.Buffer, disposables bool) {
 	if disposables {
 		fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
 		fmt.Fprintf(buf, "\tif s.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn nil\n")
+		fmt.Fprintf(buf, "\t\treturn s.closeErr\n")
 		fmt.Fprintf(buf, "\t}\n")
 		fmt.Fprintf(buf, "\ts.closed = true\n")
-		fmt.Fprintf(buf, "\treturn s.disp.CloseAll()\n")
+		fmt.Fprintf(buf, "\ts.closeErr = s.disp.CloseAll()\n")
+		fmt.Fprintf(buf, "\treturn s.closeErr\n")
 		fmt.Fprintf(buf, "}\n\n")
 	} else {
-		fmt.Fprintf(buf, "func (s *scope) Close() error { return nil }\n\n")
+		fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
+		fmt.Fprintf(buf, "\ts.closed = true\n")
+		fmt.Fprintf(buf, "\treturn nil\n")
+		fmt.Fprintf(buf, "}\n\n")
 	}
 }
 
@@ -1212,7 +1241,7 @@ func emitKeyedTransientMethods(buf *bytes.Buffer, transients []plan.Service, rec
 
 func emitGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) GetKeyedService(t reflect.Type, key any) any {\n")
-	emitClosedGuard(buf, "r", disposables)
+	emitClosedGuard(buf, "r")
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn r.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
@@ -1265,7 +1294,7 @@ func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singlet
 	unkeyedAll := concatServices(singletons, scoped, transients)
 
 	fmt.Fprintf(buf, "func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {\n")
-	emitClosedGuard(buf, "r", disposables)
+	emitClosedGuard(buf, "r")
 
 	if len(allKeyed) == 0 {
 		fmt.Fprintf(buf, "\tif key != nil {\n")

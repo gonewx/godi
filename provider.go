@@ -63,17 +63,24 @@ type Provider interface {
 	Close() error
 }
 
-// ProviderClosedError builds the error a provider (root or scope) panics with when
-// a service is resolved — or a child scope is created — AFTER Close. dotnet throws
-// ObjectDisposedException; godi panics with this error from BOTH providers so the
-// resolve-after-dispose consistency PINNED in the Provider contract above is
-// identical across the runtime oracle and generated code (AD-16). Generated code
-// calls godi.ProviderClosedError() rather than building its own error, avoiding an
-// extra import in the generated file (mirrors AnyKeySingleResolveError). Pure
-// queries (IsService / IsKeyedService) deliberately do NOT use this guard — they
-// stay total and never panic (AD-16).
+// ErrProviderClosed is the sentinel a provider (root or scope) panics with when a
+// service is resolved — or a child scope is created — AFTER Close. It is a package
+// var, not a freshly built error, so a recovering caller can match it with
+// errors.Is(v, godi.ErrProviderClosed) regardless of which provider raised it.
+var ErrProviderClosed = errors.New("godi: provider is closed (resolve-after-dispose, AD-16)")
+
+// ProviderClosedError returns the ErrProviderClosed sentinel that a provider (root
+// or scope) panics with when a service is resolved — or a child scope is created —
+// AFTER Close. dotnet throws ObjectDisposedException; godi panics with this single
+// shared sentinel from BOTH providers so the resolve-after-dispose consistency
+// PINNED in the Provider contract above is identical across the runtime oracle and
+// generated code (AD-16) and recoverable via errors.Is. Generated code calls
+// godi.ProviderClosedError() rather than building its own error, avoiding an extra
+// import in the generated file (mirrors AnyKeySingleResolveError). Pure queries
+// (IsService / IsKeyedService) deliberately do NOT use this guard — they stay total
+// and never panic (AD-16).
 func ProviderClosedError() error {
-	return errors.New("godi: provider is closed (resolve-after-dispose, AD-16)")
+	return ErrProviderClosed
 }
 
 // Scope is a child resolution scope. It exposes exactly the same resolution

@@ -16,6 +16,7 @@ type Root struct {
 	f_Session svc.ISession
 	disp      *runtime.Disposer
 	closed    bool
+	closeErr  error
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -123,10 +124,11 @@ func (r *Root) CreateScope() godi.Scope {
 
 func (r *Root) Close() error {
 	if r.closed {
-		return nil
+		return r.closeErr
 	}
 	r.closed = true
-	return r.disp.CloseAll()
+	r.closeErr = r.disp.CloseAll()
+	return r.closeErr
 }
 
 type scope struct {
@@ -134,6 +136,7 @@ type scope struct {
 	f_Session svc.ISession
 	disp      *runtime.Disposer
 	closed    bool
+	closeErr  error
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -213,10 +216,11 @@ func (s *scope) CreateScope() godi.Scope {
 
 func (s *scope) Close() error {
 	if s.closed {
-		return nil
+		return s.closeErr
 	}
 	s.closed = true
-	return s.disp.CloseAll()
+	s.closeErr = s.disp.CloseAll()
+	return s.closeErr
 }
 
 func (s *scope) NewTempFile() svc.ITempFile {

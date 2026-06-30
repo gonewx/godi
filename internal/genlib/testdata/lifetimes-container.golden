@@ -12,6 +12,7 @@ import (
 type Root struct {
 	f_Logger  *svc.Logger
 	f_Request svc.IRequest
+	closed    bool
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -34,6 +35,9 @@ func (r *Root) Request() svc.IRequest { return r.f_Request }
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
 		return r.f_Logger
@@ -68,6 +72,9 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.GetService(t)
 	}
@@ -78,6 +85,9 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key != nil {
 		return nil
 	}
@@ -93,23 +103,31 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	s := &scope{root: r}
 	s.f_Request = svc.NewRequest(s.root.f_Logger)
 	return s
 }
 
 func (r *Root) Close() error {
+	r.closed = true
 	return nil
 }
 
 type scope struct {
 	root      *Root
 	f_Request svc.IRequest
+	closed    bool
 }
 
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
 		return s.root.f_Logger
@@ -138,6 +156,9 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return s.GetService(t)
 	}
@@ -148,6 +169,9 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key != nil {
 		return nil
 	}
@@ -163,12 +187,18 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	ns := &scope{root: s.root}
 	ns.f_Request = svc.NewRequest(ns.root.f_Logger)
 	return ns
 }
 
-func (s *scope) Close() error { return nil }
+func (s *scope) Close() error {
+	s.closed = true
+	return nil
+}
 
 func (s *scope) NewWidget() svc.IWidget {
 	return svc.NewWidget(s.f_Request)

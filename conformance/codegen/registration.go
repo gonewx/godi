@@ -138,6 +138,21 @@ func register() {
 	// it is no different from keying any concrete type, so IsKeyedService(closed, key)
 	// must report true. Reuses the Story 2-5 open-generic fakes; NO AnyKey key.
 	godi.AddKeyedSingleton[fakes.IFakeOpenGenericService[fakes.IFakeService], fakes.FakeOpenGenericService[fakes.IFakeService]](&r, "gen-key")
+
+	// Story 6-1 (SPCT-18/20/21, AD-15 codegen coverage): struct (value-type)
+	// services on the codegen path. dotnet boxes struct services into `object`;
+	// the godi analog is a struct with VALUE-receiver interface methods, so the
+	// struct value (not *struct) satisfies the interface and is boxed into `any`
+	// when resolved. These verify the GENERATED container keys value types by
+	// reflect.Type and stores them in []any collections exactly as for pointers
+	// (D-3 risk) — a coverage gap the runtime-only standalone tests cannot close.
+	// IStructFakeService as a singleton (SPCT-18 value-type resolution), injected
+	// into StructConsumer (SPCT-20 struct-as-dependency), plus two struct impls of
+	// IStructFakeMultipleService for collection ordering (SPCT-21).
+	godi.AddSingleton[fakes.IStructFakeService, fakes.StructFakeService](&r)
+	godi.AddSingleton[fakes.IStructConsumer, fakes.StructConsumer](&r)
+	godi.AddSingleton[fakes.IStructFakeMultipleService, fakes.StructFakeOne](&r)
+	godi.AddSingleton[fakes.IStructFakeMultipleService, fakes.StructFakeTwo](&r)
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper

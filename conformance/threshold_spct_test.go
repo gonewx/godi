@@ -58,10 +58,10 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	{ID: "SPCT-17", DotnetMethod: "AddDisposablesAndAsyncDisposables_DisposeAsync_AllDisposed", DotnetType: "Theory(2)", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3 (AR12)"},
 
 	// ── Group 10: struct services (SPCT-18 to SPCT-21) ────────────────────
-	{ID: "SPCT-18", DotnetMethod: "WorksWithStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-18 struct services three lifetimes", Status: covered},
+	{ID: "SPCT-18", DotnetMethod: "WorksWithStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-18 struct services three lifetimes (+ codegen path TestSPCT_StructServices_Codegen / cross-provider)", Status: covered, Note: "value-type service boxing verified on BOTH providers — struct registered in codegen registration.go, cross-provider differential equivalence asserts identical reflect.Type keying + boxing (AD-15)"},
 	{ID: "SPCT-19", DotnetMethod: "WorksWithFactoryStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-19 factory struct services", Status: covered},
 	{ID: "SPCT-20", DotnetMethod: "WorksWithFactoryStructServicesAsDependencies", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-20 factory struct as dependency", Status: covered},
-	{ID: "SPCT-21", DotnetMethod: "WorksWithIEnumerableStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-21 struct multi-impl collection", Status: covered},
+	{ID: "SPCT-21", DotnetMethod: "WorksWithIEnumerableStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-21 struct multi-impl collection (+ codegen path TestSPCT_StructMultiImpl_Codegen / cross-provider)", Status: covered, Note: "struct elements in []any collection verified on BOTH providers — IEnumerable registration-order axis (AD-15) covered in codegen path with cross-provider differential equivalence"},
 
 	// ── Group 11: wide scoped tree (SPCT-22) ──────────────────────────────
 	{ID: "SPCT-22", DotnetMethod: "WorksWithWideScopedTrees", DotnetType: "Fact", GodiTest: "spec_container: SPCT-22 wide scoped tree (20 services)", Status: covered},
@@ -72,15 +72,15 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	// ── Group 13: async disposal on provider/scope (SPCT-24 to SPCT-35, N/A → Story 6-3) ──
 	{ID: "SPCT-24", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 	{ID: "SPCT-25", DotnetMethod: "ProviderDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-26", DotnetMethod: "ProviderDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-26 sync Close calls io.Closer.Close on root", Status: covered},
+	{ID: "SPCT-26", DotnetMethod: "ProviderDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-26 root Close idempotent", Status: covered, Note: "godi has only sync io.Closer (no async dispose to prefer over); the SPCT case asserts root Close idempotency — the io.Closer.Close-is-actually-called release semantics are verified by Story 2.3 (TestEmitDispose_* / disposer LIFO tests)"},
 	{ID: "SPCT-27", DotnetMethod: "ProviderDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 	{ID: "SPCT-28", DotnetMethod: "ProviderScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 	{ID: "SPCT-29", DotnetMethod: "ProviderScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-30", DotnetMethod: "ProviderScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-30 sync Close calls io.Closer.Close on scope", Status: covered},
+	{ID: "SPCT-30", DotnetMethod: "ProviderScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-30 scope Close idempotent", Status: covered, Note: "godi has only sync io.Closer; the SPCT case asserts scope Close idempotency — release semantics (io.Closer.Close called LIFO) verified by Story 2.3"},
 	{ID: "SPCT-31", DotnetMethod: "ProviderScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 	{ID: "SPCT-32", DotnetMethod: "ProviderAsyncScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 	{ID: "SPCT-33", DotnetMethod: "ProviderAsyncScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-34", DotnetMethod: "ProviderAsyncScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-34 sync Close on scope (dotnet CreateScope body equivalent)", Status: covered, Note: "dotnet test body actually uses CreateScope not CreateAsyncScope; equivalent to SPCT-30"},
+	{ID: "SPCT-34", DotnetMethod: "ProviderAsyncScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-34 scope Close idempotent (dotnet CreateScope body equivalent)", Status: covered, Note: "dotnet test body actually uses CreateScope not CreateAsyncScope; equivalent to SPCT-30 — asserts scope Close idempotency, release semantics verified by Story 2.3"},
 	{ID: "SPCT-35", DotnetMethod: "ProviderAsyncScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
 
 	// ── Group 14: factory singleton dispose + instance dispose (SPCT-36, SPCT-37) ──

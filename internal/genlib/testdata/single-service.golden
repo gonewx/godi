@@ -11,6 +11,7 @@ import (
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
 	f_Logger *logger.Logger
+	closed   bool
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -26,6 +27,9 @@ func (r *Root) Logger() *logger.Logger { return r.f_Logger }
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[*logger.Logger]():
 		return r.f_Logger
@@ -52,6 +56,9 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.GetService(t)
 	}
@@ -62,6 +69,9 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key != nil {
 		return nil
 	}
@@ -73,10 +83,14 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	return &scope{root: r}
 }
 
 func (r *Root) Close() error {
+	r.closed = true
 	return nil
 }
 

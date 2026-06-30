@@ -13,6 +13,7 @@ package conformance
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gonewx/godi"
@@ -198,16 +199,16 @@ var spctCases = []SpecCase{
 
 	// ── G4: dispose semantics (SPCT-26, SPCT-30, SPCT-34, SPCT-36, SPCT-37, SPCT-08) ──
 
-	// SPCT-26: sync Close calls io.Closer.Close on root transient disposable
+	// SPCT-26: root Close is idempotent. NOTE: the io.Closer.Close-is-called
+	// semantics is verified in depth by Story 2.3 (rtFactoryDispose); the basic
+	// SPCT factory registers no disposable, so here we only assert idempotency in
+	// the SPCT context — NOT that Close was invoked on a tracked disposable.
 	{
-		Name: "SPCT-26: root Close calls io.Closer.Close (sync dispose preferred)",
+		Name: "SPCT-26: root Close is idempotent (release verified by Story 2.3)",
 		Run: func(t *testing.T, p Provider) {
-			// This test requires disposable services to be registered.
-			// The SpecCase uses the existing dispose factory (rtFactoryDispose / cgFactoryDispose).
-			// For the basic SPCT factory, we verify the contract on the provider itself.
-			//
-			// Story 2.3 already verified this in depth; here we confirm in SPCT context:
-			// root Close is idempotent and calls Close on tracked disposables.
+			// The basic SPCT factory registers no disposable, so this asserts
+			// idempotency only; sync-dispose-preferred / io.Closer.Close-called is
+			// covered by Story 2.3's dispose factory in depth.
 			err := p.Close()
 			testutil.NoError(t, err)
 			// Idempotent
@@ -215,9 +216,9 @@ var spctCases = []SpecCase{
 			testutil.NoError(t, err)
 		},
 	},
-	// SPCT-30: scope Close calls io.Closer.Close on scope disposables
+	// SPCT-30: scope Close is idempotent (release verified by Story 2.3).
 	{
-		Name: "SPCT-30: scope Close calls io.Closer.Close (sync dispose preferred)",
+		Name: "SPCT-30: scope Close is idempotent (release verified by Story 2.3)",
 		Run: func(t *testing.T, p Provider) {
 			scope := p.CreateScope()
 			err := scope.Close()
@@ -229,7 +230,7 @@ var spctCases = []SpecCase{
 	},
 	// SPCT-34: same as SPCT-30 (dotnet test body actually uses CreateScope not CreateAsyncScope)
 	{
-		Name: "SPCT-34: async scope dispose prefers sync Close (CreateScope body equivalent)",
+		Name: "SPCT-34: scope Close idempotent, CreateScope body equivalent (release verified by Story 2.3)",
 		Run: func(t *testing.T, p Provider) {
 			scope := p.CreateScope()
 			err := scope.Close()
@@ -306,6 +307,64 @@ func TestSPCT_CrossProvider_ResolveAfterDispose(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSPCT_CrossProvider_ResolveAfterDispose_NoDisposable closes the gap that the
+// disposable-container probe above cannot reach: the ONLY conformance codegen
+// container (codegen.NewRoot) tracks a disposable, so that probe never exercises a
+// generated container with NOTHING to release. Earlier the codegen guard was only
+// emitted when the container tracked disposables, so a no-disposable generated
+// container would NOT panic after Close while the runtime oracle (whose guard is
+// unconditional) would — a silent AD-16 divergence the disposable probe masked.
+//
+// This test asserts the contract at the generator: a registry with no disposable
+// service must STILL emit the unconditional `closed` field + resolve-after-dispose
+// guard, exactly as the runtime root does. It mirrors the runtime side by building
+// a no-disposable runtime provider and confirming it panics after Close, then
+// confirms the generated no-disposable container carries the identical guard.
+func TestSPCT_CrossProvider_ResolveAfterDispose_NoDisposable(t *testing.T) {
+	// runtime side: a no-disposable provider must panic after Close (unconditional guard).
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IFakeService](b, func(godi.Provider) fakes.IFakeService {
+		return fakes.NewFakeService()
+	})
+	rp, err := b.Build()
+	testutil.NoError(t, err)
+	_ = rp.Close()
+	rtPanicked := func() (panicked bool) {
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		_ = rp.GetService(reflect.TypeFor[fakes.IFakeService]())
+		return false
+	}()
+	testutil.True(t, rtPanicked, "runtime no-disposable provider must panic on resolve-after-dispose")
+
+	// codegen side: a no-disposable registry must STILL emit the closed field + guard.
+	// There is no instantiable no-disposable conformance container, so assert the
+	// generated SOURCE carries the same unconditional guard the runtime relies on.
+	reg := plan.NewRegistry()
+	reg.Imports = []string{"example.com/svc"}
+	reg.Service(plan.Service{
+		Name:     "Plain",
+		GoType:   "*svc.Plain",
+		Ctor:     "svc.NewPlain",
+		Lifetime: plan.Singleton,
+	})
+	src, err := genlib.Generate(reg, "container")
+	testutil.NoError(t, err)
+	code := string(src)
+	testutil.True(t, !strings.Contains(code, "runtime.Disposer"),
+		"sanity: this registry has no disposable, so no Disposer is expected")
+	// the closed FIELD declaration line starts with tab+"closed" (gofmt aligns the
+	// type with variable spacing, so match the line prefix, not exact spacing); the
+	// guard ("\tif r.closed") and the Close assignment ("\tr.closed") do not.
+	testutil.True(t, strings.Contains(code, "\n\tclosed"),
+		"no-disposable generated container must STILL declare the closed field (AD-16)")
+	testutil.True(t, strings.Contains(code, "panic(godi.ProviderClosedError())"),
+		"no-disposable generated container must STILL emit the resolve-after-dispose guard (AD-16)")
 }
 
 // ── Standalone tests for scenarios needing custom registration ──────────────
@@ -677,6 +736,88 @@ func TestSPCT_21_StructMultiImplCollection(t *testing.T) {
 	testutil.Equal(t, reflect.TypeOf(services[1]).String(), "fakes.StructFakeTwo")
 }
 
+// TestSPCT_StructServices_CrossProvider closes review finding F7/#10: the struct
+// (value-type) services are now ALSO registered in the codegen container
+// (registration.go), so the value-type axis — reflect.Type keying of a boxed
+// struct value, struct-as-dependency injection, and struct elements in a []any
+// collection — is verified on the GENERATED container too, not runtime-only. It
+// runs a differential equivalence check (AC2, AD-15): for each struct scenario
+// the codegen Root must observe the SAME boxed dynamic type and tag the runtime
+// oracle does. The runtime side mirrors the codegen registration source.
+func TestSPCT_StructServices_CrossProvider(t *testing.T) {
+	// Runtime oracle built from the same logical source as registration.go.
+	rt := func(t *testing.T) Provider {
+		b := runtime.NewBuilder()
+		runtime.AddSingleton[fakes.IStructFakeService](b, func(godi.Provider) fakes.IStructFakeService {
+			return fakes.NewStructFakeService()
+		})
+		runtime.AddSingleton[fakes.IStructConsumer](b, func(p godi.Provider) fakes.IStructConsumer {
+			dep := p.GetService(reflect.TypeFor[fakes.IStructFakeService]()).(fakes.IStructFakeService)
+			return fakes.NewStructConsumer(dep)
+		})
+		runtime.AddSingleton[fakes.IStructFakeMultipleService](b, func(godi.Provider) fakes.IStructFakeMultipleService {
+			return fakes.NewStructFakeOne()
+		})
+		runtime.AddSingleton[fakes.IStructFakeMultipleService](b, func(godi.Provider) fakes.IStructFakeMultipleService {
+			return fakes.NewStructFakeTwo()
+		})
+		p, err := b.Build()
+		testutil.NoError(t, err)
+		t.Cleanup(func() { _ = p.Close() })
+		return p
+	}
+	cg := func(t *testing.T) Provider {
+		root, err := codegen.NewRoot()
+		testutil.NoError(t, err)
+		t.Cleanup(func() { _ = root.Close() })
+		return root
+	}
+
+	// probe captures the observable facts of each struct scenario as comparable
+	// strings, so runtime and codegen outcomes compare directly.
+	for _, scenario := range []struct {
+		name  string
+		probe func(Provider) string
+	}{
+		{
+			// SPCT-18: value-type service boxes the struct VALUE, not a pointer.
+			name: "struct service boxes value type",
+			probe: func(p Provider) string {
+				got := p.GetService(reflect.TypeFor[fakes.IStructFakeService]())
+				return reflect.TypeOf(got).String() + "|" + got.(fakes.IStructFakeService).StructTag()
+			},
+		},
+		{
+			// SPCT-20: struct injected as a constructor dependency.
+			name: "struct as dependency",
+			probe: func(p Provider) string {
+				c := p.GetService(reflect.TypeFor[fakes.IStructConsumer]()).(fakes.IStructConsumer)
+				return c.Dependency().StructTag()
+			},
+		},
+		{
+			// SPCT-21: struct elements keep value identity + order in a []any.
+			name: "struct multi-impl collection",
+			probe: func(p Provider) string {
+				svcs := p.GetKeyedServices(reflect.TypeFor[fakes.IStructFakeMultipleService](), nil)
+				out := ""
+				for _, s := range svcs {
+					out += reflect.TypeOf(s).String() + ":" + s.(fakes.IStructFakeMultipleService).MultiTag() + ";"
+				}
+				return out
+			},
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			rtOut := scenario.probe(rt(t))
+			cgOut := scenario.probe(cg(t))
+			if rtOut != cgOut {
+				t.Errorf("cross-provider struct mismatch: runtime=%q codegen=%q", rtOut, cgOut)
+			}
+		})
+	}
+}
+
 // TestSPCT_22_WideScopedTree verifies a wide tree of scoped services (dotnet
 // WorksWithWideScopedTrees): N same-typed scoped registrations all resolve as a
 // collection, every element is a distinct instance, stable WITHIN one scope and
@@ -701,6 +842,16 @@ func TestSPCT_22_WideScopedTree(t *testing.T) {
 	services := scope.GetKeyedServices(typ, nil)
 	if len(services) != width {
 		t.Fatalf("SPCT-22: wide scoped tree expected %d services, got %d", width, len(services))
+	}
+	// every element is a DISTINCT instance: the N same-typed scoped registrations
+	// must NOT collapse into one shared slot (the "wide" part of the wide tree).
+	seen := make(map[*spctWideNode]int, width)
+	for i := range services {
+		node := services[i].(*spctWideNode)
+		if prev, dup := seen[node]; dup {
+			t.Errorf("SPCT-22: scoped elements %d and %d are the SAME instance (must be distinct)", prev, i)
+		}
+		seen[node] = i
 	}
 	// stable within the scope (scoped cache): a second resolve returns identical pointers
 	again := scope.GetKeyedServices(typ, nil)

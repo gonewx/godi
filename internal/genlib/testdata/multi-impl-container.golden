@@ -11,6 +11,7 @@ import (
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
 	f_FakeService fakes.IFakeService
+	closed        bool
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -38,6 +39,9 @@ func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
 		return r.f_FakeService
@@ -72,6 +76,9 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.GetService(t)
 	}
@@ -82,6 +89,9 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key != nil {
 		return nil
 	}
@@ -97,21 +107,29 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	s := &scope{root: r}
 	return s
 }
 
 func (r *Root) Close() error {
+	r.closed = true
 	return nil
 }
 
 type scope struct {
-	root *Root
+	root   *Root
+	closed bool
 }
 
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
 		return s.root.f_FakeService
@@ -140,6 +158,9 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return s.GetService(t)
 	}
@@ -150,6 +171,9 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key != nil {
 		return nil
 	}
@@ -165,11 +189,17 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	ns := &scope{root: s.root}
 	return ns
 }
 
-func (s *scope) Close() error { return nil }
+func (s *scope) Close() error {
+	s.closed = true
+	return nil
+}
 
 func (s *scope) NewFakeOneMultipleService() fakes.IFakeMultipleService {
 	return fakes.NewFakeOneMultipleService()

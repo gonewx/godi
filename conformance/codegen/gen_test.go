@@ -371,6 +371,35 @@ func conformanceRegistry() *plan.Registry {
 		Key:      "\"gen-key\"",
 		Deps:     []string{"FakeService"},
 	})
+	// Story 6-1 (SPCT-18/20/21): struct (value-type) services as singletons. The
+	// value-receiver fakes box the struct VALUE into the interface; StructConsumer
+	// takes the struct service as a ctor dependency, and the two IStructFakeMultiple
+	// Service impls verify struct elements keep identity inside a []any collection.
+	reg.Service(plan.Service{
+		Name:     "StructFakeService",
+		GoType:   "fakes.IStructFakeService",
+		Ctor:     "fakes.NewStructFakeService",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "StructConsumer",
+		GoType:   "fakes.IStructConsumer",
+		Ctor:     "fakes.NewStructConsumer",
+		Lifetime: plan.Singleton,
+		Deps:     []string{"StructFakeService"},
+	})
+	reg.Service(plan.Service{
+		Name:     "StructFakeOne",
+		GoType:   "fakes.IStructFakeMultipleService",
+		Ctor:     "fakes.NewStructFakeOne",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "StructFakeTwo",
+		GoType:   "fakes.IStructFakeMultipleService",
+		Ctor:     "fakes.NewStructFakeTwo",
+		Lifetime: plan.Singleton,
+	})
 	return reg
 }
 
