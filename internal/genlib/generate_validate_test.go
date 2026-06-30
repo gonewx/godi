@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 5.1 — genlib package: Generate gate
 // verification for transitive missing dependencies.
 //

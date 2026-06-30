@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 5.1 — plan package: transitive missing
 // dependency detection with chain reporting and aggregated error output.
 //

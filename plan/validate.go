@@ -46,24 +46,55 @@ func (r *Registry) Validate() []error {
 	}
 
 	for _, s := range allServices {
-		for _, dep := range s.Deps {
-			if strings.HasPrefix(dep, "[]") {
-				goType := dep[2:]
-				if len(r.byGoType[goType]) == 0 {
-					errs = append(errs, fmt.Errorf(
-						"missing dependency: %s %q depends on unregistered slice %q",
-						s.Lifetime, s.Name, dep,
-					))
+		visited := map[string]struct{}{s.Name: {}}
+		r.walkMissing(s.Name, s.Lifetime, s, []string{s.Name}, visited, &errs)
+	}
+
+	return errs
+}
+
+func (r *Registry) walkMissing(rootName string, rootLifetime Lifetime, current Service, chain []string, visited map[string]struct{}, errs *[]error) {
+	for _, dep := range current.Deps {
+		if strings.HasPrefix(dep, "[]") {
+			goType := dep[2:]
+			if len(r.byGoType[goType]) == 0 {
+				if _, seen := visited[dep]; seen {
+					continue
 				}
+				visited[dep] = struct{}{}
+				fullChain := append(chain[:len(chain):len(chain)], dep)
+				*errs = append(*errs, fmt.Errorf(
+					"missing dependency: %s %q cannot be constructed: %s (%s is not registered)",
+					rootLifetime, rootName, strings.Join(fullChain, " → "), dep,
+				))
 				continue
 			}
-			if _, ok := r.byName[dep]; !ok {
-				errs = append(errs, fmt.Errorf(
-					"missing dependency: %s %q depends on unregistered %q",
-					s.Lifetime, s.Name, dep,
-				))
+			for _, implName := range r.byGoType[goType] {
+				if _, seen := visited[implName]; seen {
+					continue
+				}
+				visited[implName] = struct{}{}
+				nextChain := append(chain[:len(chain):len(chain)], implName)
+				if implSvc, ok := r.byName[implName]; ok {
+					r.walkMissing(rootName, rootLifetime, implSvc, nextChain, visited, errs)
+				}
 			}
+		} else {
+			if _, seen := visited[dep]; seen {
+				continue
+			}
+			visited[dep] = struct{}{}
+			depSvc, ok := r.byName[dep]
+			if !ok {
+				fullChain := append(chain[:len(chain):len(chain)], dep)
+				*errs = append(*errs, fmt.Errorf(
+					"missing dependency: %s %q cannot be constructed: %s (%s is not registered)",
+					rootLifetime, rootName, strings.Join(fullChain, " → "), dep,
+				))
+				continue
+			}
+			nextChain := append(chain[:len(chain):len(chain)], dep)
+			r.walkMissing(rootName, rootLifetime, depSvc, nextChain, visited, errs)
 		}
 	}
-	return errs
 }
