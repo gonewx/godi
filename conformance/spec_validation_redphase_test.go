@@ -15,8 +15,6 @@
 // plan.Validate; runtime Build() may succeed because root acts as root-scope
 // (scoped-from-root semantics, Story 3-2). Tests explicitly annotate this.
 //
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-5-4-validation-dual-provider-m2.md.
 package conformance
 
 import (
@@ -416,6 +414,7 @@ func TestSPV_PolymorphicLastNotScoped_BuildSucceeds(t *testing.T) {
 
 	got := provider.GetService(reflect.TypeFor[valIBar]())
 	testutil.NotNil(t, got)
+	testutil.Equal(t, reflect.TypeOf(got).String(), "*conformance.valBar")
 }
 
 // 5.4-SPV-15: GetService_DoesNotThrow_WhenGetServiceForServiceWithMultipleImplementationScopesWhereLastIsNotScoped
