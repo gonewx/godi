@@ -1,21 +1,5 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 5.2 — plan package: captive dependency
-// detection (singleton captures scoped, direct and transitive).
-//
-// Story 5-1 delivered transitive missing-dependency DFS (walkMissing). This
-// story adds a new walkCaptive DFS pass in Validate that rejects graphs where
-// a Singleton directly or transitively depends on a Scoped service — the Go
-// equivalent of dotnet's ValidateScopes, left-shifted to build time (AD-3).
-//
-// Red-phase focus: the current Validate has NO lifetime cross-check. All
-// assertions containing "captive dependency" will fail because walkCaptive
-// does not yet exist.
-//
-// Activation (TDD red → green): delete the //go:build line above and the blank
-// line after it once plan.Validate performs captive dependency checking (Story
-// 5.2 Task 2). The file then joins the default build and drives the slice to
-// green.
+// ATDD tests for Story 5.2 — plan package: captive dependency detection
+// (singleton captures scoped, direct and transitive).
 package plan_test
 
 import (

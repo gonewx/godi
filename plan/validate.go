@@ -18,9 +18,9 @@ var reservedMethodNames = map[string]struct{}{
 	"Close":            {},
 }
 
-// Validate checks the registry for structural errors. This story implements
-// the minimum slice: missing-dependency detection (AD-3). Captured-dependency
-// (Epic 5.2) and circular-dependency (Epic 5.3) checks land later.
+// Validate checks the registry for structural errors: duplicate/reserved names,
+// missing dependencies (AD-3, Story 5-1), and captive dependencies (AD-3,
+// Story 5-2). Circular-dependency detection (Story 5-3) lands later.
 //
 // Errors are aggregated into []error — all violations are reported in one
 // pass, not fail-on-first (Consistency Conventions).
@@ -48,6 +48,14 @@ func (r *Registry) Validate() []error {
 	for _, s := range allServices {
 		visited := map[string]struct{}{s.Name: {}}
 		r.walkMissing(s.Name, s.Lifetime, s, []string{s.Name}, visited, &errs)
+	}
+
+	for _, s := range allServices {
+		if s.Lifetime != Singleton {
+			continue
+		}
+		visited := map[string]struct{}{s.Name: {}}
+		r.walkCaptive(s.Name, s, []string{s.Name}, visited, &errs)
 	}
 
 	return errs
@@ -96,5 +104,52 @@ func (r *Registry) walkMissing(rootName string, rootLifetime Lifetime, current S
 			nextChain := append(chain[:len(chain):len(chain)], dep)
 			r.walkMissing(rootName, rootLifetime, depSvc, nextChain, visited, errs)
 		}
+	}
+}
+
+func (r *Registry) walkCaptive(rootName string, current Service, chain []string, visited map[string]struct{}, errs *[]error) {
+	for _, dep := range current.Deps {
+		if strings.HasPrefix(dep, "[]") {
+			goType := dep[2:]
+			for _, implName := range r.byGoType[goType] {
+				if _, seen := visited[implName]; seen {
+					continue
+				}
+				visited[implName] = struct{}{}
+				implSvc, ok := r.byName[implName]
+				if !ok {
+					continue
+				}
+				if implSvc.Lifetime == Scoped {
+					fullChain := append(chain[:len(chain):len(chain)], implName)
+					*errs = append(*errs, fmt.Errorf(
+						"captive dependency: Singleton %q captures Scoped %q: %s (Scoped %q would be captured by Singleton %q)",
+						rootName, implName, strings.Join(fullChain, " → "), implName, rootName,
+					))
+					continue
+				}
+				nextChain := append(chain[:len(chain):len(chain)], implName)
+				r.walkCaptive(rootName, implSvc, nextChain, visited, errs)
+			}
+			continue
+		}
+		if _, seen := visited[dep]; seen {
+			continue
+		}
+		visited[dep] = struct{}{}
+		depSvc, ok := r.byName[dep]
+		if !ok {
+			continue
+		}
+		if depSvc.Lifetime == Scoped {
+			fullChain := append(chain[:len(chain):len(chain)], dep)
+			*errs = append(*errs, fmt.Errorf(
+				"captive dependency: Singleton %q captures Scoped %q: %s (Scoped %q would be captured by Singleton %q)",
+				rootName, dep, strings.Join(fullChain, " → "), dep, rootName,
+			))
+			continue
+		}
+		nextChain := append(chain[:len(chain):len(chain)], dep)
+		r.walkCaptive(rootName, depSvc, nextChain, visited, errs)
 	}
 }
