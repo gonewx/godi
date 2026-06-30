@@ -19,8 +19,8 @@ var reservedMethodNames = map[string]struct{}{
 }
 
 // Validate checks the registry for structural errors: duplicate/reserved names,
-// missing dependencies (AD-3, Story 5-1), and captive dependencies (AD-3,
-// Story 5-2). Circular-dependency detection (Story 5-3) lands later.
+// missing dependencies (AD-3, Story 5-1), captive dependencies (AD-3,
+// Story 5-2), and circular dependencies (AD-3, Story 5-3).
 //
 // Errors are aggregated into []error — all violations are reported in one
 // pass, not fail-on-first (Consistency Conventions).
@@ -56,6 +56,13 @@ func (r *Registry) Validate() []error {
 		}
 		visited := map[string]struct{}{s.Name: {}}
 		r.walkCaptive(s.Name, s, []string{s.Name}, visited, &errs)
+	}
+
+	cycleState := make(map[string]int, len(allServices))
+	for _, s := range allServices {
+		if cycleState[s.Name] == 0 {
+			r.walkCycle(s.Name, cycleState, nil, &errs)
+		}
 	}
 
 	return errs
@@ -152,4 +159,49 @@ func (r *Registry) walkCaptive(rootName string, current Service, chain []string,
 		nextChain := append(chain[:len(chain):len(chain)], dep)
 		r.walkCaptive(rootName, depSvc, nextChain, visited, errs)
 	}
+}
+
+func (r *Registry) walkCycle(name string, state map[string]int, stack []string, errs *[]error) {
+	switch state[name] {
+	case 1:
+		for i, n := range stack {
+			if n == name {
+				cyclePath := make([]string, len(stack)-i+1)
+				copy(cyclePath, stack[i:])
+				cyclePath[len(cyclePath)-1] = name
+				*errs = append(*errs, fmt.Errorf(
+					"circular dependency: %s", strings.Join(cyclePath, " → "),
+				))
+				return
+			}
+		}
+		return
+	case 2:
+		return
+	}
+
+	state[name] = 1
+	stack = append(stack, name)
+
+	s, ok := r.byName[name]
+	if !ok {
+		state[name] = 2
+		return
+	}
+
+	for _, dep := range s.Deps {
+		if strings.HasPrefix(dep, "[]") {
+			goType := dep[2:]
+			for _, implName := range r.byGoType[goType] {
+				r.walkCycle(implName, state, stack, errs)
+			}
+		} else {
+			if _, exists := r.byName[dep]; !exists {
+				continue
+			}
+			r.walkCycle(dep, state, stack, errs)
+		}
+	}
+
+	state[name] = 2
 }

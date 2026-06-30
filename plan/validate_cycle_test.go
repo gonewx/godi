@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 5.3 — plan package: circular dependency
+// ATDD tests for Story 5.3 — plan package: circular dependency
 // detection via three-color DFS (walkCycle).
 //
 // Story 5-1 delivered transitive missing dependency detection (walkMissing DFS).
@@ -17,8 +15,9 @@
 // plan.Validate implements walkCycle (Story 5-3 Task 2).
 //
 // AC mapping:
-//   AC1 — Validate detects cycles, reports path, rejects bad graph
-//   AC3 — CircularDependencyTests (10 methods) coverage via plan-layer tests
+//
+//	AC1 — Validate detects cycles, reports path, rejects bad graph
+//	AC3 — CircularDependencyTests (10 methods) coverage via plan-layer tests
 package plan_test
 
 import (

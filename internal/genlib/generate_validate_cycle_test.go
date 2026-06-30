@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 5.3 — genlib package: Generate gate
+// ATDD tests for Story 5.3 — genlib package: Generate gate
 // verification for circular dependency detection. The Generate function (AD-2)
 // calls plan.Validate first; a non-empty result aborts emission and returns nil
 // output + error (AD-3).

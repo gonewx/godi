@@ -86,6 +86,9 @@ type root struct {
 	// services (nil/AnyKey excluded at registration), used by AnyKey-query (D-4).
 	keyedOrder []keyedReg
 
+	materializing      map[reflect.Type]bool
+	materializingKeyed map[keyedEntry]bool
+
 	disp      *Disposer
 	closeOnce sync.Once
 	closeErr  error
@@ -95,10 +98,24 @@ var _ godi.Provider = (*root)(nil)
 
 func (r *root) GetService(t reflect.Type) any {
 	if factories, ok := r.singletonFactories[t]; ok {
+		if _, cached := r.singletons[t]; !cached {
+			if r.materializing[t] {
+				panic(fmt.Sprintf("circular dependency detected for type %v", t))
+			}
+			r.materializing[t] = true
+			defer delete(r.materializing, t)
+		}
 		instances := materializeInto(r.singletons, t, factories, r, r.disp)
 		return instances[len(instances)-1]
 	}
 	if factories, ok := r.scopedFactories[t]; ok {
+		if _, cached := r.rootScoped[t]; !cached {
+			if r.materializing[t] {
+				panic(fmt.Sprintf("circular dependency detected for type %v", t))
+			}
+			r.materializing[t] = true
+			defer delete(r.materializing, t)
+		}
 		instances := materializeInto(r.rootScoped, t, factories, r, r.disp)
 		return instances[len(instances)-1]
 	}
@@ -163,10 +180,24 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 	}
 	ke := keyedEntry{t: t, key: key}
 	if factories, ok := r.keyedSingletonFactories[ke]; ok {
+		if _, cached := r.keyedSingletons[ke]; !cached {
+			if r.materializingKeyed[ke] {
+				panic(fmt.Sprintf("circular dependency detected for keyed type %v key %v", t, key))
+			}
+			r.materializingKeyed[ke] = true
+			defer delete(r.materializingKeyed, ke)
+		}
 		instances := materializeKeyedInto(r.keyedSingletons, ke, factories, r, r.disp)
 		return instances[len(instances)-1]
 	}
 	if factories, ok := r.keyedScopedFactories[ke]; ok {
+		if _, cached := r.keyedRootScoped[ke]; !cached {
+			if r.materializingKeyed[ke] {
+				panic(fmt.Sprintf("circular dependency detected for keyed type %v key %v", t, key))
+			}
+			r.materializingKeyed[ke] = true
+			defer delete(r.materializingKeyed, ke)
+		}
 		instances := materializeKeyedInto(r.keyedRootScoped, ke, factories, r, r.disp)
 		return instances[len(instances)-1]
 	}
@@ -603,6 +634,8 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 		keyedSingletons:         make(map[keyedEntry][]any, len(ksf)),
 		keyedRootScoped:         make(map[keyedEntry][]any, len(kscf)),
 		keyedOrder:              ko,
+		materializing:           make(map[reflect.Type]bool),
+		materializingKeyed:      make(map[keyedEntry]bool),
 		disp:                    NewDisposer(),
 	}
 	defer func() {
