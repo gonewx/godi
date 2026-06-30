@@ -90,6 +90,7 @@ type root struct {
 	materializingKeyed map[keyedEntry]bool
 
 	disp      *Disposer
+	closed    bool
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -97,6 +98,9 @@ type root struct {
 var _ godi.Provider = (*root)(nil)
 
 func (r *root) GetService(t reflect.Type) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if factories, ok := r.singletonFactories[t]; ok {
 		if _, cached := r.singletons[t]; !cached {
 			if r.materializing[t] {
@@ -170,6 +174,9 @@ func (r *root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *root) GetKeyedService(t reflect.Type, key any) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.GetService(t)
 	}
@@ -212,6 +219,9 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.getUnkeyedServices(t)
 	}
@@ -304,6 +314,9 @@ func (r *root) getAnyKeyedServices(t reflect.Type) []any {
 }
 
 func (r *root) CreateScope() godi.Scope {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	return &scope{
 		root:        r,
 		scoped:      make(map[reflect.Type][]any),
@@ -314,6 +327,10 @@ func (r *root) CreateScope() godi.Scope {
 
 func (r *root) Close() error {
 	r.closeOnce.Do(func() {
+		// Mark closed BEFORE releasing so a factory that calls Close mid-Build
+		// (ctor-dispose-in-flight, SPCT-16) trips the resolve guard on the next
+		// GetService, and so post-Close resolution is rejected (AD-16).
+		r.closed = true
 		r.closeErr = r.disp.CloseAll()
 	})
 	return r.closeErr
@@ -324,13 +341,22 @@ type scope struct {
 	scoped      map[reflect.Type][]any
 	keyedScoped map[keyedEntry][]any
 	disp        *Disposer
+	closed      bool
 	closeOnce   sync.Once
 	closeErr    error
 }
 
 var _ godi.Scope = (*scope)(nil)
 
+// closedGuard reports whether this scope can no longer resolve: either the scope
+// itself was closed, or its root was closed (a closed root invalidates every live
+// child scope — SPCT-14). A closed scope leaves the root usable (SPCT-15).
+func (s *scope) closedGuard() bool { return s.closed || s.root.closed }
+
 func (s *scope) GetService(t reflect.Type) any {
+	if s.closedGuard() {
+		panic(godi.ProviderClosedError())
+	}
 	if factories, ok := s.root.singletonFactories[t]; ok {
 		instances := materializeInto(s.root.singletons, t, factories, s.root, s.root.disp)
 		return instances[len(instances)-1]
@@ -356,6 +382,9 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
+	if s.closedGuard() {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return s.GetService(t)
 	}
@@ -383,6 +412,9 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
+	if s.closedGuard() {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return s.getUnkeyedServices(t)
 	}
@@ -473,6 +505,9 @@ func (s *scope) getAnyKeyedServices(t reflect.Type) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
+	if s.closedGuard() {
+		panic(godi.ProviderClosedError())
+	}
 	return &scope{
 		root:        s.root,
 		scoped:      make(map[reflect.Type][]any),
@@ -483,6 +518,7 @@ func (s *scope) CreateScope() godi.Scope {
 
 func (s *scope) Close() error {
 	s.closeOnce.Do(func() {
+		s.closed = true
 		s.closeErr = s.disp.CloseAll()
 	})
 	return s.closeErr

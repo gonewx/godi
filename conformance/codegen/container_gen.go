@@ -217,6 +217,9 @@ func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_F
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
 		return r.f_FakeService
@@ -381,6 +384,9 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return r.GetService(t)
 	}
@@ -441,6 +447,9 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		switch t {
 		case reflect.TypeFor[fakes.IFakeService]():
@@ -563,6 +572,9 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
+	if r.closed {
+		panic(godi.ProviderClosedError())
+	}
 	s := &scope{root: r}
 	s.disp = runtime.NewDisposer()
 	s.f_FakeScopedService = fakes.NewFakeScopedService()
@@ -596,6 +608,9 @@ type scope struct {
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
 		return s.root.f_FakeService
@@ -704,6 +719,9 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		return s.GetService(t)
 	}
@@ -764,6 +782,9 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	if key == nil {
 		switch t {
 		case reflect.TypeFor[fakes.IFakeService]():
@@ -886,6 +907,9 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
+	if s.closed || s.root.closed {
+		panic(godi.ProviderClosedError())
+	}
 	ns := &scope{root: s.root}
 	ns.disp = runtime.NewDisposer()
 	ns.f_FakeScopedService = fakes.NewFakeScopedService()

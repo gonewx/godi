@@ -8,7 +8,6 @@
 //	adapted  — rewritten for Go差異 but covers same semantic intent
 //	na       — Go mechanism wall (with mandatory justification)
 //	Formula: covered + adapted + na = 36 (no MISSING gap)
-//
 package conformance
 
 import "testing"

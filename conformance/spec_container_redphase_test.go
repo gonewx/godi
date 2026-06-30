@@ -1,19 +1,13 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 6.1 (AC1/AC2) — conformance suite:
-// ServiceProviderContainerTests comprehensive container behavior.
-//
-// This file ports the 28 covered/adapted methods (out of 49 total) from dotnet
-// ServiceProviderContainerTests to godi conformance SpecCases that run against
-// BOTH providers (runtime oracle + codegen B2).
-//
-// Red-phase triggers:
-//   - fakes_struct.go does not exist → struct fakes compilation failure
-//   - runtime provider may lack closed guard → SPCT-12/13/14/15 assertions fail
-//   - new test-local types (spctDisposable etc.) are defined here
-//
-// Activation: delete the //go:build line and blank line to join the default
-// build. See _bmad-output/test-artifacts/atdd-checklist-6-1-container-behavior.md.
+// Story 6.1 (AC1/AC2) — conformance suite: ServiceProviderContainerTests
+// comprehensive container behavior. Ports the covered/adapted methods (28 of 49)
+// from dotnet ServiceProviderContainerTests: resolve-after-dispose guards, struct
+// (value-type) services, multi-impl ordering, wide scoped trees, root-scoped
+// stability, sync-dispose-preferred, and build-time rejection of missing
+// dependencies. The resolve-after-dispose group runs against BOTH providers
+// (runtime oracle + codegen B2) as SpecCases plus a cross-provider differential
+// equivalence check (AC2); the "corner combination" axes outside the AD-15
+// differential obligation are runtime-only standalone tests (D-7). See
+// conformance/threshold_spct_test.go for the full 49-method coverage map.
 package conformance
 
 import (
@@ -24,7 +18,9 @@ import (
 	"github.com/gonewx/godi"
 	"github.com/gonewx/godi/conformance/codegen"
 	"github.com/gonewx/godi/conformance/fakes"
+	"github.com/gonewx/godi/internal/genlib"
 	"github.com/gonewx/godi/internal/testutil"
+	"github.com/gonewx/godi/plan"
 	"github.com/gonewx/godi/runtime"
 )
 
@@ -34,7 +30,7 @@ type spctDisposable struct {
 	disposed bool
 }
 
-func (d *spctDisposable) Close() error { d.disposed = true; return nil }
+func (d *spctDisposable) Close() error     { d.disposed = true; return nil }
 func (d *spctDisposable) IsDisposed() bool { return d.disposed }
 
 type iSPCTCustomService interface{ isSPCTCustom() }
@@ -79,6 +75,11 @@ type spctScopedAa struct {
 }
 
 func newSPCTScopedAa(a *spctScopedA) *spctScopedAa { return &spctScopedAa{a: a} }
+
+// spctWideNode is a pointer-typed scoped service used to build a wide scoped tree
+// (SPCT-22). Pointer identity lets the test assert per-scope caching: every
+// element is a distinct instance, stable within one scope, fresh in the next.
+type spctWideNode struct{ slot int }
 
 // ── Provider factories for SPCT tests ───────────────────────────────────────
 
@@ -236,29 +237,13 @@ var spctCases = []SpecCase{
 		},
 	},
 
-	// ── G3: multi-impl + wide tree + generic cache (SPCT-05, SPCT-22, SPCT-23) ──
-
-	// SPCT-23: singleton GetService == GetServices single element (cache slot)
-	{
-		Name: "SPCT-23: singleton GetService == GetServices single element (cache slot)",
-		Run: func(t *testing.T, p Provider) {
-			// This test requires a singleton registration of IFakeOpenGenericService[PocoClass].
-			// Story 4.1 already registered this in the main factory.
-			// Verify single-resolve and collection-resolve return same instance.
-			singleType := reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]()
-			single := p.GetService(singleType)
-			if single == nil {
-				t.Skip("SPCT-23: IFakeOpenGenericService[IFakeService] not registered in this factory")
-			}
-			services := p.GetKeyedServices(singleType, nil)
-			if len(services) != 1 {
-				t.Fatalf("SPCT-23: expected 1 service in collection, got %d", len(services))
-			}
-			if single != services[0] {
-				t.Error("SPCT-23: GetService and GetKeyedServices(nil) must return same singleton instance")
-			}
-		},
-	},
+	// ── G3: multi-impl + wide tree + generic cache ─────────────────────────
+	// SPCT-05 / SPCT-22 / SPCT-23 are standalone tests below — each needs a
+	// bespoke registration (N same-typed impls, a wide scoped tree, a SINGLETON
+	// closed generic) that neither default SPCT factory provides. In particular
+	// the default container registers IFakeOpenGenericService[T] as a TRANSIENT,
+	// so a single-vs-collection identity check (SPCT-23) needs its own singleton
+	// registration to be meaningful.
 }
 
 // ── Test runners ────────────────────────────────────────────────────────────
@@ -274,55 +259,50 @@ func TestSPCT_CodegenProvider(t *testing.T) {
 // ── Cross-provider differential equivalence (AC2) ───────────────────────────
 
 func TestSPCT_CrossProvider_ResolveAfterDispose(t *testing.T) {
-	// Both providers must exhibit identical resolve-after-dispose behavior:
-	// root Close → GetService panics in both
-
+	// Both providers must exhibit IDENTICAL resolve-after-dispose behavior: after
+	// root Close, GetService and CreateScope both panic. The probe captures its
+	// OWN panic and reports "panicked"/"no-panic" (a named return set from the
+	// deferred recover) so the two providers' observable outcomes compare directly
+	// — and so a swallowed panic can never masquerade as a missing one (AC2, AD-15).
 	for _, tc := range []struct {
 		name  string
 		probe func(Provider) string
 	}{
 		{
 			name: "root Close → GetService panics consistently",
-			probe: func(p Provider) string {
+			probe: func(p Provider) (result string) {
 				_ = p.Close()
-				defer func() { recover() }()
+				defer func() {
+					if recover() != nil {
+						result = "panicked"
+					}
+				}()
 				_ = p.GetService(reflect.TypeFor[fakes.IFakeService]())
 				return "no-panic"
 			},
 		},
 		{
 			name: "root Close → CreateScope panics consistently",
-			probe: func(p Provider) string {
+			probe: func(p Provider) (result string) {
 				_ = p.Close()
-				defer func() { recover() }()
+				defer func() {
+					if recover() != nil {
+						result = "panicked"
+					}
+				}()
 				_ = p.CreateScope()
 				return "no-panic"
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rtResult := func() (result string) {
-				defer func() {
-					if r := recover(); r != nil {
-						result = "panicked"
-					}
-				}()
-				p := rtFactorySPCT.Build(t)
-				return tc.probe(p)
-			}()
-
-			cgResult := func() (result string) {
-				defer func() {
-					if r := recover(); r != nil {
-						result = "panicked"
-					}
-				}()
-				p := cgFactorySPCT.Build(t)
-				return tc.probe(p)
-			}()
-
+			rtResult := tc.probe(rtFactorySPCT.Build(t))
+			cgResult := tc.probe(cgFactorySPCT.Build(t))
 			if rtResult != cgResult {
 				t.Errorf("cross-provider mismatch: runtime=%q codegen=%q", rtResult, cgResult)
+			}
+			if rtResult != "panicked" {
+				t.Errorf("both providers must panic on resolve-after-dispose, got %q", rtResult)
 			}
 		})
 	}
@@ -569,4 +549,290 @@ func TestSPCT_44_KeyedMissingDoesNotFallThrough(t *testing.T) {
 	// Keyed IFakeService("service1") must NOT be found
 	testutil.True(t, !p.IsKeyedService(reflect.TypeFor[fakes.IFakeService](), "service1"),
 		"SPCT-44: keyed IFakeService('service1') must not fall through to unkeyed")
+}
+
+// TestSPCT_23_GenericSingletonCacheSlot verifies that a SINGLETON closed generic
+// resolved singly (GetService) and as a collection (GetKeyedServices(nil)) returns
+// the SAME cached instance — the generic IEnumerable item lives in the same cache
+// slot (dotnet GenericIEnumerableItemCachedInTheRightSlot). The default SPCT
+// containers register the open generic as TRANSIENT, so this needs its own
+// singleton registration to be meaningful (runtime-only; the singleton-shared axis
+// is already differentially verified by spec_test.go across both providers).
+func TestSPCT_23_GenericSingletonCacheSlot(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IFakeService](b, func(godi.Provider) fakes.IFakeService {
+		return fakes.NewFakeService()
+	})
+	runtime.AddSingleton[*fakes.FakeOpenGenericService[fakes.IFakeService]](b, func(p godi.Provider) *fakes.FakeOpenGenericService[fakes.IFakeService] {
+		dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
+		return fakes.NewFakeOpenGenericService[fakes.IFakeService](dep)
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	typ := reflect.TypeFor[*fakes.FakeOpenGenericService[fakes.IFakeService]]()
+	single := p.GetService(typ)
+	testutil.NotNil(t, single)
+	services := p.GetKeyedServices(typ, nil)
+	if len(services) != 1 {
+		t.Fatalf("SPCT-23: expected 1 service in collection, got %d", len(services))
+	}
+	if single != services[0] {
+		t.Error("SPCT-23: singleton GetService and GetServices(nil) must return the SAME cached instance")
+	}
+}
+
+// TestSPCT_18_StructServicesThreeLifetimes verifies a value-type (struct) service
+// resolves under all three lifetimes, boxing the struct VALUE (not a pointer) into
+// the interface (dotnet WorksWithStructServices).
+func TestSPCT_18_StructServicesThreeLifetimes(t *testing.T) {
+	for _, lt := range []string{"singleton", "scoped", "transient"} {
+		t.Run(lt, func(t *testing.T) {
+			b := runtime.NewBuilder()
+			factory := func(godi.Provider) fakes.IStructFakeService { return fakes.NewStructFakeService() }
+			switch lt {
+			case "singleton":
+				runtime.AddSingleton[fakes.IStructFakeService](b, factory)
+			case "scoped":
+				runtime.AddScoped[fakes.IStructFakeService](b, factory)
+			case "transient":
+				runtime.AddTransient[fakes.IStructFakeService](b, factory)
+			}
+			p, err := b.Build()
+			testutil.NoError(t, err)
+			t.Cleanup(func() { _ = p.Close() })
+
+			got := p.GetService(reflect.TypeFor[fakes.IStructFakeService]())
+			testutil.NotNil(t, got)
+			svc, ok := got.(fakes.IStructFakeService)
+			testutil.True(t, ok, "resolved value must satisfy IStructFakeService")
+			testutil.Equal(t, svc.StructTag(), "struct-fake")
+			// struct services box the VALUE type — dynamic type is the struct, not a pointer
+			testutil.Equal(t, reflect.TypeOf(got).String(), "fakes.StructFakeService")
+		})
+	}
+}
+
+// TestSPCT_19_FactoryStructServices verifies a form-B factory returning a struct
+// VALUE (dotnet WorksWithFactoryStructServices). In godi every runtime registration
+// is a form-B factory, so this asserts a factory-produced struct value resolves
+// with its factory-set field intact.
+func TestSPCT_19_FactoryStructServices(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IStructFakeService](b, func(godi.Provider) fakes.IStructFakeService {
+		return fakes.StructFakeService{Tag: "factory-made"}
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	got := p.GetService(reflect.TypeFor[fakes.IStructFakeService]()).(fakes.IStructFakeService)
+	testutil.Equal(t, got.StructTag(), "factory-made")
+}
+
+// TestSPCT_20_StructServiceAsDependency verifies a struct (value-type) service can
+// be injected as a constructor dependency (dotnet WorksWithFactoryStructServicesAs
+// Dependencies).
+func TestSPCT_20_StructServiceAsDependency(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IStructFakeService](b, func(godi.Provider) fakes.IStructFakeService {
+		return fakes.NewStructFakeService()
+	})
+	runtime.AddSingleton[fakes.IStructConsumer](b, func(p godi.Provider) fakes.IStructConsumer {
+		dep := p.GetService(reflect.TypeFor[fakes.IStructFakeService]()).(fakes.IStructFakeService)
+		return fakes.NewStructConsumer(dep)
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	consumer := p.GetService(reflect.TypeFor[fakes.IStructConsumer]()).(fakes.IStructConsumer)
+	testutil.NotNil(t, consumer.Dependency())
+	testutil.Equal(t, consumer.Dependency().StructTag(), "struct-fake")
+}
+
+// TestSPCT_21_StructMultiImplCollection verifies struct elements keep their value
+// identity inside a []any collection resolution (dotnet WorksWithIEnumerableStruct
+// Services). Both elements must be value-typed structs, not pointers, in order.
+func TestSPCT_21_StructMultiImplCollection(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IStructFakeMultipleService](b, func(godi.Provider) fakes.IStructFakeMultipleService {
+		return fakes.NewStructFakeOne()
+	})
+	runtime.AddSingleton[fakes.IStructFakeMultipleService](b, func(godi.Provider) fakes.IStructFakeMultipleService {
+		return fakes.NewStructFakeTwo()
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	services := p.GetKeyedServices(reflect.TypeFor[fakes.IStructFakeMultipleService](), nil)
+	if len(services) != 2 {
+		t.Fatalf("SPCT-21: expected 2 struct services, got %d", len(services))
+	}
+	testutil.Equal(t, services[0].(fakes.IStructFakeMultipleService).MultiTag(), "struct-one")
+	testutil.Equal(t, services[1].(fakes.IStructFakeMultipleService).MultiTag(), "struct-two")
+	testutil.Equal(t, reflect.TypeOf(services[0]).String(), "fakes.StructFakeOne")
+	testutil.Equal(t, reflect.TypeOf(services[1]).String(), "fakes.StructFakeTwo")
+}
+
+// TestSPCT_22_WideScopedTree verifies a wide tree of scoped services (dotnet
+// WorksWithWideScopedTrees): N same-typed scoped registrations all resolve as a
+// collection, every element is a distinct instance, stable WITHIN one scope and
+// fresh in the next (scoped-per-scope materialization, AD-1).
+func TestSPCT_22_WideScopedTree(t *testing.T) {
+	const width = 20
+	b := runtime.NewBuilder()
+	for i := 0; i < width; i++ {
+		slot := i
+		runtime.AddScoped[*spctWideNode](b, func(godi.Provider) *spctWideNode {
+			return &spctWideNode{slot: slot}
+		})
+	}
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	scope := p.CreateScope()
+	t.Cleanup(func() { _ = scope.Close() })
+
+	typ := reflect.TypeFor[*spctWideNode]()
+	services := scope.GetKeyedServices(typ, nil)
+	if len(services) != width {
+		t.Fatalf("SPCT-22: wide scoped tree expected %d services, got %d", width, len(services))
+	}
+	// stable within the scope (scoped cache): a second resolve returns identical pointers
+	again := scope.GetKeyedServices(typ, nil)
+	for i := range services {
+		if services[i] != again[i] {
+			t.Errorf("SPCT-22: scoped element %d not stable across resolves in one scope", i)
+		}
+	}
+	// fresh in a sibling scope: instances differ from the first scope's
+	scope2 := p.CreateScope()
+	t.Cleanup(func() { _ = scope2.Close() })
+	other := scope2.GetKeyedServices(typ, nil)
+	for i := range services {
+		if services[i] == other[i] {
+			t.Errorf("SPCT-22: scoped element %d shared across distinct scopes (must be fresh)", i)
+		}
+	}
+}
+
+// TestSPCT_39_ConstrainedOpenGenericResolves confirms a constrained closed generic
+// (Story 4.2) resolves after build on the real codegen container — godi ALWAYS
+// runs build-time validation (plan.Validate + NewRoot), the dotnet
+// ValidateOnBuild=true analog. Collection-resolvable too.
+func TestSPCT_39_ConstrainedOpenGenericResolves(t *testing.T) {
+	root, err := codegen.NewRoot()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+
+	typ := reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]()
+	got := root.GetService(typ)
+	testutil.NotNil(t, got)
+	services := root.GetKeyedServices(typ, nil)
+	testutil.True(t, len(services) >= 1, "SPCT-39: constrained open generic must be collection-resolvable")
+}
+
+// TestSPCT_42_RootScopedGenericDepStability verifies a scoped service with a
+// generic-typed graph resolved FROM ROOT is root-scoped (singleton-like): repeated
+// resolves return the same instance (dotnet ScopedServiceResolvedFromSingleton
+// AfterCompilation2, adapted to godi's root-scoped semantics, Story 3-2).
+func TestSPCT_42_RootScopedGenericDepStability(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddSingleton[fakes.IFakeService](b, func(godi.Provider) fakes.IFakeService {
+		return fakes.NewFakeService()
+	})
+	runtime.AddScoped[*fakes.FakeOpenGenericService[fakes.IFakeService]](b, func(p godi.Provider) *fakes.FakeOpenGenericService[fakes.IFakeService] {
+		dep := p.GetService(reflect.TypeFor[fakes.IFakeService]()).(fakes.IFakeService)
+		return fakes.NewFakeOpenGenericService[fakes.IFakeService](dep)
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	typ := reflect.TypeFor[*fakes.FakeOpenGenericService[fakes.IFakeService]]()
+	first := p.GetService(typ)
+	testutil.NotNil(t, first)
+	for i := 0; i < 5; i++ {
+		if p.GetService(typ) != first {
+			t.Fatalf("SPCT-42: root-scoped generic instance changed on resolve %d (want same)", i)
+		}
+	}
+}
+
+// TestSPCT_43_RootScopedNestedDepStability verifies a nested scoped-depends-on-
+// scoped graph resolved FROM ROOT: the inner A is root-scoped, and the SAME
+// root-scoped A is injected into Aa (dotnet ScopedServiceResolvedFromSingleton
+// AfterCompilation3, adapted to godi root-scoped semantics).
+func TestSPCT_43_RootScopedNestedDepStability(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddScoped[*spctScopedA](b, func(godi.Provider) *spctScopedA {
+		return newSPCTScopedA()
+	})
+	runtime.AddScoped[*spctScopedAa](b, func(p godi.Provider) *spctScopedAa {
+		a := p.GetService(reflect.TypeFor[*spctScopedA]()).(*spctScopedA)
+		return newSPCTScopedAa(a)
+	})
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	a := p.GetService(reflect.TypeFor[*spctScopedA]()).(*spctScopedA)
+	aa := p.GetService(reflect.TypeFor[*spctScopedAa]()).(*spctScopedAa)
+	if aa.a != a {
+		t.Error("SPCT-43: nested scoped dependency must be the SAME root-scoped instance")
+	}
+	if p.GetService(reflect.TypeFor[*spctScopedAa]()) != aa {
+		t.Error("SPCT-43: root-scoped Aa must be stable across resolves")
+	}
+}
+
+// TestSPCT_03_MissingDependencyRejectedAtBuild verifies godi left-shifts a missing
+// dependency to BUILD time (dotnet AttemptingToResolveNonexistentServiceIndirectly
+// Throws, adapted): the generator REJECTS a graph whose service depends on an
+// unregistered type — no container emitted (plan.Validate, Story 5-1; AD-3).
+func TestSPCT_03_MissingDependencyRejectedAtBuild(t *testing.T) {
+	reg := plan.NewRegistry()
+	reg.Imports = []string{"example.com/svc"}
+	reg.Service(plan.Service{
+		Name:     "Consumer",
+		GoType:   "*svc.Consumer",
+		Ctor:     "svc.NewConsumer",
+		Lifetime: plan.Singleton,
+		Deps:     []string{"Missing"}, // Missing is never registered
+	})
+	src, err := genlib.Generate(reg, "container")
+	testutil.Error(t, err)
+	testutil.Nil(t, src)
+}
+
+// TestSPCT_04_IndirectMissingViaSliceRejectedAtBuild verifies the collection analog
+// (dotnet AttemptingToIEnumerableResolveNonexistentServiceIndirectlyThrows): a
+// service B reachable through a slice dependency []B is itself missing a
+// dependency, so the graph is rejected at build time before any container exists.
+func TestSPCT_04_IndirectMissingViaSliceRejectedAtBuild(t *testing.T) {
+	reg := plan.NewRegistry()
+	reg.Imports = []string{"example.com/svc"}
+	// B is registered but depends on an UNregistered Missing.
+	reg.Service(plan.Service{
+		Name:     "B",
+		GoType:   "*svc.B",
+		Ctor:     "svc.NewB",
+		Lifetime: plan.Singleton,
+		Deps:     []string{"Missing"},
+	})
+	// A depends on the collection []*svc.B; resolving it constructs B, which needs Missing.
+	reg.Service(plan.Service{
+		Name:     "A",
+		GoType:   "*svc.A",
+		Ctor:     "svc.NewA",
+		Lifetime: plan.Singleton,
+		Deps:     []string{"[]*svc.B"},
+	})
+	src, err := genlib.Generate(reg, "container")
+	testutil.Error(t, err)
+	testutil.Nil(t, src)
 }

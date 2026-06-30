@@ -14,7 +14,6 @@
 // Captive dependency is a KNOWN DESIGN DIFFERENCE: codegen hard-rejects via
 // plan.Validate; runtime Build() may succeed because root acts as root-scope
 // (scoped-from-root semantics, Story 3-2). Tests explicitly annotate this.
-//
 package conformance
 
 import (

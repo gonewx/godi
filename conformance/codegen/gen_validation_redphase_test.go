@@ -5,7 +5,6 @@
 //
 // Path γ = AD-15 保真敏感能力升格为严格跑。校验门禁的 codegen 路径不仅
 // 做差分等价，还直接在预生成路径断言 Generate 的拒绝行为。
-//
 package codegen_test
 
 import (

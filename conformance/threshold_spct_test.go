@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 6.1 (AC1) — SPCT threshold gate assertion:
+// ATDD scaffold for Story 6.1 (AC1) — SPCT threshold gate assertion:
 // ServiceProviderContainerTests 44 [Fact]/[Theory] + 5 [ConditionalFact] = 49
 // dotnet methods × godi coverage mapping.
 //
@@ -10,8 +8,6 @@
 //	adapted  — rewritten for Go差異 but covers same semantic intent
 //	na       — Go mechanism wall / deferred scope (with mandatory justification)
 //	Formula: covered + adapted + na = 49 (no MISSING gap)
-//
-// Activation: delete the //go:build line and blank line to join the default build.
 package conformance
 
 import "testing"
@@ -28,7 +24,7 @@ type spctMethodMapping struct {
 var dotnetSPCTMethodMap = []spctMethodMapping{
 	// ── Group 1: ctor error propagation (SPCT-01 to SPCT-04) ──────────────
 	{ID: "SPCT-01", DotnetMethod: "RethrowOriginalExceptionFromConstructor", DotnetType: "Fact", GodiTest: "spec_container: SPCT-01 ctor error propagation", Status: adapted, Note: "Go ctor returns error (not throw); Build/resolve propagates"},
-	{ID: "SPCT-02", DotnetMethod: "DependencyWithPrivateConstructorIsIdentifiedAsPartOfException", DotnetType: "Fact", GodiTest: "spec_container: SPCT-02 missing New{Impl} detected at gen", Status: adapted, Note: "Go has no private ctor; godi form-A New{Impl} not found → gen error"},
+	{ID: "SPCT-02", DotnetMethod: "DependencyWithPrivateConstructorIsIdentifiedAsPartOfException", DotnetType: "Fact", GodiTest: "cmd/godi-gen: TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint (Story 2.1 gen-time gate)", Status: adapted, Note: "Go has no private ctor; godi form-A New{Impl} not found → gen error + form-B hint (already covered by the Story 2.1 generator gate)"},
 	{ID: "SPCT-03", DotnetMethod: "AttemptingToResolveNonexistentServiceIndirectlyThrows", DotnetType: "Fact", GodiTest: "spec_container: SPCT-03 missing dependency detected by plan.Validate", Status: adapted, Note: "godi plan.Validate left-shifts missing dep detection (Story 5-1)"},
 	{ID: "SPCT-04", DotnetMethod: "AttemptingToIEnumerableResolveNonexistentServiceIndirectlyThrows", DotnetType: "Fact", GodiTest: "spec_container: SPCT-04 slice dep missing detected by plan.Validate", Status: adapted, Note: "same as SPCT-03 for collection dependency"},
 
@@ -71,7 +67,7 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	{ID: "SPCT-22", DotnetMethod: "WorksWithWideScopedTrees", DotnetType: "Fact", GodiTest: "spec_container: SPCT-22 wide scoped tree (20 services)", Status: covered},
 
 	// ── Group 12: generic IEnumerable cache slot (SPCT-23) ────────────────
-	{ID: "SPCT-23", DotnetMethod: "GenericIEnumerableItemCachedInTheRightSlot", DotnetType: "Fact", GodiTest: "spec_container: SPCT-23 singleton GetService == GetServices single (cache slot)", Status: covered},
+	{ID: "SPCT-23", DotnetMethod: "GenericIEnumerableItemCachedInTheRightSlot", DotnetType: "Fact", GodiTest: "spec_container: TestSPCT_23_GenericSingletonCacheSlot", Status: covered, Note: "runtime-only: needs a SINGLETON closed generic (default container registers it transient); singleton-shared axis differentially verified by spec_test.go"},
 
 	// ── Group 13: async disposal on provider/scope (SPCT-24 to SPCT-35, N/A → Story 6-3) ──
 	{ID: "SPCT-24", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
@@ -155,10 +151,10 @@ func TestSPCT_ThresholdGate_49Methods(t *testing.T) {
 
 func TestSPCT_NACategorySummary(t *testing.T) {
 	categories := map[string]int{
-		"IAsyncDisposable → Story 6-3":        0,
-		"NFR8 concurrency":                    0,
-		"Go compile-time type safety":         0,
-		"Go no optional ctor params":          0,
+		"IAsyncDisposable → Story 6-3": 0,
+		"NFR8 concurrency":             0,
+		"Go compile-time type safety":  0,
+		"Go no optional ctor params":   0,
 	}
 
 	for _, m := range dotnetSPCTMethodMap {

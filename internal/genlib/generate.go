@@ -87,11 +87,11 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
 		emitKeyedTransientMethods(&buf, keyedTransients, "r", "*Root", reg, disposables)
 		emitTypedAccessors(&buf, singletons, scoped, "r", "*Root")
-		emitGetServiceLifetimes(&buf, singletons, scoped, transients)
+		emitGetServiceLifetimes(&buf, singletons, scoped, transients, disposables)
 		emitIsServiceLifetimes(&buf, services)
 	} else {
 		emitTypedAccessors(&buf, singletons, nil, "r", "*Root")
-		emitGetServiceSingletonsOnly(&buf, singletons)
+		emitGetServiceSingletonsOnly(&buf, singletons, disposables)
 		emitIsServiceSingletonsOnly(&buf, singletons)
 	}
 
@@ -99,8 +99,8 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	// EVERY container must implement it — including unkeyed ones, where the switch
 	// body is empty and only the nil/AnyKey/false lines remain. Emit unconditionally.
 	emitIsKeyedService(&buf, keyedSingletons, keyedScoped, keyedTransients)
-	emitGetKeyedServiceFull(&buf, reg, keyedSingletons, keyedScoped, keyedTransients)
-	emitGetKeyedServicesRootFull(&buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients)
+	emitGetKeyedServiceFull(&buf, reg, keyedSingletons, keyedScoped, keyedTransients, disposables)
+	emitGetKeyedServicesRootFull(&buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients, disposables)
 	emitCreateScope(&buf, scopedWiring, reg, hasLifetimes, disposables, reg.KeyedScopedTopo())
 	emitClose(&buf, disposables)
 	emitScope(&buf, singletons, scoped, transients, reg, hasLifetimes, disposables, keyedSingletons, keyedScoped, keyedTransients)
@@ -438,9 +438,10 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 // emitGetServiceLifetimes writes GetService that dispatches by lifetime (D-5).
 // Same-GoType multi-registrations are deduped to one case returning the
 // last-registered service (last-wins, D-3).
-func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients []plan.Service) {
+func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "// GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.\n")
 	fmt.Fprintf(buf, "func (r *Root) GetService(t reflect.Type) any {\n")
+	emitClosedGuard(buf, "r", disposables)
 	all := concatServices(singletons, scoped, transients)
 	if len(all) > 0 {
 		seen := make(map[string]struct{})
@@ -487,9 +488,10 @@ func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients [
 }
 
 // emitGetServiceSingletonsOnly preserves the legacy singleton-only emit shape.
-func emitGetServiceSingletonsOnly(buf *bytes.Buffer, singletons []plan.Service) {
+func emitGetServiceSingletonsOnly(buf *bytes.Buffer, singletons []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "// GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.\n")
 	fmt.Fprintf(buf, "func (r *Root) GetService(t reflect.Type) any {\n")
+	emitClosedGuard(buf, "r", disposables)
 	if len(singletons) > 0 {
 		seen := make(map[string]struct{})
 		fmt.Fprintf(buf, "\tswitch t {\n")
@@ -664,6 +666,7 @@ func collectionItemExpr(s plan.Service, recv string) string {
 
 func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables bool, keyedScopedWiring []plan.Service) {
 	fmt.Fprintf(buf, "func (r *Root) CreateScope() godi.Scope {\n")
+	emitClosedGuard(buf, "r", disposables)
 	if !hasLifetimes {
 		fmt.Fprintf(buf, "\treturn &scope{root: r}\n")
 	} else {
@@ -755,6 +758,28 @@ func sliceDepExprScope(dep, recv string, reg *plan.Registry) string {
 	return dep + "{" + strings.Join(parts, ", ") + "}"
 }
 
+// emitClosedGuard writes the resolve-after-dispose guard at the top of a
+// resolution or scope-creation method. It is emitted ONLY when the container
+// tracks disposables — the `closed` field (and Close state machine) exists only
+// then, and a container with nothing to release has no dispose state to guard, so
+// the single-service golden stays guard-free. For root recv "r" the guard is
+// `if r.closed`; for a scope a closed ROOT also invalidates the live scope, so the
+// guard is `if s.closed || s.root.closed` (SPCT-12..15). Both providers panic with
+// godi.ProviderClosedError() so resolve-after-dispose is identical across the
+// runtime oracle and generated code (AD-16).
+func emitClosedGuard(buf *bytes.Buffer, recv string, disposables bool) {
+	if !disposables {
+		return
+	}
+	if recv == "s" {
+		fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
+	} else {
+		fmt.Fprintf(buf, "\tif %s.closed {\n", recv)
+	}
+	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
+	fmt.Fprintf(buf, "\t}\n")
+}
+
 func emitClose(buf *bytes.Buffer, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) Close() error {\n")
 	if disposables {
@@ -777,11 +802,11 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	}
 	emitScopeStruct(buf, scoped, disposables, keyedScoped)
 	emitScopeAssertion(buf)
-	emitScopeGetService(buf, singletons, scoped, transients)
+	emitScopeGetService(buf, singletons, scoped, transients, disposables)
 	emitScopeIsService(buf, singletons, scoped, transients)
 	emitScopeIsKeyedService(buf)
-	emitScopeGetKeyedServiceFull(buf, reg, keyedSingletons, keyedScoped, keyedTransients)
-	emitScopeGetKeyedServicesFull(buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients)
+	emitScopeGetKeyedServiceFull(buf, reg, keyedSingletons, keyedScoped, keyedTransients, disposables)
+	emitScopeGetKeyedServicesFull(buf, reg, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients, disposables)
 	emitScopeCreateScope(buf, reg.ScopedTopo(), reg, disposables, reg.KeyedScopedTopo())
 	emitScopeClose(buf, disposables)
 	emitTransientMethods(buf, transients, "s", "*scope", reg, disposables)
@@ -827,8 +852,9 @@ func emitScopeAssertion(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "var _ godi.Scope = (*scope)(nil)\n\n")
 }
 
-func emitScopeGetService(buf *bytes.Buffer, singletons, scoped, transients []plan.Service) {
+func emitScopeGetService(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (s *scope) GetService(t reflect.Type) any {\n")
+	emitClosedGuard(buf, "s", disposables)
 	all := concatServices(singletons, scoped, transients)
 	if len(all) > 0 {
 		seen := make(map[string]struct{})
@@ -894,8 +920,9 @@ func emitScopeIsService(buf *bytes.Buffer, singletons, scoped, transients []plan
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScopeGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service) {
+func emitScopeGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedService(t reflect.Type, key any) any {\n")
+	emitClosedGuard(buf, "s", disposables)
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn s.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
@@ -925,11 +952,12 @@ func emitScopeGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSi
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients []plan.Service) {
+func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	allKeyed := concatServices(keyedSingletons, keyedScoped, keyedTransients)
 	unkeyedAll := concatServices(singletons, scoped, transients)
 
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {\n")
+	emitClosedGuard(buf, "s", disposables)
 
 	if len(allKeyed) == 0 {
 		fmt.Fprintf(buf, "\tif key != nil {\n")
@@ -996,6 +1024,7 @@ func emitScopeGetKeyedServicesFull(buf *bytes.Buffer, reg *plan.Registry, single
 
 func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.Registry, disposables bool, keyedScopedWiring []plan.Service) {
 	fmt.Fprintf(buf, "func (s *scope) CreateScope() godi.Scope {\n")
+	emitClosedGuard(buf, "s", disposables)
 	fmt.Fprintf(buf, "\tns := &scope{root: s.root}\n")
 	if disposables {
 		fmt.Fprintf(buf, "\tns.disp = runtime.NewDisposer()\n")
@@ -1181,8 +1210,9 @@ func emitKeyedTransientMethods(buf *bytes.Buffer, transients []plan.Service, rec
 	}
 }
 
-func emitGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service) {
+func emitGetKeyedServiceFull(buf *bytes.Buffer, reg *plan.Registry, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	fmt.Fprintf(buf, "func (r *Root) GetKeyedService(t reflect.Type, key any) any {\n")
+	emitClosedGuard(buf, "r", disposables)
 	fmt.Fprintf(buf, "\tif key == nil {\n")
 	fmt.Fprintf(buf, "\t\treturn r.GetService(t)\n")
 	fmt.Fprintf(buf, "\t}\n")
@@ -1230,11 +1260,12 @@ func emitKeyedServiceReturn(buf *bytes.Buffer, s plan.Service, recv string) {
 	}
 }
 
-func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients []plan.Service) {
+func emitGetKeyedServicesRootFull(buf *bytes.Buffer, reg *plan.Registry, singletons, scoped, transients, keyedSingletons, keyedScoped, keyedTransients []plan.Service, disposables bool) {
 	allKeyed := concatServices(keyedSingletons, keyedScoped, keyedTransients)
 	unkeyedAll := concatServices(singletons, scoped, transients)
 
 	fmt.Fprintf(buf, "func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {\n")
+	emitClosedGuard(buf, "r", disposables)
 
 	if len(allKeyed) == 0 {
 		fmt.Fprintf(buf, "\tif key != nil {\n")
