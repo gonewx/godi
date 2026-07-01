@@ -572,139 +572,156 @@ func (s *scope) CloseAsync(ctx context.Context) error {
 	return s.closeErr
 }
 
+// Lifetime identifies the caching strategy for a service registration.
+type Lifetime int
+
+const (
+	Singleton Lifetime = iota
+	Scoped
+	Transient
+)
+
+// serviceDescriptor records one registration in the Builder's ordered list.
+type serviceDescriptor struct {
+	serviceType reflect.Type
+	lifetime    Lifetime
+	key         any // nil for unkeyed
+	factory     func(godi.Provider) any
+}
+
 // Builder accumulates form-B closure registrations for all three lifetimes
 // and materializes them into a runtime provider.
 type Builder struct {
-	singletonFactories map[reflect.Type][]func(godi.Provider) any
-	scopedFactories    map[reflect.Type][]func(godi.Provider) any
-	transientFactories map[reflect.Type][]func(godi.Provider) any
-
-	keyedSingletonFactories map[keyedEntry][]func(godi.Provider) any
-	keyedScopedFactories    map[keyedEntry][]func(godi.Provider) any
-	keyedTransientFactories map[keyedEntry][]func(godi.Provider) any
-
-	// keyedOrder records concrete-keyed registrations in call order (D-4).
-	keyedOrder []keyedReg
+	descriptors []serviceDescriptor
+	readOnly    bool
 }
 
 func NewBuilder() *Builder {
-	return &Builder{
-		singletonFactories:      make(map[reflect.Type][]func(godi.Provider) any),
-		scopedFactories:         make(map[reflect.Type][]func(godi.Provider) any),
-		transientFactories:      make(map[reflect.Type][]func(godi.Provider) any),
-		keyedSingletonFactories: make(map[keyedEntry][]func(godi.Provider) any),
-		keyedScopedFactories:    make(map[keyedEntry][]func(godi.Provider) any),
-		keyedTransientFactories: make(map[keyedEntry][]func(godi.Provider) any),
+	return &Builder{}
+}
+
+func (b *Builder) readOnlyGuard() {
+	if b.readOnly {
+		panic(fmt.Errorf("godi: service collection is read-only"))
 	}
 }
 
+// IsReadOnly reports whether the builder has been frozen.
+func (b *Builder) IsReadOnly() bool { return b.readOnly }
+
+func (b *Builder) addDescriptor(d serviceDescriptor) {
+	b.readOnlyGuard()
+	b.descriptors = append(b.descriptors, d)
+}
+
 func AddSingleton[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	t := reflect.TypeFor[T]()
-	b.singletonFactories[t] = append(b.singletonFactories[t], func(p godi.Provider) any {
-		return factory(p)
+	b.addDescriptor(serviceDescriptor{
+		serviceType: reflect.TypeFor[T](),
+		lifetime:    Singleton,
+		factory:     func(p godi.Provider) any { return factory(p) },
 	})
 	return b
 }
 
 func AddScoped[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	t := reflect.TypeFor[T]()
-	b.scopedFactories[t] = append(b.scopedFactories[t], func(p godi.Provider) any {
-		return factory(p)
+	b.addDescriptor(serviceDescriptor{
+		serviceType: reflect.TypeFor[T](),
+		lifetime:    Scoped,
+		factory:     func(p godi.Provider) any { return factory(p) },
 	})
 	return b
 }
 
 func AddTransient[T any](b *Builder, factory func(godi.Provider) T) *Builder {
-	t := reflect.TypeFor[T]()
-	b.transientFactories[t] = append(b.transientFactories[t], func(p godi.Provider) any {
-		return factory(p)
+	b.addDescriptor(serviceDescriptor{
+		serviceType: reflect.TypeFor[T](),
+		lifetime:    Transient,
+		factory:     func(p godi.Provider) any { return factory(p) },
 	})
 	return b
 }
 
 func AddKeyedSingleton[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
 	t := reflect.TypeFor[T]()
-	wrapped := func(p godi.Provider) any { return factory(p) }
-	// Check order: AnyKey (reject) → nil (route to unkeyed) → concrete key.
 	if key == godi.AnyKey {
 		panic(godi.AnyKeyRegistrationError(t))
 	}
-	if key == nil {
-		// null key == unkeyed (AD-17): route to the unkeyed namespace, NOT the
-		// keyed index, symmetric to nil resolution (AC1 registration side).
-		b.singletonFactories[t] = append(b.singletonFactories[t], wrapped)
-		return b
-	}
-	ke := keyedEntry{t: t, key: key}
-	slot := len(b.keyedSingletonFactories[ke])
-	b.keyedSingletonFactories[ke] = append(b.keyedSingletonFactories[ke], wrapped)
-	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedSingleton, slot: slot})
+	b.addDescriptor(serviceDescriptor{
+		serviceType: t,
+		lifetime:    Singleton,
+		key:         key,
+		factory:     func(p godi.Provider) any { return factory(p) },
+	})
 	return b
 }
 
 func AddKeyedScoped[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
 	t := reflect.TypeFor[T]()
-	wrapped := func(p godi.Provider) any { return factory(p) }
 	if key == godi.AnyKey {
 		panic(godi.AnyKeyRegistrationError(t))
 	}
-	if key == nil {
-		b.scopedFactories[t] = append(b.scopedFactories[t], wrapped)
-		return b
-	}
-	ke := keyedEntry{t: t, key: key}
-	slot := len(b.keyedScopedFactories[ke])
-	b.keyedScopedFactories[ke] = append(b.keyedScopedFactories[ke], wrapped)
-	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedScoped, slot: slot})
+	b.addDescriptor(serviceDescriptor{
+		serviceType: t,
+		lifetime:    Scoped,
+		key:         key,
+		factory:     func(p godi.Provider) any { return factory(p) },
+	})
 	return b
 }
 
 func AddKeyedTransient[T any](b *Builder, key any, factory func(godi.Provider) T) *Builder {
 	t := reflect.TypeFor[T]()
-	wrapped := func(p godi.Provider) any { return factory(p) }
 	if key == godi.AnyKey {
 		panic(godi.AnyKeyRegistrationError(t))
 	}
-	if key == nil {
-		b.transientFactories[t] = append(b.transientFactories[t], wrapped)
-		return b
-	}
-	ke := keyedEntry{t: t, key: key}
-	slot := len(b.keyedTransientFactories[ke])
-	b.keyedTransientFactories[ke] = append(b.keyedTransientFactories[ke], wrapped)
-	b.keyedOrder = append(b.keyedOrder, keyedReg{ke: ke, lifetime: keyedTransient, slot: slot})
+	b.addDescriptor(serviceDescriptor{
+		serviceType: t,
+		lifetime:    Transient,
+		key:         key,
+		factory:     func(p godi.Provider) any { return factory(p) },
+	})
 	return b
 }
 
-func copyFactoryMap(m map[reflect.Type][]func(godi.Provider) any) map[reflect.Type][]func(godi.Provider) any {
-	out := make(map[reflect.Type][]func(godi.Provider) any, len(m))
-	for t, fns := range m {
-		cp := make([]func(godi.Provider) any, len(fns))
-		copy(cp, fns)
-		out[t] = cp
-	}
-	return out
-}
-
-func copyKeyedFactoryMap(m map[keyedEntry][]func(godi.Provider) any) map[keyedEntry][]func(godi.Provider) any {
-	out := make(map[keyedEntry][]func(godi.Provider) any, len(m))
-	for ke, fns := range m {
-		cp := make([]func(godi.Provider) any, len(fns))
-		copy(cp, fns)
-		out[ke] = cp
-	}
-	return out
-}
-
 func (b *Builder) Build() (provider godi.Provider, err error) {
-	sf := copyFactoryMap(b.singletonFactories)
-	scf := copyFactoryMap(b.scopedFactories)
-	tf := copyFactoryMap(b.transientFactories)
-	ksf := copyKeyedFactoryMap(b.keyedSingletonFactories)
-	kscf := copyKeyedFactoryMap(b.keyedScopedFactories)
-	ktf := copyKeyedFactoryMap(b.keyedTransientFactories)
-	ko := make([]keyedReg, len(b.keyedOrder))
-	copy(ko, b.keyedOrder)
+	b.readOnly = true
+
+	sf := make(map[reflect.Type][]func(godi.Provider) any)
+	scf := make(map[reflect.Type][]func(godi.Provider) any)
+	tf := make(map[reflect.Type][]func(godi.Provider) any)
+	ksf := make(map[keyedEntry][]func(godi.Provider) any)
+	kscf := make(map[keyedEntry][]func(godi.Provider) any)
+	ktf := make(map[keyedEntry][]func(godi.Provider) any)
+	var ko []keyedReg
+
+	for _, d := range b.descriptors {
+		if d.key == nil {
+			switch d.lifetime {
+			case Singleton:
+				sf[d.serviceType] = append(sf[d.serviceType], d.factory)
+			case Scoped:
+				scf[d.serviceType] = append(scf[d.serviceType], d.factory)
+			case Transient:
+				tf[d.serviceType] = append(tf[d.serviceType], d.factory)
+			}
+		} else {
+			ke := keyedEntry{t: d.serviceType, key: d.key}
+			switch d.lifetime {
+			case Singleton:
+				slot := len(ksf[ke])
+				ksf[ke] = append(ksf[ke], d.factory)
+				ko = append(ko, keyedReg{ke: ke, lifetime: keyedSingleton, slot: slot})
+			case Scoped:
+				slot := len(kscf[ke])
+				kscf[ke] = append(kscf[ke], d.factory)
+				ko = append(ko, keyedReg{ke: ke, lifetime: keyedScoped, slot: slot})
+			case Transient:
+				slot := len(ktf[ke])
+				ktf[ke] = append(ktf[ke], d.factory)
+				ko = append(ko, keyedReg{ke: ke, lifetime: keyedTransient, slot: slot})
+			}
+		}
+	}
 
 	r := &root{
 		singletonFactories:      sf,

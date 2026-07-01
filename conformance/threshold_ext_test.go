@@ -197,10 +197,10 @@ func TestExt_ThresholdGate_55Methods(t *testing.T) {
 
 func TestExt_NACategorySummary(t *testing.T) {
 	categories := map[string]int{
-		"ISupportRequiredService":     0,
-		"IServiceScopeFactory":        0,
-		"ServiceDescriptor.ToString":  0,
-		"C# type-erasure object":      0,
+		"ISupportRequiredService":    0,
+		"IServiceScopeFactory":       0,
+		"ServiceDescriptor.ToString": 0,
+		"C# type-erasure object":     0,
 	}
 
 	for _, m := range dotnetExtMethodMap {

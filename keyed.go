@@ -48,3 +48,33 @@ func GetRequiredKeyed[T any](p Provider, key any) T {
 	}
 	return t
 }
+
+// GetKeyed resolves the keyed service of type T from p, returning (value, true)
+// on a hit and (zero, false) on a miss — the non-required keyed counterpart of
+// GetRequiredKeyed, symmetric to Get[T] (D-2 naming convention).
+func GetKeyed[T any](p Provider, key any) (T, bool) {
+	v := p.GetKeyedService(reflect.TypeFor[T](), key)
+	if v == nil {
+		var zero T
+		return zero, false
+	}
+	t, ok := v.(T)
+	return t, ok
+}
+
+// GetKeyedServices resolves every keyed service registered for (T, key) and
+// returns them as a typed slice in registration order. An unregistered
+// (type, key) pair returns an empty non-nil slice (never nil), mirroring dotnet
+// GetKeyedServices<T>(key). Underneath it calls p.GetKeyedServices(t, key) and
+// asserts each element to T.
+func GetKeyedServices[T any](p Provider, key any) []T {
+	all := p.GetKeyedServices(reflect.TypeFor[T](), key)
+	if all == nil {
+		return []T{}
+	}
+	out := make([]T, len(all))
+	for i, v := range all {
+		out[i] = v.(T)
+	}
+	return out
+}

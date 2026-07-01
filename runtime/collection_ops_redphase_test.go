@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 6.4 (AC2/AC3/AC4) — runtime package:
 // collection operations on Builder (TryAdd, TryAddEnumerable, Replace,
 // RemoveAll, instance registration, MakeReadOnly).

@@ -46,3 +46,20 @@ func GetRequired[T any](p Provider) T {
 	}
 	panic(fmt.Errorf("godi: no service registered for type %s", reflect.TypeFor[T]()))
 }
+
+// GetServices resolves every service registered for type T and returns them as a
+// typed slice in registration order. An unregistered type returns an empty
+// non-nil slice (never nil), mirroring dotnet GetServices<T>(). Underneath it
+// calls p.GetKeyedServices(t, nil) — nil key routes to the unkeyed namespace
+// (AD-17) — and asserts each element to T.
+func GetServices[T any](p Provider) []T {
+	all := p.GetKeyedServices(reflect.TypeFor[T](), nil)
+	if all == nil {
+		return []T{}
+	}
+	out := make([]T, len(all))
+	for i, v := range all {
+		out[i] = v.(T)
+	}
+	return out
+}

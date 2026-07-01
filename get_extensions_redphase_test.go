@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 6.4 (AC1) — godi package: typed resolution
 // extension functions GetServices[T], GetKeyedServices[T], GetKeyed[T].
 //
@@ -15,13 +13,14 @@
 //
 // Activation: delete the //go:build line and blank line to join the default
 // build. See _bmad-output/test-artifacts/atdd-checklist-6-4-extensions-collection-ops.md.
-package godi
+package godi_test
 
 import (
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/gonewx/godi"
 	"github.com/gonewx/godi/internal/testutil"
 	"github.com/gonewx/godi/runtime"
 )
@@ -39,44 +38,44 @@ func (*extSvcB) isExtSvc() {}
 
 func TestGetServices_ReturnsAllRegistered(t *testing.T) {
 	b := runtime.NewBuilder()
-	runtime.AddSingleton[iExtSvc](b, func(Provider) iExtSvc { return &extSvcA{} })
-	runtime.AddSingleton[iExtSvc](b, func(Provider) iExtSvc { return &extSvcB{} })
+	runtime.AddSingleton[iExtSvc](b, func(godi.Provider) iExtSvc { return &extSvcA{} })
+	runtime.AddSingleton[iExtSvc](b, func(godi.Provider) iExtSvc { return &extSvcB{} })
 	p, err := b.Build()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetServices[iExtSvc](p)
+	result := godi.GetServices[iExtSvc](p)
 	testutil.Equal(t, len(result), 2)
-	testutil.Equal(t, reflect.TypeOf(result[0]).String(), "*godi.extSvcA")
-	testutil.Equal(t, reflect.TypeOf(result[1]).String(), "*godi.extSvcB")
+	testutil.Equal(t, reflect.TypeOf(result[0]).String(), "*godi_test.extSvcA")
+	testutil.Equal(t, reflect.TypeOf(result[1]).String(), "*godi_test.extSvcB")
 }
 
 func TestGetServices_ReturnsSingleService(t *testing.T) {
 	b := runtime.NewBuilder()
-	runtime.AddSingleton[iExtSvc](b, func(Provider) iExtSvc { return &extSvcA{} })
+	runtime.AddSingleton[iExtSvc](b, func(godi.Provider) iExtSvc { return &extSvcA{} })
 	p, err := b.Build()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetServices[iExtSvc](p)
+	result := godi.GetServices[iExtSvc](p)
 	testutil.Equal(t, len(result), 1)
 }
 
 func TestGetServices_ReturnsCorrectDynamicTypes(t *testing.T) {
 	b := runtime.NewBuilder()
-	runtime.AddSingleton[iExtSvc](b, func(Provider) iExtSvc { return &extSvcA{} })
-	runtime.AddSingleton[iExtSvc](b, func(Provider) iExtSvc { return &extSvcB{} })
+	runtime.AddSingleton[iExtSvc](b, func(godi.Provider) iExtSvc { return &extSvcA{} })
+	runtime.AddSingleton[iExtSvc](b, func(godi.Provider) iExtSvc { return &extSvcB{} })
 	p, err := b.Build()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetServices[iExtSvc](p)
+	result := godi.GetServices[iExtSvc](p)
 	types := make([]string, len(result))
 	for i, s := range result {
 		types[i] = reflect.TypeOf(s).String()
 	}
-	testutil.True(t, types[0] == "*godi.extSvcA", "first element dynamic type")
-	testutil.True(t, types[1] == "*godi.extSvcB", "second element dynamic type")
+	testutil.True(t, types[0] == "*godi_test.extSvcA", "first element dynamic type")
+	testutil.True(t, types[1] == "*godi_test.extSvcB", "second element dynamic type")
 }
 
 func TestGetServices_ReturnsEmptyNonNilSlice_WhenUnregistered(t *testing.T) {
@@ -85,7 +84,7 @@ func TestGetServices_ReturnsEmptyNonNilSlice_WhenUnregistered(t *testing.T) {
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetServices[iExtSvc](p)
+	result := godi.GetServices[iExtSvc](p)
 	testutil.True(t, result != nil, "GetServices must return non-nil slice for unregistered type")
 	testutil.Equal(t, len(result), 0)
 }
@@ -96,7 +95,7 @@ func TestGetServices_FreshBuild_ReturnsEmptySlice(t *testing.T) {
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetServices[iExtSvc](p)
+	result := godi.GetServices[iExtSvc](p)
 	testutil.True(t, result != nil, "GetServices from fresh Build must return non-nil empty slice")
 	testutil.Equal(t, len(result), 0)
 }
@@ -105,14 +104,14 @@ func TestGetServices_FreshBuild_ReturnsEmptySlice(t *testing.T) {
 
 func TestGetKeyed_ReturnsService_WhenRegistered(t *testing.T) {
 	b := runtime.NewBuilder()
-	runtime.AddKeyedSingleton[iExtSvc](b, "alpha", func(Provider) iExtSvc { return &extSvcA{} })
+	runtime.AddKeyedSingleton[iExtSvc](b, "alpha", func(godi.Provider) iExtSvc { return &extSvcA{} })
 	p, err := b.Build()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	v, ok := GetKeyed[iExtSvc](p, "alpha")
+	v, ok := godi.GetKeyed[iExtSvc](p, "alpha")
 	testutil.True(t, ok, "GetKeyed should return true for registered keyed service")
-	testutil.Equal(t, reflect.TypeOf(v).String(), "*godi.extSvcA")
+	testutil.Equal(t, reflect.TypeOf(v).String(), "*godi_test.extSvcA")
 }
 
 func TestGetKeyed_ReturnsFalse_WhenMissing(t *testing.T) {
@@ -121,7 +120,7 @@ func TestGetKeyed_ReturnsFalse_WhenMissing(t *testing.T) {
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	_, ok := GetKeyed[iExtSvc](p, "nonexistent")
+	_, ok := godi.GetKeyed[iExtSvc](p, "nonexistent")
 	testutil.True(t, !ok, "GetKeyed should return false for unregistered keyed service")
 }
 
@@ -129,13 +128,13 @@ func TestGetKeyed_ReturnsFalse_WhenMissing(t *testing.T) {
 
 func TestGetKeyedServices_ReturnsAllKeyed(t *testing.T) {
 	b := runtime.NewBuilder()
-	runtime.AddKeyedSingleton[iExtSvc](b, "k", func(Provider) iExtSvc { return &extSvcA{} })
-	runtime.AddKeyedSingleton[iExtSvc](b, "k", func(Provider) iExtSvc { return &extSvcB{} })
+	runtime.AddKeyedSingleton[iExtSvc](b, "k", func(godi.Provider) iExtSvc { return &extSvcA{} })
+	runtime.AddKeyedSingleton[iExtSvc](b, "k", func(godi.Provider) iExtSvc { return &extSvcB{} })
 	p, err := b.Build()
 	testutil.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	result := GetKeyedServices[iExtSvc](p, "k")
+	result := godi.GetKeyedServices[iExtSvc](p, "k")
 	testutil.Equal(t, len(result), 2)
 }
 
@@ -148,7 +147,7 @@ func TestGetRequired_PanicsWithTypeName_WhenMissing(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	recovered := testutil.Panics(t, func() {
-		GetRequired[iExtSvc](p)
+		godi.GetRequired[iExtSvc](p)
 	})
 	if e, ok := recovered.(error); ok {
 		testutil.True(t, strings.Contains(e.Error(), "iExtSvc"),

@@ -1,5 +1,3 @@
-//go:build atdd_redphase
-
 // ATDD red-phase scaffold for Story 6.4 (AC1/AC3/AC6) — conformance suite:
 // dual-provider resolution extensions + cross-provider differential equivalence
 // for collection operations "final set equivalence" (AD-15 义务轴, D-8).
@@ -34,6 +32,10 @@ import (
 )
 
 // ══ AC1: Resolution extension SpecCases (dual provider, 表 1) ══════════════
+
+// iUnregisteredExt is a conformance-local type NOT registered in either
+// provider, used by GetRequired-panic and GetServices-empty tests.
+type iUnregisteredExt interface{ unregisteredExtMarker() }
 
 // extRtFactory builds a runtime provider with multi-impl registrations for
 // testing GetServices[T] and related resolution extensions.
@@ -82,7 +84,7 @@ var extSpecCases = []SpecCase{
 		Name: "GetRequired panics with type name when no service registered",
 		Run: func(t *testing.T, p Provider) {
 			recovered := testutil.Panics(t, func() {
-				godi.GetRequired[fakes.IFakeConsumer](p)
+				godi.GetRequired[iUnregisteredExt](p)
 			})
 			if e, ok := recovered.(error); ok {
 				testutil.True(t, e != nil, "GetRequired panic must be an error")
@@ -119,7 +121,7 @@ var extSpecCases = []SpecCase{
 	{
 		Name: "GetServices[T] returns empty non-nil slice for unregistered type",
 		Run: func(t *testing.T, p Provider) {
-			result := godi.GetServices[fakes.IFakeOuterService](p)
+			result := godi.GetServices[iUnregisteredExt](p)
 			testutil.True(t, result != nil, "GetServices must return non-nil empty slice")
 			testutil.Equal(t, len(result), 0)
 		},
