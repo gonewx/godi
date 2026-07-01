@@ -190,6 +190,31 @@ func register() {
 	// FakeSyncAsyncDisposable is both (prefer-async under CloseAsync, AC2).
 	godi.AddTransient[*fakes.FakeAsyncOnlyDisposable, fakes.FakeAsyncOnlyDisposable](&r)
 	godi.AddTransient[*fakes.FakeSyncAsyncDisposable, fakes.FakeSyncAsyncDisposable](&r)
+
+	// Story 6.4 code review (2026-07-01, AD-15/D-8 "final set equivalence"): the
+	// codegen leg for TestFinalSetEquivalence_Replace_DynType declares DIRECTLY
+	// the same final set the runtime leg reaches via mutation (Add(One) +
+	// Add(Two) + Replace(One) removes the first ServiceType match and appends
+	// the new one -> final = [Two, One-new]). Registered in that exact order so
+	// GetKeyedServices(t, nil) returns the same [Two, One] dynamic-type sequence
+	// on both providers. Dedicated fakes (fakes_extensions_finalset.go) so this
+	// cannot perturb the existing IFakeMultipleService count/order assertions.
+	// IFakeRemovedService (the RemoveAll_IsService scenario) is deliberately
+	// NOT registered here — codegen's generated IsService for it is naturally
+	// false, matching the runtime leg's post-RemoveAll state without needing an
+	// explicit "absence" declaration.
+	godi.AddSingleton[fakes.IFakeReplaceFinalService, fakes.FakeReplaceFinalTwo](&r)
+	godi.AddSingleton[fakes.IFakeReplaceFinalService, fakes.FakeReplaceFinalOne](&r)
+
+	// Story 6.4 code review (2026-07-01, D-8 instance-registration result
+	// obligation): codegen has no raw-instance DSL entry (D-1/D-4 scope γ), so
+	// the equivalent final state is declared via a form-B factory producing a
+	// value of the same concrete type AddSingletonInstance would hold on the
+	// runtime leg. Equivalence is asserted on observable resolve results
+	// (dynamic type name), never on cross-provider pointer identity (R4).
+	godi.AddSingletonFactory[fakes.IFakeInstanceService](&r, func(p godi.Provider) fakes.IFakeInstanceService {
+		return fakes.NewFakeInstanceService()
+	})
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper

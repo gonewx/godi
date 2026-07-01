@@ -39,9 +39,31 @@ dotnet `ServiceDescriptor.ToString()` 格式化输出注册信息。godi 无公�
 
 dotnet `TryAddEnumerable` 在 factory-based descriptor 上 `ImplementationType == typeof(object)` 时抛 `ArgumentException`（工厂退化为 `Func<IServiceProvider, object>`，impl 不可区分）。Go form-B 工厂 `func(Provider) T` 的返回类型 `T` 在编译期静态已知（==ServiceType），无 C# 的 `object` 类型擦除分支。
 
-Go 的 `TryAddEnumerable` dedup 退化为 `(ServiceType, Key)` — 与 `TryAdd` 等价，因为 ImplType 总等于 ServiceType。不可区分校验的**触发条件**不同但**语义等价**（都是"无法区分 impl 时拒绝"，只是 Go 的 form-B 永远"可区分"因为 T 是静态的）。
+> **修订（code review of story-6.4，2026-07-01）**：本条初版曾断言「Go 的 `TryAddEnumerable` dedup 退化为 `(ServiceType, Key)` 与 dotnet 语义等价」——**该结论不成立**，已被推翻，正确表述见下方 EXT-D9。这里保留的是唯一站得住脚的部分：dotnet 的 `ImplementationType==object` 分支专属 C# 类型擦除，Go form-B 无此分支（N/A），这与「dedup 键退化」是两件事，不应混为一谈。
 
-影响：SCSE-10 / SCKSE-10（2 项 adapted）。
+影响：SCSE-10（1 项 adapted，Go 侧永久"不可区分"故此校验总是触发，见 EXT-D9）/ SCKSE-10（1 项 na，键控 `TryAddEnumerable` 未实现，见 EXT-D9）。
+
+### EXT-D9 TryAddEnumerable dedup 退化为 (ServiceType, Key) — 真实行为分歧（adapted/na，纠正 D-7/EXT-D5 的错误论证）
+
+**dotnet 规则（D-3）**：`TryAddEnumerable` 判重键 = `(ServiceType, ImplementationType, ServiceKey)`——同一 `ServiceType` 下不同 `ImplementationType` 视为不同注册，都会被加入；只有 impl 类型也相同才算重复。这是它与 `TryAdd`（判重键仅 `(ServiceType, ServiceKey)`）的**核心区别**，也是该 API 存在的意义：允许同一服务类型下累积多个不同实现。
+
+**godi 现状（`runtime/collection.go` `TryAddEnumerable`）**：判重键退化为 `(ServiceType, nil)`——与 `TryAdd` **完全相同**。原因：Go form-B 工厂 `func(Provider) T` 在不执行的前提下，运行时无法获知它返回的具体实现类型是什么（`T` 是共享的服务接口类型，不是各次调用的动态实现类型）。**故意重新表述**：Story 6.4 的 D-7/EXT-D5 初版曾主张"T 静态已知 = 语义等价"——这混淆了"接口类型 T 静态已知"与"每次调用的具体实现类型静态已知"，两者不是一回事，该论证不成立。
+
+**实际后果**：`TryAddEnumerable[IFoo](b, factory returning *A)` 后再 `TryAddEnumerable[IFoo](b, factory returning *B)`（A、B 是不同实现）—— godi 会把第二次调用当作"重复"静默丢弃，**不会**注册 `*B`。这与 dotnet 的"允许两个不同实现共存"行为相反。这是 Go form-B 架构下**尚未解决的机制局限**，not 语义等价的适配。
+
+**处置**（Decker 拍板，2026-07-01，code review of story-6.4）：不重新设计 API（不引入显式实现标识参数），保持现状；诚实降级门槛映射：
+- SCSE-08/09（非键控，Theory(3)）→ `adapted`：add-when-missing / 同一注册内容不重复这两个子语义仍成立，但"不同实现应共存"的核心语义未验证、且已知不成立。
+- SCKSE-08/09/10（键控）→ `na`：`TryAddKeyedEnumerable` 函数**不存在**，无任何实现或测试，此前门槛表标记为 `covered` 是错误的（NFR7 诚实门槛红线修复）。
+
+影响：SCSE-08/09/10（3 项 adapted）/ SCKSE-08/09/10（3 项 na）。
+
+### EXT-D10 Remove 按类型删除而非按引用删单条（adapted）
+
+dotnet `IServiceCollection.Remove(descriptor)` 按**引用**移除集合中的**一条**具体 descriptor。godi 无独立可引用的 `ServiceDescriptor` 对象（方案 γ），`Remove[T]` 改为按 `ServiceType` 移除**全部**未键控注册（等价于 `RemoveAll[T]`）。
+
+两者在**恰好一条注册**时行为一致；当同一 `ServiceType` 存在**多条**注册时（本 Story 的核心场景——多实现服务）分歧：dotnet 只删被引用的那一条，godi 删除全部。
+
+影响：SCDE-03（1 项 adapted，此前标 `covered` 未考虑多实现场景，已修正）。
 
 ### EXT-D6 集合突变 codegen 硬墙（N/A — 操作本身；结果义务轴）
 

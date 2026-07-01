@@ -437,6 +437,32 @@ func conformanceRegistry() *plan.Registry {
 		Disposable:      true,
 		AsyncDisposable: true,
 	})
+	// Story 6.4 code review (2026-07-01, AD-15/D-8 "final set equivalence" +
+	// instance-registration result obligation): mirrors the additions in
+	// registration.go — the codegen leg for TestFinalSetEquivalence_Replace_DynType
+	// declares fakes.IFakeReplaceFinalService{Two, One} directly (the same final
+	// set runtime.Replace produces via mutation), and IFakeInstanceService is the
+	// form-B equivalent of the runtime AddSingletonInstance leg (D-4: codegen has
+	// no raw-instance DSL entry). IFakeRemovedService is deliberately absent —
+	// see registration.go.
+	reg.Service(plan.Service{
+		Name:     "FakeReplaceFinalTwo",
+		GoType:   "fakes.IFakeReplaceFinalService",
+		Ctor:     "fakes.NewFakeReplaceFinalTwo",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "FakeReplaceFinalOne",
+		GoType:   "fakes.IFakeReplaceFinalService",
+		Ctor:     "fakes.NewFakeReplaceFinalOne",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:        "IFakeInstanceService",
+		GoType:      "fakes.IFakeInstanceService",
+		FactoryExpr: "func(p godi.Provider) fakes.IFakeInstanceService {\n\treturn fakes.NewFakeInstanceService()\n}",
+		Lifetime:    plan.Singleton,
+	})
 	return reg
 }
 

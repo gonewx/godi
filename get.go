@@ -59,7 +59,7 @@ func GetServices[T any](p Provider) []T {
 	}
 	out := make([]T, len(all))
 	for i, v := range all {
-		out[i] = v.(T)
+		out[i], _ = v.(T)
 	}
 	return out
 }

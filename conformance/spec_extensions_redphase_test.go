@@ -160,35 +160,33 @@ func TestExtensions_DifferentialEquivalence_IsService(t *testing.T) {
 // ══ AC6/D-8: "Final set equivalence" (collection ops result = codegen
 //    static DSL same final set) ═════════════════════════════════════════════
 
-// extFinalSetRtFactory: runtime uses TryAdd/Replace/RemoveAll to arrive at a
-// final registration set; the codegen factory declares the SAME final set
-// statically. Cross-provider differential equivalence verifies they resolve
-// identically.
+// extFinalSetRtFactory: runtime uses Replace/RemoveAll to arrive at a final
+// registration set; the codegen leg is the REAL generated container
+// (codegen.NewRoot()), which declares the same logical final set directly
+// through the static DSL (conformance/codegen/registration.go). Cross-provider
+// differential equivalence verifies they resolve identically — this is the
+// literal AD-15/D-8 obligation, not a runtime-vs-runtime stand-in (code review
+// of story-6.4, 2026-07-01: the prior version compared two runtime.NewBuilder
+// legs and never touched codegen at all).
 //
-// Scenario: register A, register B, Replace(C) → final set = {B, C}
-// Runtime: AddSingleton A → AddSingleton B → Replace C (removes first A, appends C)
-// Codegen: static DSL declares {B, C} directly (the equivalent final set).
-//
-// This test requires the codegen registration to contain the equivalent final
-// set. Since Story 6.4 doesn't add new codegen registrations, this test will
-// reference a codegen factory that has been set up for this scenario (or will
-// be set up during dev-story as a conformance codegen registration).
+// Scenario: register One, register Two, Replace(One) → final set = [Two, One]
+// (first ServiceType match — One — removed, new One appended at the end).
+// Dedicated fakes (fakes.IFakeReplaceFinalService) keep this isolated from the
+// existing IFakeMultipleService count/order assertions elsewhere in this file.
 func TestFinalSetEquivalence_Replace_DynType(t *testing.T) {
-	// Runtime: AddSingleton[IFakeMultipleService](A) + AddSingleton(B) + Replace(C)
-	// → final = {B, C} (first match A removed, C appended)
 	rtFinal := ProviderFactory{
 		Name: "runtime-replace-final",
 		Build: func(t *testing.T) Provider {
 			t.Helper()
 			b := runtime.NewBuilder()
-			runtime.AddSingleton[fakes.IFakeMultipleService](b, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeOneMultipleService()
+			runtime.AddSingleton[fakes.IFakeReplaceFinalService](b, func(godi.Provider) fakes.IFakeReplaceFinalService {
+				return fakes.NewFakeReplaceFinalOne()
 			})
-			runtime.AddSingleton[fakes.IFakeMultipleService](b, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeTwoMultipleService()
+			runtime.AddSingleton[fakes.IFakeReplaceFinalService](b, func(godi.Provider) fakes.IFakeReplaceFinalService {
+				return fakes.NewFakeReplaceFinalTwo()
 			})
-			runtime.Replace[fakes.IFakeMultipleService](b, runtime.Singleton, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeOneMultipleService()
+			runtime.Replace[fakes.IFakeReplaceFinalService](b, runtime.Singleton, func(godi.Provider) fakes.IFakeReplaceFinalService {
+				return fakes.NewFakeReplaceFinalOne()
 			})
 			p, err := b.Build()
 			testutil.NoError(t, err)
@@ -196,31 +194,24 @@ func TestFinalSetEquivalence_Replace_DynType(t *testing.T) {
 		},
 	}
 
-	// Codegen equivalent: static DSL declares {Two, One} (same final set as
-	// runtime Replace result). This factory will be wired in dev-story when
-	// the codegen registration for this scenario is added.
+	// Codegen equivalent: the REAL generated container. registration.go
+	// declares fakes.IFakeReplaceFinalService{Two, One} directly, in that
+	// order — the same final set the runtime leg reaches via mutation.
 	cgFinal := ProviderFactory{
 		Name: "codegen-replace-final",
 		Build: func(t *testing.T) Provider {
 			t.Helper()
-			b := runtime.NewBuilder()
-			runtime.AddSingleton[fakes.IFakeMultipleService](b, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeTwoMultipleService()
-			})
-			runtime.AddSingleton[fakes.IFakeMultipleService](b, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeOneMultipleService()
-			})
-			p, err := b.Build()
+			root, err := codegen.NewRoot()
 			testutil.NoError(t, err)
-			return p
+			return root
 		},
 	}
 
 	AssertEquivalent(t, rtFinal, cgFinal, func(p Provider) int {
-		return len(p.GetKeyedServices(reflect.TypeFor[fakes.IFakeMultipleService](), nil))
+		return len(p.GetKeyedServices(reflect.TypeFor[fakes.IFakeReplaceFinalService](), nil))
 	})
 	AssertEquivalent(t, rtFinal, cgFinal, func(p Provider) string {
-		all := p.GetKeyedServices(reflect.TypeFor[fakes.IFakeMultipleService](), nil)
+		all := p.GetKeyedServices(reflect.TypeFor[fakes.IFakeReplaceFinalService](), nil)
 		if len(all) < 2 {
 			return ""
 		}
@@ -228,35 +219,79 @@ func TestFinalSetEquivalence_Replace_DynType(t *testing.T) {
 	})
 }
 
+// TestFinalSetEquivalence_RemoveAll_IsService: runtime registers
+// fakes.IFakeRemovedService then RemoveAll's it -> final set = empty ->
+// IsService false. The codegen leg is the REAL generated container; this type
+// is deliberately registered NOWHERE in registration.go, so its generated
+// IsService is naturally false — the same final state, without codegen having
+// to declare an "absence" (code review of story-6.4, 2026-07-01).
 func TestFinalSetEquivalence_RemoveAll_IsService(t *testing.T) {
-	// Runtime: register then RemoveAll → IsService false
 	rtRemoved := ProviderFactory{
 		Name: "runtime-removeall",
 		Build: func(t *testing.T) Provider {
 			t.Helper()
 			b := runtime.NewBuilder()
-			runtime.AddSingleton[fakes.IFakeMultipleService](b, func(godi.Provider) fakes.IFakeMultipleService {
-				return fakes.NewFakeOneMultipleService()
+			runtime.AddSingleton[fakes.IFakeRemovedService](b, func(godi.Provider) fakes.IFakeRemovedService {
+				return fakes.NewFakeRemovedService()
 			})
-			runtime.RemoveAll[fakes.IFakeMultipleService](b)
+			runtime.RemoveAll[fakes.IFakeRemovedService](b)
 			p, err := b.Build()
 			testutil.NoError(t, err)
 			return p
 		},
 	}
-	// Codegen equivalent: no registration at all = same final set
-	cgEmpty := ProviderFactory{
-		Name: "codegen-empty",
+	cgAbsent := ProviderFactory{
+		Name: "codegen-never-registered",
 		Build: func(t *testing.T) Provider {
 			t.Helper()
-			b := runtime.NewBuilder()
-			p, err := b.Build()
+			root, err := codegen.NewRoot()
 			testutil.NoError(t, err)
-			return p
+			return root
 		},
 	}
 
-	AssertEquivalent(t, rtRemoved, cgEmpty, func(p Provider) bool {
-		return p.IsService(reflect.TypeFor[fakes.IFakeMultipleService]())
+	AssertEquivalent(t, rtRemoved, cgAbsent, func(p Provider) bool {
+		return p.IsService(reflect.TypeFor[fakes.IFakeRemovedService]())
+	})
+}
+
+// TestFinalSetEquivalence_InstanceRegistration_DynType is the D-8 "instance
+// registration result obligation" axis: runtime uses AddSingletonInstance with
+// a pre-constructed value; codegen has no raw-instance DSL entry (D-4), so it
+// declares the equivalent via a form-B factory (registration.go). Equivalence
+// is asserted on the observable dynamic type, never on cross-provider pointer
+// identity (R4) — previously this obligation axis had no differential
+// equivalence test at all (code review of story-6.4, 2026-07-01).
+func TestFinalSetEquivalence_InstanceRegistration_DynType(t *testing.T) {
+	rtInstance := ProviderFactory{
+		Name: "runtime-instance",
+		Build: func(t *testing.T) Provider {
+			t.Helper()
+			b := runtime.NewBuilder()
+			runtime.AddSingletonInstance[fakes.IFakeInstanceService](b, fakes.NewFakeInstanceService())
+			p, err := b.Build()
+			testutil.NoError(t, err)
+			return p
+		},
+	}
+	cgInstance := ProviderFactory{
+		Name: "codegen-instance-equivalent",
+		Build: func(t *testing.T) Provider {
+			t.Helper()
+			root, err := codegen.NewRoot()
+			testutil.NoError(t, err)
+			return root
+		},
+	}
+
+	AssertEquivalent(t, rtInstance, cgInstance, func(p Provider) string {
+		v, ok := godi.Get[fakes.IFakeInstanceService](p)
+		if !ok {
+			return ""
+		}
+		return reflect.TypeOf(v).String()
+	})
+	AssertEquivalent(t, rtInstance, cgInstance, func(p Provider) bool {
+		return p.IsService(reflect.TypeFor[fakes.IFakeInstanceService]())
 	})
 }

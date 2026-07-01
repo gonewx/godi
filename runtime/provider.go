@@ -703,6 +703,8 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 				scf[d.serviceType] = append(scf[d.serviceType], d.factory)
 			case Transient:
 				tf[d.serviceType] = append(tf[d.serviceType], d.factory)
+			default:
+				return nil, fmt.Errorf("godi: invalid lifetime %d for type %s", d.lifetime, d.serviceType)
 			}
 		} else {
 			ke := keyedEntry{t: d.serviceType, key: d.key}
@@ -719,6 +721,8 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 				slot := len(ktf[ke])
 				ktf[ke] = append(ktf[ke], d.factory)
 				ko = append(ko, keyedReg{ke: ke, lifetime: keyedTransient, slot: slot})
+			default:
+				return nil, fmt.Errorf("godi: invalid lifetime %d for type %s key %v", d.lifetime, d.serviceType, d.key)
 			}
 		}
 	}

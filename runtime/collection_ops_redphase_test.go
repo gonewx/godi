@@ -47,6 +47,32 @@ type collOtherImpl struct{ _ int }
 
 func (*collOtherImpl) isCollOther() {}
 
+// collKeyKind is a genuine Go enum type (named int constants), used to verify
+// AD-17/D-5 key diversity beyond string/int literals — mirrors dotnet's
+// Int32Enum key case (SCKSE-16).
+type collKeyKind int
+
+const (
+	collKeyFirst collKeyKind = iota
+	collKeySecond
+)
+
+// closableCollSvc is a test-local disposable fixture (iCollSvc + io.Closer)
+// used to lock down AddSingletonInstance's disposal claim: a pre-constructed
+// instance implementing io.Closer must be tracked and released on provider
+// Close, exactly like a factory-produced singleton (code review of story-6.4,
+// 2026-07-01).
+type closableCollSvc struct {
+	closed bool
+	_      int // padding for distinct pointer identity (2.2 zero-size lesson)
+}
+
+func (c *closableCollSvc) isCollSvc() {}
+func (c *closableCollSvc) Close() error {
+	c.closed = true
+	return nil
+}
+
 // ══ AC2: Instance Registration (SCSE #3 adapted, D-4) ══════════════════════
 
 func TestAddSingletonInstance_ResolvesIdenticalInstance(t *testing.T) {
@@ -61,6 +87,22 @@ func TestAddSingletonInstance_ResolvesIdenticalInstance(t *testing.T) {
 	v2 := p.GetService(reflect.TypeFor[iCollSvc]())
 	testutil.True(t, v1 == v2, "instance registration must return same pointer within one provider")
 	testutil.True(t, v1 == inst, "instance registration must return the original instance")
+}
+
+// TestAddSingletonInstance_ClosedOnProviderClose locks down the doc claim on
+// AddSingletonInstance: a pre-constructed instance implementing io.Closer is
+// tracked for disposal exactly like a factory-produced singleton, via Build()'s
+// eager singleton materialization (runtime/provider.go Build()).
+func TestAddSingletonInstance_ClosedOnProviderClose(t *testing.T) {
+	inst := &closableCollSvc{}
+	b := runtime.NewBuilder()
+	runtime.AddSingletonInstance[iCollSvc](b, inst)
+	p, err := b.Build()
+	testutil.NoError(t, err)
+
+	testutil.True(t, !inst.closed, "instance must not be closed before provider Close")
+	testutil.NoError(t, p.Close())
+	testutil.True(t, inst.closed, "AddSingletonInstance's instance must be closed on provider Close")
 }
 
 // ══ AC2: TryAdd (SCSE #4/#5/#6/#7, D-3 判重键=(ServiceType,ServiceKey)) ═══
@@ -312,6 +354,51 @@ func TestRemoveAllKeyed_WithIntKey(t *testing.T) {
 
 	testutil.True(t, p.GetKeyedService(reflect.TypeFor[iCollSvc](), 9) == nil, "int key 9 should be removed")
 	testutil.NotNil(t, p.GetKeyedService(reflect.TypeFor[iCollSvc](), 7))
+}
+
+// TestRemoveAllKeyed_WithEnumKey verifies AD-17/D-5 key diversity with a
+// genuine named-constant Go enum type (not an int literal standing in for
+// one), mirroring dotnet's Int32Enum.Second key case (SCKSE-16).
+func TestRemoveAllKeyed_WithEnumKey(t *testing.T) {
+	b := runtime.NewBuilder()
+	runtime.AddKeyedSingleton[iCollSvc](b, collKeySecond, func(godi.Provider) iCollSvc { return &collSvcA{} })
+	runtime.AddKeyedSingleton[iCollSvc](b, collKeyFirst, func(godi.Provider) iCollSvc { return &collSvcB{} })
+	runtime.RemoveAllKeyed[iCollSvc](b, collKeySecond)
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	testutil.True(t, p.GetKeyedService(reflect.TypeFor[iCollSvc](), collKeySecond) == nil, "enum key collKeySecond should be removed")
+	testutil.NotNil(t, p.GetKeyedService(reflect.TypeFor[iCollSvc](), collKeyFirst))
+}
+
+// collObjectKey is a non-zero-size type so distinct allocations are guaranteed
+// distinct addresses — Go's zero-size types (e.g. struct{}) may alias to the
+// same address (runtime.zerobase), which would defeat the reference-identity
+// test below.
+type collObjectKey struct{ _ int }
+
+// TestKeyedRegistration_WithObjectIdentityKey verifies AD-17/D-5 key diversity
+// with reference-identity keys — the Go equivalent of dotnet's `new object()`
+// case: each key is a distinct pointer, unequal to every other pointer even of
+// the same underlying type.
+func TestKeyedRegistration_WithObjectIdentityKey(t *testing.T) {
+	key1 := new(collObjectKey)
+	key2 := new(collObjectKey)
+	testutil.True(t, key1 != key2, "two new(collObjectKey) values must be distinct references")
+
+	b := runtime.NewBuilder()
+	runtime.AddKeyedSingleton[iCollSvc](b, key1, func(godi.Provider) iCollSvc { return &collSvcA{} })
+	runtime.AddKeyedSingleton[iCollSvc](b, key2, func(godi.Provider) iCollSvc { return &collSvcB{} })
+	p, err := b.Build()
+	testutil.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+
+	v1 := p.GetKeyedService(reflect.TypeFor[iCollSvc](), key1)
+	v2 := p.GetKeyedService(reflect.TypeFor[iCollSvc](), key2)
+	testutil.Equal(t, reflect.TypeOf(v1).String(), "*runtime_test.collSvcA")
+	testutil.Equal(t, reflect.TypeOf(v2).String(), "*runtime_test.collSvcB")
+	testutil.True(t, p.GetKeyedService(reflect.TypeFor[iCollSvc](), new(collObjectKey)) == nil, "an unrelated new(collObjectKey) reference must not match either registered key")
 }
 
 // ══ AC3: Instance keyed (AddKeyedSingletonInstance) ════════════════════════

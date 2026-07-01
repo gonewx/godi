@@ -27,6 +27,9 @@ type Root struct {
 	f_StructFakeOne                                       fakes.IStructFakeMultipleService
 	f_StructFakeTwo                                       fakes.IStructFakeMultipleService
 	f_SelfComparable                                      fakes.ISelfComparable
+	f_FakeReplaceFinalTwo                                 fakes.IFakeReplaceFinalService
+	f_FakeReplaceFinalOne                                 fakes.IFakeReplaceFinalService
+	f_IFakeInstanceService                                fakes.IFakeInstanceService
 	f_FakeScopedService                                   fakes.IFakeScopedService
 	f_FakeDisposableScoped                                fakes.IFakeDisposableScoped
 	f_KeyedServiceOne__service1_                          fakes.IKeyedService
@@ -70,6 +73,11 @@ func NewRoot() (*Root, error) {
 	r.f_StructFakeOne = fakes.NewStructFakeOne()
 	r.f_StructFakeTwo = fakes.NewStructFakeTwo()
 	r.f_SelfComparable = fakes.NewSelfComparable()
+	r.f_FakeReplaceFinalTwo = fakes.NewFakeReplaceFinalTwo()
+	r.f_FakeReplaceFinalOne = fakes.NewFakeReplaceFinalOne()
+	r.f_IFakeInstanceService = (func(p godi.Provider) fakes.IFakeInstanceService {
+		return fakes.NewFakeInstanceService()
+	})(r)
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	r.disp.Track(r.f_FakeDisposableScoped.(io.Closer))
@@ -249,6 +257,12 @@ func (r *Root) StructFakeTwo() fakes.IStructFakeMultipleService { return r.f_Str
 
 func (r *Root) SelfComparable() fakes.ISelfComparable { return r.f_SelfComparable }
 
+func (r *Root) FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService { return r.f_FakeReplaceFinalTwo }
+
+func (r *Root) FakeReplaceFinalOne() fakes.IFakeReplaceFinalService { return r.f_FakeReplaceFinalOne }
+
+func (r *Root) IFakeInstanceService() fakes.IFakeInstanceService { return r.f_IFakeInstanceService }
+
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
@@ -285,6 +299,10 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_StructFakeTwo
 	case reflect.TypeFor[fakes.ISelfComparable]():
 		return r.f_SelfComparable
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return r.f_FakeReplaceFinalOne
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
+		return r.f_IFakeInstanceService
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -384,6 +402,10 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 		return true
 	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+		return true
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
 		return true
 	}
 	return false
@@ -544,6 +566,10 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_StructFakeOne, r.f_StructFakeTwo}
 		case reflect.TypeFor[fakes.ISelfComparable]():
 			return []any{r.f_SelfComparable}
+		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+			return []any{r.f_FakeReplaceFinalTwo, r.f_FakeReplaceFinalOne}
+		case reflect.TypeFor[fakes.IFakeInstanceService]():
+			return []any{r.f_IFakeInstanceService}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -729,6 +755,10 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_StructFakeTwo
 	case reflect.TypeFor[fakes.ISelfComparable]():
 		return s.root.f_SelfComparable
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return s.root.f_FakeReplaceFinalOne
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
+		return s.root.f_IFakeInstanceService
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -794,6 +824,10 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return true
 	case reflect.TypeFor[fakes.ISelfComparable]():
+		return true
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return true
@@ -932,6 +966,10 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_StructFakeOne, s.root.f_StructFakeTwo}
 		case reflect.TypeFor[fakes.ISelfComparable]():
 			return []any{s.root.f_SelfComparable}
+		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+			return []any{s.root.f_FakeReplaceFinalTwo, s.root.f_FakeReplaceFinalOne}
+		case reflect.TypeFor[fakes.IFakeInstanceService]():
+			return []any{s.root.f_IFakeInstanceService}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -1210,6 +1248,18 @@ func (s *scope) StructFakeOne() fakes.IStructFakeMultipleService { return s.root
 func (s *scope) StructFakeTwo() fakes.IStructFakeMultipleService { return s.root.f_StructFakeTwo }
 
 func (s *scope) SelfComparable() fakes.ISelfComparable { return s.root.f_SelfComparable }
+
+func (s *scope) FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService {
+	return s.root.f_FakeReplaceFinalTwo
+}
+
+func (s *scope) FakeReplaceFinalOne() fakes.IFakeReplaceFinalService {
+	return s.root.f_FakeReplaceFinalOne
+}
+
+func (s *scope) IFakeInstanceService() fakes.IFakeInstanceService {
+	return s.root.f_IFakeInstanceService
+}
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
 

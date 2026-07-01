@@ -138,10 +138,10 @@ func Replace[T any](b *Builder, lt Lifetime, factory func(godi.Provider) T) *Bui
 // appends a new one at the end.
 func ReplaceKeyed[T any](b *Builder, key any, lt Lifetime, factory func(godi.Provider) T) *Builder {
 	t := reflect.TypeFor[T]()
-	b.readOnlyGuard()
 	if key == godi.AnyKey {
 		panic(godi.AnyKeyRegistrationError(t))
 	}
+	b.readOnlyGuard()
 	for i, d := range b.descriptors {
 		if d.serviceType == t && d.key == key {
 			b.descriptors = append(b.descriptors[:i], b.descriptors[i+1:]...)
@@ -191,10 +191,13 @@ func RemoveAllKeyed[T any](b *Builder, key any) *Builder {
 	return b
 }
 
-// Remove removes all unkeyed registrations for ServiceType T — the Go
-// adaptation of dotnet's IServiceCollection.Remove(descriptor) which removes
-// by reference. Since godi does not expose individual descriptors, Remove
-// operates by type (functionally identical to RemoveAll for unkeyed).
+// Remove is the Go adaptation of dotnet's IServiceCollection.Remove(descriptor),
+// which removes ONE registration identified by reference. godi exposes no
+// standalone descriptor object to reference, so Remove operates by type
+// instead: it removes ALL unkeyed registrations of T (== RemoveAll[T]). This
+// diverges from dotnet when multiple registrations of T coexist — dotnet
+// removes exactly one, godi removes every unkeyed one (EXTENSIONS_DIVERGENCE.md
+// EXT-D10).
 func Remove[T any](b *Builder) *Builder {
 	return RemoveAll[T](b)
 }
