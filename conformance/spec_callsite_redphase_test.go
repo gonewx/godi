@@ -230,9 +230,8 @@ var callSiteConstraintRuntimeCases = []SpecCase{
 		Run: func(t *testing.T, p Provider) {
 			all := p.GetKeyedServices(csfCollectionClosedType(), nil)
 			testutil.NotNil(t, all)
-			testutil.Equal(t, len(all), 4)
 			if len(all) != 4 {
-				return
+				t.Fatalf("expected 4 impls in collection[int], got %d", len(all))
 			}
 			testutil.True(t, strings.Contains(dynTypeName(all[0]), "ClassWithStructConstraint"), "slot0=struct")
 			testutil.True(t, strings.Contains(dynTypeName(all[1]), "ClassWithClassConstraint"), "slot1=class")
@@ -255,17 +254,21 @@ var callSiteConstraintRuntimeCases = []SpecCase{
 		Name: "callsite: CSF-22 constraint-matrix observable — collection[int] contains only impls whose Go constraint int satisfies; self-ref excluded (exact dotnet matrix N/A, CALLSITE_DIVERGENCE.md)",
 		Run: func(t *testing.T, p Provider) {
 			// Observable (adapted): int satisfies comparable(struct) + any(class/new/
-			// no-constraint) → the four helpers compile for int; int does NOT satisfy
-			// the self-referencing constraint (int has no CompareTo(int) int) → the
-			// self-ref impl is NOT in the int collection. This is the Go-constraint
-			// analog of dotnet's runtime constraint-matrix filter; the EXACT dotnet
-			// matrix (struct/class/new/interface/abstract) is N/A — Go constraint kinds
-			// do not map 1:1 (documented divergence, AD-10).
+			// no-constraint) → the four helpers compile for int. The self-referencing
+			// helper addSelfRefConstraintRT[int] cannot even be CALLED — int has no
+			// CompareTo(int) int method, so the Go compiler rejects the instantiation.
+			// Therefore the self-ref impl is structurally absent from the int collection:
+			// this is a COMPILE-TIME exclusion (AD-10), not a runtime constraint filter
+			// like dotnet's. The assertion below confirms the compile-time outcome is
+			// observable (collection count = 4, all non-self-ref). The EXACT dotnet
+			// constraint matrix (struct/class/new/interface/abstract) is N/A — Go
+			// constraint kinds do not map 1:1 (documented divergence, AD-10,
+			// CALLSITE_DIVERGENCE.md §B).
 			all := p.GetKeyedServices(csfCollectionClosedType(), nil)
 			testutil.Equal(t, len(all), 4)
 			for _, svc := range all {
 				testutil.True(t, !strings.Contains(dynTypeName(svc), "SelfReferencing"),
-					"self-ref impl must NOT appear in the int collection (int lacks CompareTo(int) int)")
+					"self-ref impl must NOT appear in the int collection (compile-time excluded: int lacks CompareTo(int) int)")
 			}
 		},
 	},
@@ -494,6 +497,7 @@ var rtFactoryCallSiteDisposable = ProviderFactory{
 // (codegen's LIFO release order is covered by Story 2.3).
 func TestCallSite_DisposableCaptureAndElide(t *testing.T) {
 	p := rtFactoryCallSiteDisposable.Build(t)
+	t.Cleanup(func() { _ = p.Close() })
 	scope := p.CreateScope()
 	recorder := fakes.NewDisposeRecorder()
 
@@ -601,9 +605,8 @@ var callSiteKeyedRuntimeCases = []SpecCase{
 		Run: func(t *testing.T, p Provider) {
 			all := p.GetKeyedServices(reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]](), "gen-key")
 			testutil.NotNil(t, all)
-			testutil.Equal(t, len(all), 1)
 			if len(all) != 1 {
-				return
+				t.Fatalf("expected 1 keyed closed-generic impl, got %d", len(all))
 			}
 			testutil.True(t, strings.Contains(dynTypeName(all[0]), "FakeOpenGenericService"),
 				"keyed closed-generic collection element must be FakeOpenGenericService")
