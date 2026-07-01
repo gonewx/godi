@@ -400,6 +400,23 @@ func conformanceRegistry() *plan.Registry {
 		Ctor:     "fakes.NewStructFakeTwo",
 		Lifetime: plan.Singleton,
 	})
+	// Story 6-2 (CSF-19, AD-15): self-referencing structural constraint fake closed
+	// materialization on the codegen path. SelfComparable is the injected candidate;
+	// the closed ClassWithSelfReferencingConstraint[ISelfComparable] wires it via the
+	// form-A `value T` ctor param (Deps). A fresh closed type — no collision.
+	reg.Service(plan.Service{
+		Name:     "SelfComparable",
+		GoType:   "fakes.ISelfComparable",
+		Ctor:     "fakes.NewSelfComparable",
+		Lifetime: plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:     "ClassWithSelfReferencingConstraint_fakes_ISelfComparable",
+		GoType:   "fakes.IFakeOpenGenericService[fakes.ISelfComparable]",
+		Ctor:     "fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable]",
+		Lifetime: plan.Transient,
+		Deps:     []string{"SelfComparable"},
+	})
 	return reg
 }
 

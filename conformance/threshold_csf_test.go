@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 6.2 (AC1) — CSF threshold gate assertion:
+// ATDD scaffold for Story 6.2 (AC1) — CSF threshold gate assertion:
 // CallSiteFactoryTest (30 [Fact]/[Theory] + 4 [ConditionalFact] = 34) +
 // CallSiteTests (13 [Fact]/[Theory]) = 47 dotnet methods × godi coverage mapping.
 //
@@ -24,8 +22,10 @@
 // Estimate (Task 1): covered 0, adapted 26, na 21 = 47; effective coverage =
 // (covered+adapted)/(47-na) = 26/26 = 100%.
 //
-// Activation: delete the //go:build line and the blank line below it to join the
-// default build. See _bmad-output/test-artifacts/atdd-checklist-6-2-callsite-construction.md.
+// ACTIVATED (Story 6.2): the build tag was removed once Task 1 finalized the
+// 47-method mapping and Tasks 2-5 landed the observable tests in
+// spec_callsite_redphase_test.go — this gate is now GREEN on the default build.
+// See _bmad-output/test-artifacts/atdd-checklist-6-2-callsite-construction.md.
 //
 // Reuses coverageStatus / covered / adapted / na (threshold_116_test.go) and
 // contains (threshold_spct_test.go) — same conformance package.

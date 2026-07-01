@@ -153,6 +153,20 @@ func register() {
 	godi.AddSingleton[fakes.IStructConsumer, fakes.StructConsumer](&r)
 	godi.AddSingleton[fakes.IStructFakeMultipleService, fakes.StructFakeOne](&r)
 	godi.AddSingleton[fakes.IStructFakeMultipleService, fakes.StructFakeTwo](&r)
+
+	// Story 6-2 (CSF-19, AD-15 codegen coverage): the self-referencing structural
+	// constraint fake ClassWithSelfReferencingConstraint[T] materialized on the
+	// codegen path. It is the ONLY one of the 5 structural constraint fakes with a
+	// form-A New{Impl} ctor (the other four — class/struct/new/no-constraint — have
+	// no ctor and stay runtime-only, Dev Notes D-1). ISelfComparable is the injected
+	// candidate (value T dependency); the per-service helper mirrors 4.1/4.2's
+	// Mechanism A. A FRESH closed type IFakeOpenGenericService[ISelfComparable] — no
+	// collision with existing closed instantiations. This gives the "open-generic
+	// closed materialization" obligation axis (AD-15) a structural-constraint
+	// scenario in codegen + cross-provider differential equivalence, closing the
+	// 6.1 runtime-only gap.
+	godi.AddSingleton[fakes.ISelfComparable, fakes.SelfComparable](&r)
+	AddSelfReferencingConstrainedService[fakes.ISelfComparable](&r)
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper
@@ -186,6 +200,17 @@ func AddInterfaceConstrainedService[T fakes.IterableLike](r *godi.Registry) *god
 // where T : AbstractClass.
 func AddAbstractConstrainedService[T fakes.AbstractClassLike](r *godi.Registry) *godi.Registry {
 	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.ClassWithAbstractClassConstraint[T]](r)
+}
+
+// AddSelfReferencingConstrainedService is the Story 6.2 structural per-service
+// helper (Mechanism A): mirrors dotnet ClassWithSelfReferencingConstraint<T>
+// where T : IComparable<T>. The Go self-referencing constraint
+// interface{ CompareTo(T) int } is F-bounded; the generator is transparent to it
+// (AD-10) and reduces the call to the closed form-A registration exactly as for
+// the 4.2 constrained helpers — reading NewClassWithSelfReferencingConstraint's
+// `value T` parameter and wiring the registered T dependency (AC2).
+func AddSelfReferencingConstrainedService[T interface{ CompareTo(T) int }](r *godi.Registry) *godi.Registry {
+	return godi.AddTransient[fakes.IFakeOpenGenericService[T], fakes.ClassWithSelfReferencingConstraint[T]](r)
 }
 
 // _ keeps register reachable: it exists solely as the generator's static-analysis

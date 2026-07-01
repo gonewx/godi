@@ -197,3 +197,30 @@ func (f *ClassWithSelfReferencingConstraint[T]) Value() T { return f.value }
 func NewClassWithSelfReferencingConstraint[T interface{ CompareTo(T) int }](value T) *ClassWithSelfReferencingConstraint[T] {
 	return &ClassWithSelfReferencingConstraint[T]{value: value}
 }
+
+// ---------------------------------------------------------------------------
+// Self-referencing candidate type (Story 6.2) — the injected T for
+// ClassWithSelfReferencingConstraint's closed materialization on BOTH providers.
+// ---------------------------------------------------------------------------
+
+// ISelfComparable satisfies the self-referencing Go constraint
+// interface{ CompareTo(T) int } (dotnet "where T : IComparable<T>"): its own
+// method set is exactly { CompareTo(ISelfComparable) int }, so ISelfComparable
+// itself is a legal T for ClassWithSelfReferencingConstraint[T]. Story 6.2
+// consumes it (CSF-19) as the only structural constraint fake with a form-A
+// New{Impl} ctor — hence the only one that materializes on the codegen path
+// (AD-15). The other four structural fakes (class/struct/new/no-constraint) have
+// no ctor and stay runtime-only (Task 3 decision, Dev Notes D-1).
+type ISelfComparable interface {
+	CompareTo(ISelfComparable) int
+}
+
+// SelfComparable is the canonical ISelfComparable implementation. The padding
+// field ensures distinct heap allocations produce distinct pointer identities.
+type SelfComparable struct{ _ int }
+
+// CompareTo makes *SelfComparable satisfy ISelfComparable (self-referencing).
+func (*SelfComparable) CompareTo(ISelfComparable) int { return 0 }
+
+// NewSelfComparable is the form-A constructor (AD-8 New{Impl}).
+func NewSelfComparable() *SelfComparable { return &SelfComparable{} }

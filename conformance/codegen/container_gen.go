@@ -25,6 +25,7 @@ type Root struct {
 	f_StructConsumer                                      fakes.IStructConsumer
 	f_StructFakeOne                                       fakes.IStructFakeMultipleService
 	f_StructFakeTwo                                       fakes.IStructFakeMultipleService
+	f_SelfComparable                                      fakes.ISelfComparable
 	f_FakeScopedService                                   fakes.IFakeScopedService
 	f_FakeDisposableScoped                                fakes.IFakeDisposableScoped
 	f_KeyedServiceOne__service1_                          fakes.IKeyedService
@@ -67,6 +68,7 @@ func NewRoot() (*Root, error) {
 	r.f_StructConsumer = fakes.NewStructConsumer(r.f_StructFakeService)
 	r.f_StructFakeOne = fakes.NewStructFakeOne()
 	r.f_StructFakeTwo = fakes.NewStructFakeTwo()
+	r.f_SelfComparable = fakes.NewSelfComparable()
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	r.disp.Track(r.f_FakeDisposableScoped.(io.Closer))
@@ -186,6 +188,10 @@ func (r *Root) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOp
 	return fakes.NewInstanceFakeOpenGenericService[fakes.IGenSlotB]()
 }
 
+func (r *Root) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fakes.IFakeOpenGenericService[fakes.ISelfComparable] {
+	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](r.f_SelfComparable)
+}
+
 func (r *Root) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -228,6 +234,8 @@ func (r *Root) StructFakeOne() fakes.IStructFakeMultipleService { return r.f_Str
 
 func (r *Root) StructFakeTwo() fakes.IStructFakeMultipleService { return r.f_StructFakeTwo }
 
+func (r *Root) SelfComparable() fakes.ISelfComparable { return r.f_SelfComparable }
+
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
@@ -262,6 +270,8 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.f_StructConsumer
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return r.f_StructFakeTwo
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return r.f_SelfComparable
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -290,6 +300,8 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.NewClosedFakeOpenGenericService_fakes_IGenSlotA()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+		return r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
 	}
 	return nil
 }
@@ -347,6 +359,10 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IStructConsumer]():
 		return true
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return true
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return true
 	}
 	return false
@@ -505,6 +521,8 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.f_StructConsumer}
 		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 			return []any{r.f_StructFakeOne, r.f_StructFakeTwo}
+		case reflect.TypeFor[fakes.ISelfComparable]():
+			return []any{r.f_SelfComparable}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -533,6 +551,8 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.NewFakeOpenGenericService_fakes_IGenSlotA(), r.NewClosedFakeOpenGenericService_fakes_IGenSlotA()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 			return []any{r.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), r.NewFakeOpenGenericService_fakes_IGenSlotB(), r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+			return []any{r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
 		}
 		return nil
 	}
@@ -673,6 +693,8 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.f_StructConsumer
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return s.root.f_StructFakeTwo
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return s.root.f_SelfComparable
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -701,6 +723,8 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.NewClosedFakeOpenGenericService_fakes_IGenSlotA()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+		return s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
 	}
 	return nil
 }
@@ -731,6 +755,8 @@ func (s *scope) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 		return true
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -758,6 +784,8 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
+		return true
+	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return true
 	}
 	return false
@@ -860,6 +888,8 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.f_StructConsumer}
 		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
 			return []any{s.root.f_StructFakeOne, s.root.f_StructFakeTwo}
+		case reflect.TypeFor[fakes.ISelfComparable]():
+			return []any{s.root.f_SelfComparable}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -888,6 +918,8 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.NewFakeOpenGenericService_fakes_IGenSlotA(), s.NewClosedFakeOpenGenericService_fakes_IGenSlotA()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 			return []any{s.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), s.NewFakeOpenGenericService_fakes_IGenSlotB(), s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
+		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+			return []any{s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
 		}
 		return nil
 	}
@@ -1064,6 +1096,10 @@ func (s *scope) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeO
 	return fakes.NewInstanceFakeOpenGenericService[fakes.IGenSlotB]()
 }
 
+func (s *scope) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fakes.IFakeOpenGenericService[fakes.ISelfComparable] {
+	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](s.root.f_SelfComparable)
+}
+
 func (s *scope) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -1105,6 +1141,8 @@ func (s *scope) StructConsumer() fakes.IStructConsumer { return s.root.f_StructC
 func (s *scope) StructFakeOne() fakes.IStructFakeMultipleService { return s.root.f_StructFakeOne }
 
 func (s *scope) StructFakeTwo() fakes.IStructFakeMultipleService { return s.root.f_StructFakeTwo }
+
+func (s *scope) SelfComparable() fakes.ISelfComparable { return s.root.f_SelfComparable }
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
 
