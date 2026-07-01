@@ -17,8 +17,6 @@
 //
 // Activation: delete the //go:build line and blank line to join the default
 // build. See _bmad-output/test-artifacts/atdd-checklist-6-3-async-scope-dispose.md.
-//go:build atdd_redphase
-
 package runtime_test
 
 import (

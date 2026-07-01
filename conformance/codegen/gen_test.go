@@ -417,6 +417,26 @@ func conformanceRegistry() *plan.Registry {
 		Lifetime: plan.Transient,
 		Deps:     []string{"SelfComparable"},
 	})
+	// Story 6-3: async-disposable services (mirror registration.go). Registered by
+	// pointer type (concrete field → TrackAsync passes it directly), and TRANSIENT
+	// so codegen does not eagerly materialize them into every scope (which would
+	// break Story 2.3 sync Close — see registration.go). FakeAsyncOnlyDisposable is
+	// async-only; FakeSyncAsyncDisposable is both.
+	reg.Service(plan.Service{
+		Name:            "FakeAsyncOnlyDisposable",
+		GoType:          "*fakes.FakeAsyncOnlyDisposable",
+		Ctor:            "fakes.NewFakeAsyncOnlyDisposable",
+		Lifetime:        plan.Transient,
+		AsyncDisposable: true,
+	})
+	reg.Service(plan.Service{
+		Name:            "FakeSyncAsyncDisposable",
+		GoType:          "*fakes.FakeSyncAsyncDisposable",
+		Ctor:            "fakes.NewFakeSyncAsyncDisposable",
+		Lifetime:        plan.Transient,
+		Disposable:      true,
+		AsyncDisposable: true,
+	})
 	return reg
 }
 

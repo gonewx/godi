@@ -150,6 +150,15 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			"with explicit type arguments", pkg.PkgPath, godiPkgPath)
 	}
 
+	// Resolve the godi.AsyncDisposable interface ONCE (Story 6.3, D-7): reading
+	// the REAL interface type from the loaded godi package is more robust than
+	// hand-synthesizing a signature that references the named type
+	// context.Context (unlike io.Closer, whose signature uses only the universe
+	// `error`). nil if godi is not imported — any package carrying godi.Add
+	// markers imports it, so this is only nil in degenerate inputs, in which case
+	// every service simply records AsyncDisposable=false.
+	asyncIface := asyncDisposableInterface(pkg)
+
 	// AC1 registration side (AD-17): a nil key == unkeyed. Normalize nil-keyed
 	// registrations to plain unkeyed ones BEFORE the dependency-index pass, so a
 	// nil-key service joins the unkeyed namespace fully — resolvable via GetService
@@ -360,6 +369,7 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 		s.Deps = constructorDeps(sig, depIndex, imports)
 		s.CtorErr = hasTrailingError(sig)
 		s.Disposable = implementsCloser(rg.implType)
+		s.AsyncDisposable = implementsAsyncDisposable(rg.implType, asyncIface)
 
 		reg.Service(s)
 	}
@@ -1048,6 +1058,45 @@ func closerInterface() *types.Interface {
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(), results, false)
 	closeMethod := types.NewFunc(token.NoPos, nil, "Close", sig)
 	return types.NewInterfaceType([]*types.Func{closeMethod}, nil).Complete()
+}
+
+// implementsAsyncDisposable reports whether the implementation (or a pointer to
+// it) satisfies godi.AsyncDisposable — CloseAsync(context.Context) error —
+// derived statically (Story 6.3, D-7). iface is the real interface type read
+// from the godi package by asyncDisposableInterface; a nil iface (godi not among
+// the loaded imports) yields false. A both-disposable satisfies BOTH this and
+// implementsCloser — the caller records both flags and genlib's D-8 dispatch
+// keeps such a service on the unchanged sync Track path.
+func implementsAsyncDisposable(impl types.Type, iface *types.Interface) bool {
+	if impl == nil || iface == nil {
+		return false
+	}
+	if types.Implements(impl, iface) {
+		return true
+	}
+	return types.Implements(types.NewPointer(impl), iface)
+}
+
+// asyncDisposableInterface returns the godi.AsyncDisposable interface type from
+// the loaded godi package (D-7 — read the real type rather than synthesize a
+// context.Context signature). The generator loads dependencies with
+// NeedDeps|NeedTypes, so the godi package's types are available via pkg.Imports.
+// Returns nil if godi is not among the direct imports.
+func asyncDisposableInterface(pkg *packages.Package) *types.Interface {
+	godiPkg := pkg.Imports[godiPkgPath]
+	if godiPkg == nil || godiPkg.Types == nil {
+		return nil
+	}
+	obj := godiPkg.Types.Scope().Lookup("AsyncDisposable")
+	if obj == nil {
+		return nil
+	}
+	named, ok := obj.Type().(*types.Named)
+	if !ok {
+		return nil
+	}
+	iface, _ := named.Underlying().(*types.Interface)
+	return iface
 }
 
 // renderType renders t as emit-ready Go source, package-qualified by package

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"reflect"
@@ -36,6 +37,21 @@ type keyedReg struct {
 	slot     int
 }
 
+// trackDisposable records v with disp using the runtime analogue of the codegen
+// emit dispatch (D-3/D-4): a v satisfying io.Closer (including a both-disposable)
+// is tracked via Track — under CloseAllAsync it is re-asserted to
+// AsyncDisposable, so prefer-async still holds; an async-only v (no io.Closer)
+// is tracked via TrackAsync. A v that is neither is not tracked.
+func trackDisposable(disp *Disposer, v any) {
+	if c, ok := v.(io.Closer); ok {
+		disp.Track(c)
+		return
+	}
+	if ad, ok := v.(godi.AsyncDisposable); ok {
+		disp.TrackAsync(ad)
+	}
+}
+
 func materializeKeyedInto(cache map[keyedEntry][]any, ke keyedEntry, factories []func(godi.Provider) any, provider godi.Provider, disp *Disposer) []any {
 	if instances, ok := cache[ke]; ok {
 		return instances
@@ -43,9 +59,7 @@ func materializeKeyedInto(cache map[keyedEntry][]any, ke keyedEntry, factories [
 	instances := make([]any, len(factories))
 	for i, f := range factories {
 		v := f(provider)
-		if c, ok := v.(io.Closer); ok {
-			disp.Track(c)
-		}
+		trackDisposable(disp, v)
 		instances[i] = v
 	}
 	cache[ke] = instances
@@ -59,9 +73,7 @@ func materializeInto(cache map[reflect.Type][]any, t reflect.Type, factories []f
 	instances := make([]any, len(factories))
 	for i, f := range factories {
 		v := f(provider)
-		if c, ok := v.(io.Closer); ok {
-			disp.Track(c)
-		}
+		trackDisposable(disp, v)
 		instances[i] = v
 	}
 	cache[t] = instances
@@ -89,13 +101,21 @@ type root struct {
 	materializing      map[reflect.Type]bool
 	materializingKeyed map[keyedEntry]bool
 
-	disp      *Disposer
-	closed    bool
-	closeOnce sync.Once
-	closeErr  error
+	disp     *Disposer
+	closeMu  sync.Mutex
+	closed   bool
+	closeErr error
 }
 
 var _ godi.Provider = (*root)(nil)
+
+// root and scope implement CloseAsync structurally (godi.AsyncDisposable), NOT
+// as part of the pinned Provider/Scope face (AD-16 unchanged, D-2). These
+// compile-time checks keep that opt-in surface honest.
+var (
+	_ godi.AsyncDisposable = (*root)(nil)
+	_ godi.AsyncDisposable = (*scope)(nil)
+)
 
 func (r *root) GetService(t reflect.Type) any {
 	if r.closed {
@@ -125,9 +145,7 @@ func (r *root) GetService(t reflect.Type) any {
 	}
 	if factories, ok := r.transientFactories[t]; ok {
 		v := factories[len(factories)-1](r)
-		if c, ok := v.(io.Closer); ok {
-			r.disp.Track(c)
-		}
+		trackDisposable(r.disp, v)
 		return v
 	}
 	return nil
@@ -210,9 +228,7 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 	}
 	if factories, ok := r.keyedTransientFactories[ke]; ok {
 		v := factories[len(factories)-1](r)
-		if c, ok := v.(io.Closer); ok {
-			r.disp.Track(c)
-		}
+		trackDisposable(r.disp, v)
 		return v
 	}
 	return nil
@@ -245,9 +261,7 @@ func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(r)
-			if c, ok := v.(io.Closer); ok {
-				r.disp.Track(c)
-			}
+			trackDisposable(r.disp, v)
 			instances[i] = v
 		}
 		return instances
@@ -272,9 +286,7 @@ func (r *root) getUnkeyedServices(t reflect.Type) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(r)
-			if c, ok := v.(io.Closer); ok {
-				r.disp.Track(c)
-			}
+			trackDisposable(r.disp, v)
 			instances[i] = v
 		}
 		return instances
@@ -304,9 +316,7 @@ func (r *root) getAnyKeyedServices(t reflect.Type) []any {
 			out = append(out, instances[kr.slot])
 		case keyedTransient:
 			v := r.keyedTransientFactories[kr.ke][kr.slot](r)
-			if c, ok := v.(io.Closer); ok {
-				r.disp.Track(c)
-			}
+			trackDisposable(r.disp, v)
 			out = append(out, v)
 		}
 	}
@@ -325,14 +335,40 @@ func (r *root) CreateScope() godi.Scope {
 	}
 }
 
+// Close releases this provider and its disposables synchronously in LIFO order.
+// It is idempotent and shares ONE closed guard with CloseAsync
+// (first-caller-wins, D-6): whichever runs first releases and caches its error;
+// a later Close or CloseAsync is a no-op returning the cached error. Marking
+// closed BEFORE releasing makes a factory that calls Close mid-Build
+// (ctor-dispose-in-flight, SPCT-16) trip the resolve guard on the next
+// GetService, and rejects post-Close resolution (AD-16). closeMu replaces the
+// prior sync.Once so Close and CloseAsync can share the guard while keeping the
+// count-exactly-once semantics (D-6).
 func (r *root) Close() error {
-	r.closeOnce.Do(func() {
-		// Mark closed BEFORE releasing so a factory that calls Close mid-Build
-		// (ctor-dispose-in-flight, SPCT-16) trips the resolve guard on the next
-		// GetService, and so post-Close resolution is rejected (AD-16).
-		r.closed = true
-		r.closeErr = r.disp.CloseAll()
-	})
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	if r.closed {
+		return r.closeErr
+	}
+	r.closed = true
+	r.closeErr = r.disp.CloseAll()
+	return r.closeErr
+}
+
+// CloseAsync releases this provider and its disposables in LIFO order,
+// preferring each item's CloseAsync over Close (D-4). It is a STRUCTURAL opt-in
+// method (godi.AsyncDisposable), NOT part of the pinned Provider face (AD-16
+// unchanged, D-2) — a caller reaches it through a type assertion. It shares the
+// SAME closed guard as Close (first-caller-wins, D-6 / #38 DisposeAsyncOnce): if
+// Close already ran, this returns the cached error without re-releasing.
+func (r *root) CloseAsync(ctx context.Context) error {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	if r.closed {
+		return r.closeErr
+	}
+	r.closed = true
+	r.closeErr = r.disp.CloseAllAsync(ctx)
 	return r.closeErr
 }
 
@@ -341,8 +377,8 @@ type scope struct {
 	scoped      map[reflect.Type][]any
 	keyedScoped map[keyedEntry][]any
 	disp        *Disposer
+	closeMu     sync.Mutex
 	closed      bool
-	closeOnce   sync.Once
 	closeErr    error
 }
 
@@ -367,9 +403,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	if factories, ok := s.root.transientFactories[t]; ok {
 		v := factories[len(factories)-1](s)
-		if c, ok := v.(io.Closer); ok {
-			s.disp.Track(c)
-		}
+		trackDisposable(s.disp, v)
 		return v
 	}
 	return nil
@@ -403,9 +437,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	}
 	if factories, ok := s.root.keyedTransientFactories[ke]; ok {
 		v := factories[len(factories)-1](s)
-		if c, ok := v.(io.Closer); ok {
-			s.disp.Track(c)
-		}
+		trackDisposable(s.disp, v)
 		return v
 	}
 	return nil
@@ -438,9 +470,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(s)
-			if c, ok := v.(io.Closer); ok {
-				s.disp.Track(c)
-			}
+			trackDisposable(s.disp, v)
 			instances[i] = v
 		}
 		return instances
@@ -465,9 +495,7 @@ func (s *scope) getUnkeyedServices(t reflect.Type) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(s)
-			if c, ok := v.(io.Closer); ok {
-				s.disp.Track(c)
-			}
+			trackDisposable(s.disp, v)
 			instances[i] = v
 		}
 		return instances
@@ -495,9 +523,7 @@ func (s *scope) getAnyKeyedServices(t reflect.Type) []any {
 			out = append(out, instances[kr.slot])
 		case keyedTransient:
 			v := s.root.keyedTransientFactories[kr.ke][kr.slot](s)
-			if c, ok := v.(io.Closer); ok {
-				s.disp.Track(c)
-			}
+			trackDisposable(s.disp, v)
 			out = append(out, v)
 		}
 	}
@@ -516,11 +542,33 @@ func (s *scope) CreateScope() godi.Scope {
 	}
 }
 
+// Close releases this scope's disposables synchronously in LIFO order. Like
+// root.Close it is idempotent and shares ONE closed guard with CloseAsync
+// (first-caller-wins, D-6).
 func (s *scope) Close() error {
-	s.closeOnce.Do(func() {
-		s.closed = true
-		s.closeErr = s.disp.CloseAll()
-	})
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	if s.closed {
+		return s.closeErr
+	}
+	s.closed = true
+	s.closeErr = s.disp.CloseAll()
+	return s.closeErr
+}
+
+// CloseAsync releases this scope's disposables in LIFO order, preferring async
+// per item (D-4). Structural opt-in (godi.AsyncDisposable), not part of the
+// Scope face (D-2); shares the SAME closed guard as Close (D-6). Singletons are
+// tracked by root.disp, so scope.CloseAsync never releases them (AD-12 async
+// parity, AC5).
+func (s *scope) CloseAsync(ctx context.Context) error {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	if s.closed {
+		return s.closeErr
+	}
+	s.closed = true
+	s.closeErr = s.disp.CloseAllAsync(ctx)
 	return s.closeErr
 }
 

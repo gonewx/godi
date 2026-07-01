@@ -12,8 +12,6 @@
 //
 // Activation: delete the //go:build line and blank line to join the default
 // build. See _bmad-output/test-artifacts/atdd-checklist-6-3-async-scope-dispose.md.
-//go:build atdd_redphase
-
 package codegen_test
 
 import (
@@ -89,7 +87,9 @@ func TestCodegen_PathGamma_AsyncSingletonNotDisposedOnScopeCloseAsync(t *testing
 	testutil.True(t, !singletonFake.IsDisposed(),
 		"singleton must NOT be disposed on scope.CloseAsync — only root (AD-12)")
 
-	rootAc := root.(asyncCloser)
+	// *Root is a concrete type (not an interface), so its CloseAsync opt-in is
+	// proven by a compile-time interface assignment, not a type assertion.
+	var rootAc asyncCloser = root
 	testutil.NoError(t, rootAc.CloseAsync(context.Background()))
 	testutil.True(t, singletonFake.IsDisposed(), "singleton must be disposed after root.CloseAsync")
 }
@@ -125,7 +125,9 @@ func TestCodegen_CloseAsync_Idempotent_WithAsyncDisposables(t *testing.T) {
 
 	_ = root.GetService(reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]())
 
-	ac := root.(asyncCloser)
+	// *Root is concrete; prove the CloseAsync opt-in via a compile-time interface
+	// assignment rather than a type assertion (which is illegal on a non-interface).
+	var ac asyncCloser = root
 	testutil.NoError(t, ac.CloseAsync(context.Background()))
 	testutil.NoError(t, ac.CloseAsync(context.Background())) // no-op
 	testutil.NoError(t, root.Close())                        // no-op, shares the guard (D-6)

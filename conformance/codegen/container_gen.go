@@ -2,6 +2,7 @@
 package codegen
 
 import (
+	"context"
 	"io"
 	"reflect"
 
@@ -192,6 +193,18 @@ func (r *Root) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fak
 	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](r.f_SelfComparable)
 }
 
+func (r *Root) NewFakeAsyncOnlyDisposable() *fakes.FakeAsyncOnlyDisposable {
+	v := fakes.NewFakeAsyncOnlyDisposable()
+	r.disp.TrackAsync(v)
+	return v
+}
+
+func (r *Root) NewFakeSyncAsyncDisposable() *fakes.FakeSyncAsyncDisposable {
+	v := fakes.NewFakeSyncAsyncDisposable()
+	r.disp.Track(v)
+	return v
+}
+
 func (r *Root) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -302,6 +315,10 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
+	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+		return r.NewFakeAsyncOnlyDisposable()
+	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+		return r.NewFakeSyncAsyncDisposable()
 	}
 	return nil
 }
@@ -363,6 +380,10 @@ func (r *Root) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.ISelfComparable]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+		return true
+	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+		return true
+	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 		return true
 	}
 	return false
@@ -553,6 +574,10 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), r.NewFakeOpenGenericService_fakes_IGenSlotB(), r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 			return []any{r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
+		case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+			return []any{r.NewFakeAsyncOnlyDisposable()}
+		case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+			return []any{r.NewFakeSyncAsyncDisposable()}
 		}
 		return nil
 	}
@@ -651,6 +676,15 @@ func (r *Root) Close() error {
 	return r.closeErr
 }
 
+func (r *Root) CloseAsync(ctx context.Context) error {
+	if r.closed {
+		return r.closeErr
+	}
+	r.closed = true
+	r.closeErr = r.disp.CloseAllAsync(ctx)
+	return r.closeErr
+}
+
 type scope struct {
 	root                                               *Root
 	f_FakeScopedService                                fakes.IFakeScopedService
@@ -725,6 +759,10 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
+	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+		return s.NewFakeAsyncOnlyDisposable()
+	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+		return s.NewFakeSyncAsyncDisposable()
 	}
 	return nil
 }
@@ -786,6 +824,10 @@ func (s *scope) IsService(t reflect.Type) bool {
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
+		return true
+	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+		return true
+	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 		return true
 	}
 	return false
@@ -920,6 +962,10 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), s.NewFakeOpenGenericService_fakes_IGenSlotB(), s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 			return []any{s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
+		case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
+			return []any{s.NewFakeAsyncOnlyDisposable()}
+		case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+			return []any{s.NewFakeSyncAsyncDisposable()}
 		}
 		return nil
 	}
@@ -1018,6 +1064,15 @@ func (s *scope) Close() error {
 	return s.closeErr
 }
 
+func (s *scope) CloseAsync(ctx context.Context) error {
+	if s.closed {
+		return s.closeErr
+	}
+	s.closed = true
+	s.closeErr = s.disp.CloseAllAsync(ctx)
+	return s.closeErr
+}
+
 func (s *scope) NewFakeTransientService() fakes.IFakeTransientService {
 	return fakes.NewFakeTransientService()
 }
@@ -1098,6 +1153,18 @@ func (s *scope) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeO
 
 func (s *scope) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fakes.IFakeOpenGenericService[fakes.ISelfComparable] {
 	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](s.root.f_SelfComparable)
+}
+
+func (s *scope) NewFakeAsyncOnlyDisposable() *fakes.FakeAsyncOnlyDisposable {
+	v := fakes.NewFakeAsyncOnlyDisposable()
+	s.disp.TrackAsync(v)
+	return v
+}
+
+func (s *scope) NewFakeSyncAsyncDisposable() *fakes.FakeSyncAsyncDisposable {
+	v := fakes.NewFakeSyncAsyncDisposable()
+	s.disp.Track(v)
+	return v
 }
 
 func (s *scope) NewKeyedServiceOne__transient_() fakes.IKeyedService {

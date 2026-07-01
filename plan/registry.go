@@ -55,6 +55,14 @@ type Service struct {
 	// statically via types.Implements (AD-11). Story 2.1 only fills this field;
 	// the LIFO disposer that consumes it is Story 2.3.
 	Disposable bool
+	// AsyncDisposable records whether the implementation satisfies
+	// godi.AsyncDisposable (CloseAsync(context.Context) error), derived
+	// statically via types.Implements against the REAL interface type read from
+	// the godi package (Story 6.3, D-7 — not a hand-synthesized signature, since
+	// context.Context is a named type). A service may be BOTH Disposable and
+	// AsyncDisposable (a both-disposable); genlib emits the unchanged Track for
+	// the sync/both path and TrackAsync only for the async-only path (D-8).
+	AsyncDisposable bool
 	// Key holds the key expression source text for keyed registrations (AD-17).
 	// Empty = unkeyed service. The generator reads this from the AST via
 	// format.Node and emits it as a case expression in the keyed switch.

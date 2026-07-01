@@ -54,8 +54,8 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	// ── Group 8: ctor-dispose-in-flight (SPCT-16) ─────────────────────────
 	{ID: "SPCT-16", DotnetMethod: "GetService_DisposeOnSameThread_Throws", DotnetType: "Fact", GodiTest: "spec_container: SPCT-16 factory calls Close → subsequent resolve panics", Status: adapted, Note: "godi form-B factory calls p.Close() → closed guard triggers"},
 
-	// ── Group 9: async disposal (N/A → Story 6-3) ─────────────────────────
-	{ID: "SPCT-17", DotnetMethod: "AddDisposablesAndAsyncDisposables_DisposeAsync_AllDisposed", DotnetType: "Theory(2)", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3 (AR12)"},
+	// ── Group 9: async disposal (adapted @ Story 6-3) ─────────────────────
+	{ID: "SPCT-17", DotnetMethod: "AddDisposablesAndAsyncDisposables_DisposeAsync_AllDisposed", DotnetType: "Theory(2)", GodiTest: "conformance: TestConformanceAsyncDispose_LIFO_DifferentialEquivalence + runtime TestDisposerAsync_CloseAllAsync_LIFO_MixedSyncAsync", Status: adapted, Note: "6-3: mixed sync+async all-released via CloseAsync (Runtime engine, AD-6); Go CloseAsync(ctx) semantics, see ASYNC_DIVERGENCE"},
 
 	// ── Group 10: struct services (SPCT-18 to SPCT-21) ────────────────────
 	{ID: "SPCT-18", DotnetMethod: "WorksWithStructServices", DotnetType: "Theory(3)", GodiTest: "spec_container: SPCT-18 struct services three lifetimes (+ codegen path TestSPCT_StructServices_Codegen / cross-provider)", Status: covered, Note: "value-type service boxing verified on BOTH providers — struct registered in codegen registration.go, cross-provider differential equivalence asserts identical reflect.Type keying + boxing (AD-15)"},
@@ -69,26 +69,26 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	// ── Group 12: generic IEnumerable cache slot (SPCT-23) ────────────────
 	{ID: "SPCT-23", DotnetMethod: "GenericIEnumerableItemCachedInTheRightSlot", DotnetType: "Fact", GodiTest: "spec_container: TestSPCT_23_GenericSingletonCacheSlot", Status: covered, Note: "runtime-only: needs a SINGLETON closed generic (default container registers it transient); singleton-shared axis differentially verified by spec_test.go"},
 
-	// ── Group 13: async disposal on provider/scope (SPCT-24 to SPCT-35, N/A → Story 6-3) ──
-	{ID: "SPCT-24", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-25", DotnetMethod: "ProviderDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
+	// ── Group 13: async disposal on provider/scope (SPCT-24 to SPCT-35, adapted @ Story 6-3) ──
+	{ID: "SPCT-24", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "runtime: TestRT_RootCloseAsync_ReleasesAsyncOnlySingleton; conformance SPEC-001", Status: adapted, Note: "6-3: root CloseAsync calls service CloseAsync; Go CloseAsync(ctx)"},
+	{ID: "SPCT-25", DotnetMethod: "ProviderDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "runtime: TestRT_RootCloseAsync_PrefersAsyncOnBothImplementor; conformance SPEC-002", Status: adapted, Note: "6-3: prefer-async on both-disposable (D-4)"},
 	{ID: "SPCT-26", DotnetMethod: "ProviderDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-26 root Close idempotent", Status: covered, Note: "godi has only sync io.Closer (no async dispose to prefer over); the SPCT case asserts root Close idempotency — the io.Closer.Close-is-actually-called release semantics are verified by Story 2.3 (TestEmitDispose_* / disposer LIFO tests)"},
-	{ID: "SPCT-27", DotnetMethod: "ProviderDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-28", DotnetMethod: "ProviderScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-29", DotnetMethod: "ProviderScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
+	{ID: "SPCT-27", DotnetMethod: "ProviderDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "runtime: TestRT_RootClose_Sync_ErrorsOnAsyncOnlySingleton; conformance SPEC-003", Status: adapted, Note: "6-3 AC3: sync Close on async-only returns error naming CloseAsync (Go error, not InvalidOperationException)"},
+	{ID: "SPCT-28", DotnetMethod: "ProviderScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "runtime: TestRT_ScopeCloseAsync_LIFO_MixedSyncAsync; conformance SPEC-001", Status: adapted, Note: "6-3: scope CloseAsync calls service CloseAsync"},
+	{ID: "SPCT-29", DotnetMethod: "ProviderScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "conformance SPEC-002 (scope)", Status: adapted, Note: "6-3: scope prefer-async on both-disposable"},
 	{ID: "SPCT-30", DotnetMethod: "ProviderScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-30 scope Close idempotent", Status: covered, Note: "godi has only sync io.Closer; the SPCT case asserts scope Close idempotency — release semantics (io.Closer.Close called LIFO) verified by Story 2.3"},
-	{ID: "SPCT-31", DotnetMethod: "ProviderScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-32", DotnetMethod: "ProviderAsyncScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
-	{ID: "SPCT-33", DotnetMethod: "ProviderAsyncScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
+	{ID: "SPCT-31", DotnetMethod: "ProviderScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "conformance SPEC-003 (scope sync Close); codegen CG-003", Status: adapted, Note: "6-3 AC3: scope sync Close on async-only returns error"},
+	{ID: "SPCT-32", DotnetMethod: "ProviderAsyncScopeDisposeAsyncCallsDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "conformance SPEC-007 (AsyncScope wrapper over real scope)", Status: adapted, Note: "6-3: async-scope (godi.AsyncScope) CloseAsync releases via CloseAsync; maps AsyncServiceScopeTests"},
+	{ID: "SPCT-33", DotnetMethod: "ProviderAsyncScopeDisposeAsyncPrefersDisposeAsyncOnServices", DotnetType: "Fact", GodiTest: "conformance SPEC-007 + SPEC-002", Status: adapted, Note: "6-3: async-scope prefer-async on both-disposable"},
 	{ID: "SPCT-34", DotnetMethod: "ProviderAsyncScopeDisposePrefersServiceDispose", DotnetType: "Fact", GodiTest: "spec_container: SPCT-34 scope Close idempotent (dotnet CreateScope body equivalent)", Status: covered, Note: "dotnet test body actually uses CreateScope not CreateAsyncScope; equivalent to SPCT-30 — asserts scope Close idempotency, release semantics verified by Story 2.3"},
-	{ID: "SPCT-35", DotnetMethod: "ProviderAsyncScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
+	{ID: "SPCT-35", DotnetMethod: "ProviderAsyncScopeDisposeThrowsWhenOnlyDisposeAsyncImplemented", DotnetType: "Fact", GodiTest: "conformance SPEC-003 / codegen CG-003 (sync Close on async-only)", Status: adapted, Note: "6-3 AC3: async-scope sync Close on async-only returns error"},
 
 	// ── Group 14: factory singleton dispose + instance dispose (SPCT-36, SPCT-37) ──
 	{ID: "SPCT-36", DotnetMethod: "SingletonServiceCreatedFromFactoryIsDisposedWhenContainerIsDisposed", DotnetType: "Fact", GodiTest: "spec_container: SPCT-36 factory singleton disposed on root Close", Status: covered},
 	{ID: "SPCT-37", DotnetMethod: "SingletonServiceCreatedFromInstanceIsNotDisposedWhenContainerIsDisposed", DotnetType: "Fact", GodiTest: "spec_container: SPCT-37 godi form-B factory = tracked+disposed (adapted)", Status: adapted, Note: "godi has no raw instance registration; form-B factory output IS tracked"},
 
-	// ── Group 15: async dispose once (SPCT-38, N/A → Story 6-3) ───────────
-	{ID: "SPCT-38", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnceOnServices", DotnetType: "Fact", GodiTest: "", Status: na, Note: "IAsyncDisposable → Story 6-3"},
+	// ── Group 15: async dispose once (SPCT-38, adapted @ Story 6-3) ───────
+	{ID: "SPCT-38", DotnetMethod: "ProviderDisposeAsyncCallsDisposeAsyncOnceOnServices", DotnetType: "Fact", GodiTest: "runtime: TestRT_DisposeOnce_CloseFirst_ThenCloseAsyncNoOp / TestRT_DisposeOnce_CloseAsyncFirst_ThenCloseNoOp; codegen CG-004", Status: adapted, Note: "6-3 D-6: dispose-once via shared closed guard across Close/CloseAsync (first-caller-wins)"},
 
 	// ── Group 16: constrained open generic (SPCT-39) ──────────────────────
 	{ID: "SPCT-39", DotnetMethod: "ValidateOnBuild_True_ResolvesConstrainedOpenGeneric", DotnetType: "Theory(2)", GodiTest: "spec_container: SPCT-39 constrained open generic collection resolve (Story 4.2 coverage)", Status: covered, Note: "Story 4.2 already verified; this confirms coverage in SPCT context"},
@@ -105,7 +105,7 @@ var dotnetSPCTMethodMap = []spctMethodMapping{
 	{ID: "SPCT-44", DotnetMethod: "ResolveKeyedServiceWithKeyedParameter_MissingRegistrationButWithUnkeyedService", DotnetType: "Fact", GodiTest: "spec_container: SPCT-44 keyed dep missing does not fall through to unkeyed", Status: adapted, Note: "godi plan.Validate detects missing keyed dep (ValidateOnBuild=always)"},
 
 	// ── Group 20: ConditionalFact threading/concurrency (C1-C5, N/A NFR8) ─
-	{ID: "SPCT-C1", DotnetMethod: "GetAsyncService_DisposeAsyncOnSameThread_ThrowsAndDoesNotHangAndDisposeAsyncGetsCalled", DotnetType: "ConditionalFact", GodiTest: "", Status: na, Note: "NFR8 concurrency + IAsyncDisposable → Story 6-3"},
+	{ID: "SPCT-C1", DotnetMethod: "GetAsyncService_DisposeAsyncOnSameThread_ThrowsAndDoesNotHangAndDisposeAsyncGetsCalled", DotnetType: "ConditionalFact", GodiTest: "", Status: na, Note: "NFR8 concurrency: same-thread DisposeAsync threading semantics N/A (permanent, C-2); its async-release semantics are now covered by SPCT-24..38 (6-3)"},
 	{ID: "SPCT-C2", DotnetMethod: "GetService_DisposeOnSameThread_ThrowsAndDoesNotHangAndDisposeGetsCalled", DotnetType: "ConditionalFact", GodiTest: "", Status: na, Note: "NFR8 concurrency: threading-aware dispose test"},
 	{ID: "SPCT-C3", DotnetMethod: "GetRequiredService_ResolvingSameSingletonInTwoThreads_SameServiceReturned", DotnetType: "ConditionalFact", GodiTest: "", Status: na, Note: "NFR8: concurrent singleton resolution deferred to C-2"},
 	{ID: "SPCT-C4", DotnetMethod: "GetRequiredService_UsesSingletonAndLazyLocks_NoDeadlock", DotnetType: "ConditionalFact", GodiTest: "", Status: na, Note: "NFR8: deadlock detection deferred to C-2"},

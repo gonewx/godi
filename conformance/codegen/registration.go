@@ -167,6 +167,29 @@ func register() {
 	// 6.1 runtime-only gap.
 	godi.AddSingleton[fakes.ISelfComparable, fakes.SelfComparable](&r)
 	AddSelfReferencingConstrainedService[fakes.ISelfComparable](&r)
+
+	// Story 6-3 (AC5/AC6, AD-15 codegen coverage): async-disposable services on
+	// the codegen path. Registered by POINTER type so the service key matches the
+	// spec test's reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]() and the emitted
+	// field is concrete (TrackAsync passes it directly, no interface assertion).
+	//
+	// TRANSIENT — not scoped — deliberately: codegen EAGERLY materializes every
+	// scoped service in CreateScope, so a scoped async-only service in this SHARED
+	// container would make every sync scope.Close error (AC3: "only implements
+	// AsyncDisposable"), breaking Story 2.3's sync dispose tests. Transient stays
+	// lazy (tracked only when the async tests explicitly resolve it), preserving
+	// Story 2.3 zero-regression (AC6) while still exercising scope-level async
+	// release: the async tests resolve these FROM a scope, so that scope's disposer
+	// tracks them and scope.CloseAsync releases them (AC2). The runtime spec oracle
+	// registers them scoped; the axis under test (async release / prefer-async /
+	// LIFO / sync-errors) is observably identical across both (AD-15).
+	//
+	// async-only is registered BEFORE both so the resolve/track order makes the
+	// LIFO release sequence [both, async-only]. FakeAsyncOnlyDisposable is
+	// async-only (CloseAsync, no io.Closer → sync Close errors, AC3);
+	// FakeSyncAsyncDisposable is both (prefer-async under CloseAsync, AC2).
+	godi.AddTransient[*fakes.FakeAsyncOnlyDisposable, fakes.FakeAsyncOnlyDisposable](&r)
+	godi.AddTransient[*fakes.FakeSyncAsyncDisposable, fakes.FakeSyncAsyncDisposable](&r)
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper
