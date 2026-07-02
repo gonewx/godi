@@ -46,10 +46,15 @@ type Service struct {
 	// from the constructor's *types.Signature, and emitNewRoot uses it to switch
 	// between `r.f_X = Ctor(...)` and the comma-err `r.f_X, err = Ctor(...)` form.
 	CtorErr bool
-	// FactoryExpr holds the form-B factory argument expression (go/ast source
-	// text) when this service was registered via AddSingletonFactory. When
-	// non-empty, genlib inlines it as `r.f_X = (FactoryExpr)(r)` (D-2) instead of
-	// discovering a New{Impl} constructor; Ctor/Deps are then unused for wiring.
+	// FactoryExpr holds the form-B factory argument expression (source text,
+	// rewritten by the generator for the emitted package: helper type
+	// parameters closed, package qualifiers remapped to the emitted file's
+	// import identifiers) when this service was registered via
+	// Add{Lifetime}Factory. When non-empty, genlib inlines it as
+	// `r.f_X = (FactoryExpr)(r)` (D-2) instead of discovering a New{Impl}
+	// constructor; Deps then carries only ORDERING constraints (the services the
+	// factory body Gets, so SingletonsTopo/ScopedTopo assemble them first) and
+	// is never rendered as call arguments.
 	FactoryExpr string
 	// Disposable records whether the implementation satisfies io.Closer, derived
 	// statically via types.Implements (AD-11). Story 2.1 only fills this field;
@@ -74,8 +79,11 @@ type Service struct {
 type Registry struct {
 	// Imports lists the third-party / project-local import paths the emitted
 	// container needs (service packages whose types appear in field decls,
-	// constructor calls, or accessor signatures). The codegen pipeline always
-	// emits "reflect" and "github.com/gonewx/godi" on its own; Imports carries
+	// constructor calls, or accessor signatures). An entry is a plain path, or
+	// "alias path" (space-separated) when the generator renamed a package whose
+	// declared name clashes with another import — emitImports splits on the
+	// space and emits `alias "path"`. The codegen pipeline always emits
+	// "reflect" and "github.com/gonewx/godi" on its own; Imports carries
 	// only the user-supplied service packages. Order is preserved and
 	// duplicates deduped at emit time.
 	//

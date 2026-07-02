@@ -155,8 +155,10 @@ func emitHeader(buf *bytes.Buffer, pkgName string) {
 
 // emitImports writes the import block. "reflect" and the host godi package are
 // always required (six-method contract uses reflect.Type and godi.Provider /
-// godi.Scope); userImports carries service-package paths. Paths are deduped and
-// service packages sorted for stable output.
+// godi.Scope); userImports carries service-package paths — a plain path, or
+// "alias path" (space-separated) when the generator renamed a package whose
+// declared name clashes with another import (two service packages both named
+// options). Paths are deduped and service packages sorted for stable output.
 func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync bool) {
 	uniq := make(map[string]struct{}, len(userImports)+3)
 	uniq["reflect"] = struct{}{}
@@ -165,18 +167,26 @@ func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync 
 		uniq["github.com/gonewx/godi/runtime"] = struct{}{}
 		uniq["io"] = struct{}{}
 	}
-	sorted := make([]string, 0, len(userImports))
+	type userImport struct {
+		alias string // "" for a plain import
+		path  string
+	}
+	sorted := make([]userImport, 0, len(userImports))
 	for _, p := range userImports {
 		if p == "" {
 			continue
 		}
-		if _, seen := uniq[p]; seen {
+		imp := userImport{path: p}
+		if i := strings.IndexByte(p, ' '); i >= 0 {
+			imp.alias, imp.path = p[:i], p[i+1:]
+		}
+		if _, seen := uniq[imp.path]; seen {
 			continue
 		}
-		uniq[p] = struct{}{}
-		sorted = append(sorted, p)
+		uniq[imp.path] = struct{}{}
+		sorted = append(sorted, imp)
 	}
-	sort.Strings(sorted)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].path < sorted[j].path })
 
 	fmt.Fprintf(buf, "import (\n")
 	if hasAsync {
@@ -190,8 +200,12 @@ func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync 
 	if disposables {
 		fmt.Fprintf(buf, "\t\"github.com/gonewx/godi/runtime\"\n")
 	}
-	for _, p := range sorted {
-		fmt.Fprintf(buf, "\t%q\n", p)
+	for _, imp := range sorted {
+		if imp.alias != "" {
+			fmt.Fprintf(buf, "\t%s %q\n", imp.alias, imp.path)
+			continue
+		}
+		fmt.Fprintf(buf, "\t%q\n", imp.path)
 	}
 	fmt.Fprintf(buf, ")\n\n")
 }

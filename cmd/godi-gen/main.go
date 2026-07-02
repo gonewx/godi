@@ -80,7 +80,7 @@ func generate(srcDir, pkgName string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := buildRegistry(pkg)
+	reg, err := buildRegistry(pkg, pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -123,20 +123,35 @@ type registration struct {
 	form     string        // "A" (AddSingleton[I,Impl]) or "B" (AddSingletonFactory[I])
 	lifetime plan.Lifetime // derived from marker name: AddScoped*→Scoped, etc.
 	pos      token.Pos     // marker position — sorted on for determinism (deferred 1.1)
+	seq      int           // secondary sort key: body order of a multi-marker helper's registrations (0 for direct markers)
 	iType    types.Type    // service type (first type argument)
 	implType types.Type    // form A only: implementation type (second type argument)
 	factory  ast.Expr      // form B only: the factory argument expression
 	keyed    bool          // true for AddKeyed* markers
 	keyExpr  ast.Expr      // keyed only: the key argument expression
 	keyText  string        // keyed only: rendered key expression source text
+
+	// factoryTP/factoryTA carry the per-service helper's type parameters and the
+	// call's closed type arguments for a form-B marker forwarded from a helper
+	// body (Mechanism A): the factory expression text still mentions the type
+	// parameters (NewMonitor[T], GetServices[Configure[T]]), so buildRegistry
+	// rewrites T → the closed type when inlining. nil for a direct marker.
+	factoryTP *types.TypeParamList
+	factoryTA *types.TypeList
 }
 
 // buildRegistry turns the package's DSL markers into a validated-input
 // plan.Registry. It maps each form-A constructor's dependency parameters back to
 // registered service names, derives CtorErr / Disposable from go/types, and
-// inlines form-B factory expressions (D-2). A form-A service with no New{Impl}
-// aggregates into a generation error (AC2).
-func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
+// inlines form-B factory expressions (D-2) — rewritten for the emitted package
+// (helper type-parameter closure, package qualification, import aliases). A
+// form-A service with no New{Impl} aggregates into a generation error (AC2).
+//
+// pkgName is the package the container is emitted into. When it equals the
+// analyzed package's name the container joins the registration package (the
+// //go:generate-in-place layout), so a factory body's bare identifiers stay
+// bare; otherwise they gain the registration package's qualifier.
+func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error) {
 	regs := collectRegistrations(pkg)
 
 	// NFR2: a package with zero recognized DSL markers must be rejected — emitting
@@ -179,13 +194,17 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 	// the service interface (I) and the implementation (Impl, and *Impl) are
 	// indexed so a constructor may inject either form. Keyed services are NOT
 	// indexed here — keyed and unkeyed are independent namespaces (D-3).
+	// elemIndex additionally maps a service type to ALL registrations carrying it
+	// (multi-impl), for factoryDeps' GetServices ordering constraints.
 	depIndex := make(map[string]string, len(regs)*2)
+	elemIndex := make(map[string][]string, len(regs))
 	for _, rg := range regs {
 		if rg.keyed {
 			continue
 		}
 		name := serviceName(rg)
 		depIndex[typeKey(rg.iType)] = name
+		elemIndex[typeKey(rg.iType)] = append(elemIndex[typeKey(rg.iType)], name)
 		if rg.form == "A" && rg.implType != nil {
 			depIndex[typeKey(rg.implType)] = name
 			depIndex[typeKey(types.NewPointer(rg.implType))] = name
@@ -271,9 +290,27 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 						"(would emit illegal field name f_%s)", s.GoType, s.Name))
 				continue
 			}
-			// Form B escape hatch (D-2): inline the factory expression verbatim;
-			// no New{Impl} discovery, no dependency reading.
-			s.FactoryExpr = renderExpr(pkg.Fset, rg.factory)
+			// Form B escape hatch (D-2): inline the factory expression, rewritten
+			// for the emitted package — helper type parameters closed, package
+			// qualifiers remapped to the emitted file's import aliases, and (when
+			// emitting into a different package) bare registration-package
+			// identifiers qualified. No New{Impl} discovery.
+			factoryText, ferr := rewriteFactoryExpr(pkg, rg.factory, rg.factoryTP, rg.factoryTA, imports, pkgName == pkg.Name)
+			if ferr != nil {
+				genErrs = append(genErrs, fmt.Sprintf(
+					"form-B service %q: %v", s.Name, ferr))
+				continue
+			}
+			s.FactoryExpr = factoryText
+			// The factory's godi.Get… calls are read as ORDERING dependencies
+			// (SingletonsTopo / ScopedTopo): an unkeyed form-B singleton assembled
+			// before a singleton its inlined factory Gets would read a nil field
+			// (AD-15). Keyed registrations are skipped — keyed wiring blocks
+			// already assemble after the unkeyed ones, and keyed deps live in an
+			// independent namespace (D-3).
+			if !rg.keyed {
+				s.Deps = factoryDeps(pkg, rg.factory, rg.factoryTP, rg.factoryTA, depIndex, elemIndex)
+			}
 			reg.Service(s)
 			continue
 		}
@@ -357,7 +394,9 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			continue
 		}
 
-		s.Ctor = implPkg.Name() + ".New" + implName
+		// Qualify the ctor by the emitted file's identifier for its package —
+		// the assigned alias when the package's name clashes with another import.
+		s.Ctor = imports.aliasOf(implPkg) + ".New" + implName
 		if typeArgs := impl.TypeArgs(); typeArgs != nil && typeArgs.Len() > 0 {
 			args := make([]string, typeArgs.Len())
 			for i := range args {
@@ -365,7 +404,6 @@ func buildRegistry(pkg *packages.Package) (*plan.Registry, error) {
 			}
 			s.Ctor += "[" + strings.Join(args, ", ") + "]"
 		}
-		imports.addPackage(implPkg)
 		s.Deps = constructorDeps(sig, depIndex, imports)
 		s.CtorErr = hasTrailingError(sig)
 		s.Disposable = implementsCloser(rg.implType)
@@ -452,7 +490,12 @@ func collectRegistrations(pkg *packages.Package) []registration {
 		if pi.Filename != pj.Filename {
 			return pi.Filename < pj.Filename
 		}
-		return pi.Offset < pj.Offset
+		if pi.Offset != pj.Offset {
+			return pi.Offset < pj.Offset
+		}
+		// Same position = registrations reduced from ONE multi-marker helper
+		// call; seq keeps them in helper-body order.
+		return out[i].seq < out[j].seq
 	})
 	return out
 }
@@ -567,33 +610,45 @@ func genericCallee(call *ast.CallExpr) *ast.Ident {
 }
 
 // readPerServiceHelper recognizes a per-service open-generic helper call
-// (Mechanism A, AC1) and reduces it to the closed registration it denotes.
+// (Mechanism A, AC1) and reduces it to the closed registrations it denotes.
 //
-// A per-service helper is a generic function DEFINED IN THE ANALYZED PACKAGE whose
-// body is a single `return godi.Add{Lifetime}[I[T…], Impl[T…]](r)` forwarder. The
-// generator follows the forwarder, reads the OUTER call's type arguments
-// (AddRepository[User] → [User]), and substitutes the helper's type parameters in
-// the inner marker's type arguments via types.Instantiate to materialize the
-// closed (IRepository[User], Repository[User]) registration — which then flows
-// through the SAME form-A pipeline as a hand-written closed marker (AD-14).
+// A per-service helper is a generic function DEFINED IN THE ANALYZED PACKAGE
+// whose body is a sequence of godi.Add… marker statements (each an expression
+// statement or a `return <marker>`; a final `return r` of the registry
+// parameter is also allowed). The generator reads the OUTER call's type
+// arguments (AddRepository[User] → [User]) and substitutes the helper's type
+// parameters in each inner marker's type arguments via types.Instantiate to
+// materialize the closed registrations — form A flows through the SAME pipeline
+// as a hand-written closed marker (AD-14); a form-B (factory) marker carries
+// its factory expression plus the substitution context, and buildRegistry
+// rewrites the factory text (T → closed type) when inlining.
 //
 // handled=true means the call is (or clearly intends to be) a helper, so the
 // caller does not additionally warn; handled=false means it is an ordinary
 // non-godi generic call (reflect.TypeFor, …) the caller treats by its
 // suspected-name rule.
 //
-// Story 4.1 scope: helpers in the analyzed package, forwarding to a single UNKEYED
-// form-A marker, single type parameter. Cross-package helpers, keyed/factory
-// forwarders, and multi/permuted type parameters are deferred — warned, never
-// silently dropped (NFR2) — and recorded in deferred-work.md.
+// Scope: helpers in the analyzed package, forwarding to UNKEYED markers (form A
+// and form B), single type parameter. Cross-package helpers, keyed forwarders,
+// and multi/permuted type parameters remain deferred — warned, never silently
+// dropped (NFR2) — and recorded in deferred-work.md. Any unsupported marker
+// skips the WHOLE helper call: materializing a subset of the helper's
+// registrations would hand the user a container silently missing services.
 func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.Ident, fn *types.Func) (regs []registration, handled bool) {
 	decl := findFuncDecl(pkg, fn)
 	if decl == nil || decl.Body == nil {
 		return nil, false // not defined in the analyzed package (e.g. reflect.TypeFor)
 	}
-	innerIdent, innerFn := helperForwardMarker(pkg, decl)
-	if innerFn == nil {
-		return nil, false // body is not a single-statement godi forwarder — ordinary func
+	markers, pure := helperBodyMarkers(pkg, decl)
+	if len(markers) == 0 {
+		return nil, false // body forwards to no godi marker — ordinary func
+	}
+	if !pure {
+		warnUnrecognized(pkg, call, true,
+			"per-service helper body mixes godi markers with other statements — "+
+				"mixed bodies are deferred; every statement must be a godi.Add… call "+
+				"(or a final `return r`)")
+		return nil, true
 	}
 
 	// From here the call is INTENDED as a per-service helper; any shortfall is a
@@ -623,38 +678,67 @@ func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.
 		return nil, true
 	}
 
-	markerName := innerFn.Name()
-	switch markerName {
-	case "AddSingleton", "AddScoped", "AddTransient":
-		// supported (Story 4.1): unkeyed form-A
-	default:
-		warnUnrecognized(pkg, call, true, fmt.Sprintf(
-			"per-service helper forwards to %s — Story 4.1 supports only unkeyed form-A "+
-				"Add{Singleton,Scoped,Transient}[I, Impl] helpers (keyed / factory / "+
-				"constrained forwarders are deferred)", markerName))
-		return nil, true
+	for i, m := range markers {
+		markerName := m.fn.Name()
+		innerInst, instOK := pkg.TypesInfo.Instances[m.ident]
+
+		switch markerName {
+		case "AddSingleton", "AddScoped", "AddTransient":
+			if !instOK || innerInst.TypeArgs == nil || innerInst.TypeArgs.Len() != 2 {
+				warnUnrecognized(pkg, call, true,
+					"per-service helper's form-A marker must have [I, Impl] type arguments")
+				return nil, true
+			}
+			innerArgs := innerInst.TypeArgs
+			iClosed, err1 := substituteTypeParams(innerArgs.At(0), tparams, outerArgs)
+			implClosed, err2 := substituteTypeParams(innerArgs.At(1), tparams, outerArgs)
+			if err1 != nil || err2 != nil {
+				warnUnrecognized(pkg, call, true, fmt.Sprintf(
+					"per-service helper type substitution failed: %v / %v", err1, err2))
+				return nil, true
+			}
+			// pos is the OUTER helper call (distinct per closure); seq keeps the
+			// helper-body marker order within one closure (collectRegistrations
+			// sorts on both).
+			regs = append(regs, registration{
+				form: "A", lifetime: lifetimeFromName(markerName), pos: call.Pos(), seq: i,
+				iType: iClosed, implType: implClosed,
+			})
+
+		case "AddSingletonFactory", "AddScopedFactory", "AddTransientFactory":
+			if !instOK || innerInst.TypeArgs == nil || innerInst.TypeArgs.Len() != 1 {
+				warnUnrecognized(pkg, call, true,
+					"per-service helper's form-B marker must have an [I] type argument")
+				return nil, true
+			}
+			if len(m.call.Args) < 2 {
+				warnUnrecognized(pkg, call, true,
+					"per-service helper's form-B marker has no factory argument")
+				return nil, true
+			}
+			iClosed, err := substituteTypeParams(innerInst.TypeArgs.At(0), tparams, outerArgs)
+			if err != nil {
+				warnUnrecognized(pkg, call, true, fmt.Sprintf(
+					"per-service helper type substitution failed: %v", err))
+				return nil, true
+			}
+			regs = append(regs, registration{
+				form: "B", lifetime: lifetimeFromName(markerName), pos: call.Pos(), seq: i,
+				iType: iClosed, factory: m.call.Args[1],
+				factoryTP: tparams, factoryTA: outerArgs,
+			})
+
+		default:
+			warnUnrecognized(pkg, call, true, fmt.Sprintf(
+				"per-service helper forwards to %s — only unkeyed "+
+					"Add{Singleton,Scoped,Transient}[I, Impl] and "+
+					"Add{Singleton,Scoped,Transient}Factory[I] helpers are supported "+
+					"(keyed forwarders are deferred)", markerName))
+			return nil, true
+		}
 	}
 
-	innerInst, ok := pkg.TypesInfo.Instances[innerIdent]
-	if !ok || innerInst.TypeArgs == nil || innerInst.TypeArgs.Len() != 2 {
-		warnUnrecognized(pkg, call, true,
-			"per-service helper's form-A marker must have [I, Impl] type arguments")
-		return nil, true
-	}
-	innerArgs := innerInst.TypeArgs
-
-	iClosed, err1 := substituteTypeParams(innerArgs.At(0), tparams, outerArgs)
-	implClosed, err2 := substituteTypeParams(innerArgs.At(1), tparams, outerArgs)
-	if err1 != nil || err2 != nil {
-		warnUnrecognized(pkg, call, true, fmt.Sprintf(
-			"per-service helper type substitution failed: %v / %v", err1, err2))
-		return nil, true
-	}
-
-	return []registration{{
-		form: "A", lifetime: lifetimeFromName(markerName), pos: call.Pos(),
-		iType: iClosed, implType: implClosed,
-	}}, true
+	return regs, true
 }
 
 // findFuncDecl returns the *ast.FuncDecl in the analyzed package that declares
@@ -676,37 +760,76 @@ func findFuncDecl(pkg *packages.Package, fn *types.Func) *ast.FuncDecl {
 	return nil
 }
 
-// helperForwardMarker extracts the single godi marker a helper body forwards to:
-// the body must be exactly one `return <call>` statement whose call resolves to a
-// godi.Add… marker. It returns the inner callee ident and resolved marker
-// *types.Func, or (nil, nil) when the body is not a single-statement godi
-// forwarder (the signal that the function is an ordinary generic function, not a
-// per-service helper).
-func helperForwardMarker(pkg *packages.Package, decl *ast.FuncDecl) (*ast.Ident, *types.Func) {
-	if decl.Body == nil || len(decl.Body.List) != 1 {
-		return nil, nil
+// helperMarker is one godi.Add… marker statement inside a per-service helper
+// body: the marker call, its generic-callee ident, and the resolved godi
+// *types.Func.
+type helperMarker struct {
+	call  *ast.CallExpr
+	ident *ast.Ident
+	fn    *types.Func
+}
+
+// helperBodyMarkers extracts the godi markers a helper body forwards to, in
+// body order. A recognized body consists of statements that are each one of:
+//
+//   - an expression statement whose call resolves to a godi.Add… marker
+//     (godi.AddSingleton[I[T], Impl[T]](r) — the multi-statement form), or
+//   - a `return <marker call>` (the classic single-statement forwarder, or a
+//     multi-statement body's final registration), or
+//   - a final `return r` returning the registry parameter unchanged.
+//
+// pure=false reports a body that contains AT LEAST one marker statement but
+// also statements outside this shape — the caller warns and defers instead of
+// materializing a partial registration set (NFR2). A body with NO marker
+// statements returns (nil, whatever): it is an ordinary generic function, not a
+// helper.
+func helperBodyMarkers(pkg *packages.Package, decl *ast.FuncDecl) (markers []helperMarker, pure bool) {
+	pure = true
+	if decl.Body == nil {
+		return nil, true
 	}
-	ret, ok := decl.Body.List[0].(*ast.ReturnStmt)
-	if !ok || len(ret.Results) != 1 {
-		return nil, nil
+	for i, stmt := range decl.Body.List {
+		var result ast.Expr
+		switch st := stmt.(type) {
+		case *ast.ExprStmt:
+			result = st.X
+		case *ast.ReturnStmt:
+			if len(st.Results) != 1 {
+				pure = false
+				continue
+			}
+			result = st.Results[0]
+			// A final bare `return r` (any lone identifier — the type checker
+			// already constrains it to the declared result type) carries no
+			// marker and is part of the recognized shape.
+			if _, isIdent := result.(*ast.Ident); isIdent && i == len(decl.Body.List)-1 {
+				continue
+			}
+		default:
+			pure = false
+			continue
+		}
+		if paren, ok := result.(*ast.ParenExpr); ok {
+			result = paren.X
+		}
+		inner, ok := result.(*ast.CallExpr)
+		if !ok {
+			pure = false
+			continue
+		}
+		innerIdent := genericCallee(inner)
+		if innerIdent == nil {
+			pure = false
+			continue
+		}
+		innerFn, ok := pkg.TypesInfo.Uses[innerIdent].(*types.Func)
+		if !ok || innerFn.Pkg() == nil || innerFn.Pkg().Path() != godiPkgPath {
+			pure = false
+			continue
+		}
+		markers = append(markers, helperMarker{call: inner, ident: innerIdent, fn: innerFn})
 	}
-	result := ret.Results[0]
-	if paren, ok := result.(*ast.ParenExpr); ok {
-		result = paren.X
-	}
-	inner, ok := result.(*ast.CallExpr)
-	if !ok {
-		return nil, nil
-	}
-	innerIdent := genericCallee(inner)
-	if innerIdent == nil {
-		return nil, nil
-	}
-	innerFn, ok := pkg.TypesInfo.Uses[innerIdent].(*types.Func)
-	if !ok || innerFn.Pkg() == nil || innerFn.Pkg().Path() != godiPkgPath {
-		return nil, nil
-	}
-	return innerIdent, innerFn
+	return markers, pure
 }
 
 // substituteTypeParams returns t with every helper type parameter (tparams[i])
@@ -1099,15 +1222,14 @@ func asyncDisposableInterface(pkg *packages.Package) *types.Interface {
 	return iface
 }
 
-// renderType renders t as emit-ready Go source, package-qualified by package
-// name (fakes.IFakeService, *svc.Dep), and records each referenced package in
-// imports as a side effect. types.TypeString handles pointers, qualified names,
-// and closed generic instances correctly (deferred 1.1 robustness).
+// renderType renders t as emit-ready Go source, package-qualified by the
+// identifier the emitted file imports each package under (normally its name;
+// an assigned alias when two service packages share a name), and records each
+// referenced package in imports as a side effect. types.TypeString handles
+// pointers, qualified names, and closed generic instances correctly (deferred
+// 1.1 robustness).
 func renderType(t types.Type, imports *importSet) string {
-	return types.TypeString(t, func(p *types.Package) string {
-		imports.addPackage(p)
-		return p.Name()
-	})
+	return types.TypeString(t, imports.aliasOf)
 }
 
 // typeKey is a fully-package-path-qualified rendering used only as a map key for
@@ -1141,31 +1263,299 @@ func renderExpr(fset *token.FileSet, expr ast.Expr) string {
 	return b.String()
 }
 
-// importSet collects service-package import paths in first-seen order, deduped.
-// genlib's emitImports sorts and re-dedupes (and always adds reflect + godi), so
-// only the user service packages need to flow through here.
+// textEdit is one span replacement inside a factory expression's source range.
+type textEdit struct {
+	pos, end token.Pos
+	text     string
+}
+
+// rewriteFactoryExpr renders a form-B factory expression as it must read inside
+// the emitted container package:
+//
+//  1. helper type parameters (tparams/targs non-nil — the marker was forwarded
+//     from a per-service helper) are replaced with the closed type's rendering
+//     (NewMonitor[T] → NewMonitor[*options.MyCfg]);
+//  2. package-qualifier identifiers are remapped to the identifier the emitted
+//     file imports that package under (a registration file's `optspkg.X` → the
+//     assigned alias; an aliased godi import → godi), and the import recorded;
+//  3. when the container is emitted into a DIFFERENT package than the
+//     registration (samePkg=false), bare identifiers referring to the analyzed
+//     package's own top-level declarations gain its qualifier — the gap that
+//     made the verbatim inline non-compilable (deferred-work.md "form-B codegen
+//     完整支持依赖型/跨包工厂" qualification half).
+//
+// With no applicable edits the format.Node rendering renderExpr produced before
+// this extension is returned unchanged, keeping prior output byte-identical
+// (AD-14 regen determinism). With edits, the ORIGINAL source span is spliced —
+// genlib's final format.Source normalizes whitespace.
+func rewriteFactoryExpr(pkg *packages.Package, expr ast.Expr, tparams *types.TypeParamList, targs *types.TypeList, imports *importSet, samePkg bool) (string, error) {
+	if expr == nil {
+		return "", fmt.Errorf("factory argument expression is missing")
+	}
+
+	// Identifiers that must never be qualified or rewritten: a selector's Sel
+	// (method/field access — x.Foo), and a composite literal's field keys
+	// (Struct{Field: v}).
+	skip := make(map[*ast.Ident]struct{})
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch e := n.(type) {
+		case *ast.SelectorExpr:
+			skip[e.Sel] = struct{}{}
+		case *ast.CompositeLit:
+			for _, elt := range e.Elts {
+				if kv, ok := elt.(*ast.KeyValueExpr); ok {
+					if key, ok := kv.Key.(*ast.Ident); ok {
+						skip[key] = struct{}{}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	var edits []textEdit
+	var editErr error
+	ast.Inspect(expr, func(n ast.Node) bool {
+		id, ok := n.(*ast.Ident)
+		if !ok || editErr != nil {
+			return editErr == nil
+		}
+		if _, skipped := skip[id]; skipped {
+			return true
+		}
+		obj := pkg.TypesInfo.Uses[id]
+		if obj == nil {
+			return true
+		}
+
+		// (1) helper type parameter → closed type text.
+		if tn, isType := obj.(*types.TypeName); isType && tparams != nil {
+			if tp, isParam := tn.Type().(*types.TypeParam); isParam {
+				for i := 0; i < tparams.Len(); i++ {
+					if tparams.At(i).Obj() != tp.Obj() {
+						continue
+					}
+					closed := targs.At(i)
+					edits = append(edits, textEdit{pos: id.Pos(), end: id.End(), text: renderType(closed, imports)})
+					return true
+				}
+				editErr = fmt.Errorf("factory expression mentions type parameter %s not bound by the helper call", id.Name)
+				return false
+			}
+		}
+
+		// (2) package qualifier → the emitted file's identifier for that package.
+		if pn, isPkg := obj.(*types.PkgName); isPkg {
+			alias := imports.aliasOf(pn.Imported())
+			if alias != id.Name {
+				edits = append(edits, textEdit{pos: id.Pos(), end: id.End(), text: alias})
+			}
+			return true
+		}
+
+		// (3) cross-package emit: qualify the registration package's own
+		// top-level identifiers.
+		if !samePkg && obj.Pkg() == pkg.Types && obj.Parent() == pkg.Types.Scope() {
+			edits = append(edits, textEdit{pos: id.Pos(), end: id.End(), text: imports.aliasOf(pkg.Types) + "." + id.Name})
+		}
+		return true
+	})
+	if editErr != nil {
+		return "", editErr
+	}
+	if len(edits) == 0 {
+		return renderExpr(pkg.Fset, expr), nil
+	}
+
+	src, err := exprSourceSpan(pkg, expr)
+	if err != nil {
+		return "", err
+	}
+	// Apply right-to-left so earlier offsets stay valid.
+	sort.Slice(edits, func(i, j int) bool { return edits[i].pos > edits[j].pos })
+	base := pkg.Fset.Position(expr.Pos()).Offset
+	out := []byte(src)
+	for _, e := range edits {
+		lo := pkg.Fset.Position(e.pos).Offset - base
+		hi := pkg.Fset.Position(e.end).Offset - base
+		if lo < 0 || hi > len(out) || lo > hi {
+			return "", fmt.Errorf("factory expression rewrite: edit span out of range")
+		}
+		out = append(out[:lo], append([]byte(e.text), out[hi:]...)...)
+	}
+	return string(out), nil
+}
+
+// exprSourceSpan returns the original source bytes of expr's span, read from
+// the file that declares it. The generator holds ASTs, not file bytes, so the
+// span is re-read here; go/packages already parsed the same bytes.
+func exprSourceSpan(pkg *packages.Package, expr ast.Expr) (string, error) {
+	pos := pkg.Fset.Position(expr.Pos())
+	end := pkg.Fset.Position(expr.End())
+	if pos.Filename == "" || pos.Filename != end.Filename {
+		return "", fmt.Errorf("factory expression rewrite: cannot locate source file for %v", pos)
+	}
+	data, err := os.ReadFile(pos.Filename)
+	if err != nil {
+		return "", fmt.Errorf("factory expression rewrite: %w", err)
+	}
+	if end.Offset > len(data) || pos.Offset > end.Offset {
+		return "", fmt.Errorf("factory expression rewrite: span exceeds %s", pos.Filename)
+	}
+	return string(data[pos.Offset:end.Offset]), nil
+}
+
+// factoryDeps reads a form-B factory expression for godi.Get / GetRequired /
+// GetServices calls and maps each resolvable requested type (helper type
+// parameters closed first) to the registered service Name(s) it denotes. The
+// names feed plan.Service.Deps for ORDERING only — SingletonsTopo/ScopedTopo
+// must assemble a form-B service AFTER the services its inlined factory Gets,
+// or the factory would read a still-nil field (AD-15; deferred-work.md "form-B
+// codegen 完整支持依赖型/跨包工厂" ordering half). The emit paths never render
+// form-B Deps as arguments (the factory text carries its own resolution calls).
+//
+// A requested type that resolves to no registered service adds no constraint —
+// GetServices over an unregistered element type legitimately yields an empty
+// slice (the AddOptions pattern's empty configure chain). Keyed Get* variants
+// are not scanned (keyed namespace, D-3).
+func factoryDeps(pkg *packages.Package, expr ast.Expr, tparams *types.TypeParamList, targs *types.TypeList, depIndex map[string]string, elemIndex map[string][]string) []string {
+	if expr == nil {
+		return nil
+	}
+	var deps []string
+	seen := make(map[string]struct{})
+	add := func(name string) {
+		if _, dup := seen[name]; dup {
+			return
+		}
+		seen[name] = struct{}{}
+		deps = append(deps, name)
+	}
+
+	ast.Inspect(expr, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident := genericCallee(call)
+		if ident == nil {
+			return true
+		}
+		fn, ok := pkg.TypesInfo.Uses[ident].(*types.Func)
+		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != godiPkgPath {
+			return true
+		}
+		inst, ok := pkg.TypesInfo.Instances[ident]
+		if !ok || inst.TypeArgs == nil || inst.TypeArgs.Len() == 0 {
+			return true
+		}
+		requested, err := substituteTypeParams(inst.TypeArgs.At(0), tparams, targs)
+		if err != nil {
+			return true // unhandled shape: no ordering constraint, factory still inlines
+		}
+		switch fn.Name() {
+		case "Get", "GetRequired":
+			if name, ok := depIndex[typeKey(requested)]; ok {
+				add(name)
+			}
+		case "GetServices":
+			for _, name := range elemIndex[typeKey(requested)] {
+				add(name)
+			}
+		}
+		return true
+	})
+	return deps
+}
+
+// importSet collects service-package imports in first-seen order, deduped, and
+// assigns each package the identifier the emitted file refers to it by. The
+// identifier is normally the package's declared name; when two packages share a
+// name (gois's options and config/options are BOTH package options) the later
+// one gets a numbered alias (options2) — without this the emitted file would
+// import two same-named packages and fail to compile. Names genlib's fixed
+// imports already bind (reflect, godi, io, context, runtime) are reserved.
+// genlib's emitImports sorts and re-dedupes (and always adds reflect + godi),
+// so only the user service packages need to flow through here.
 type importSet struct {
-	seen  map[string]struct{}
-	order []string
+	aliases map[string]string // package path → emitted identifier
+	taken   map[string]string // emitted identifier → package path (or "" for reserved)
+	order   []importEntry
+}
+
+type importEntry struct {
+	path  string
+	name  string // the package's declared name
+	alias string // the identifier the emitted file binds — == name when no clash
 }
 
 func newImportSet() *importSet {
-	return &importSet{seen: make(map[string]struct{})}
+	s := &importSet{
+		aliases: make(map[string]string),
+		taken:   make(map[string]string),
+	}
+	// Seed each name genlib's own imports may bind with the path that
+	// legitimately owns it: that exact path keeps its name (a factory body's
+	// reflect.TypeFor stays reflect — emitImports dedups against the fixed
+	// block), while ANOTHER package with the same declared name is renamed.
+	for name, owner := range map[string]string{
+		"reflect": "reflect",
+		"godi":    godiPkgPath,
+		"io":      "io",
+		"context": "context",
+		"runtime": godiPkgPath + "/runtime",
+	} {
+		s.taken[name] = owner
+	}
+	return s
 }
 
-func (s *importSet) addPackage(p *types.Package) {
+// aliasOf returns the identifier the emitted file refers to p by, assigning and
+// recording the import on first sight. The godi host package is always "godi"
+// (genlib imports it unconditionally; a registration file's own alias for godi
+// is remapped here).
+func (s *importSet) aliasOf(p *types.Package) string {
 	if p == nil {
-		return
+		return ""
 	}
 	path := p.Path()
-	if path == "" || path == godiPkgPath {
-		return
+	if path == godiPkgPath {
+		return "godi"
 	}
-	if _, ok := s.seen[path]; ok {
-		return
+	if path == "" {
+		return p.Name()
 	}
-	s.seen[path] = struct{}{}
-	s.order = append(s.order, path)
+	if a, ok := s.aliases[path]; ok {
+		return a
+	}
+	alias := p.Name()
+	for i := 2; ; i++ {
+		owner, clash := s.taken[alias]
+		if !clash || owner == path {
+			break
+		}
+		alias = fmt.Sprintf("%s%d", p.Name(), i)
+	}
+	s.aliases[path] = alias
+	s.taken[alias] = path
+	s.order = append(s.order, importEntry{path: path, name: p.Name(), alias: alias})
+	return alias
 }
 
-func (s *importSet) list() []string { return s.order }
+func (s *importSet) addPackage(p *types.Package) { _ = s.aliasOf(p) }
+
+// list renders the entries for plan.Registry.Imports: a plain path when the
+// package's declared name needs no rename, "alias path" (space-separated) when
+// the emitted file must bind it under an alias — genlib's emitImports splits on
+// the space and emits `alias "path"`.
+func (s *importSet) list() []string {
+	out := make([]string, 0, len(s.order))
+	for _, e := range s.order {
+		if e.alias == e.name {
+			out = append(out, e.path)
+			continue
+		}
+		out = append(out, e.alias+" "+e.path)
+	}
+	return out
+}

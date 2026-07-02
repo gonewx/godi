@@ -100,25 +100,26 @@ func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
 // Form B is the fallback: the generator statically reads the factory argument
 // expression and inlines it into NewRoot as `r.f_I = (factoryExpr)(r)` (D-2).
 //
-// KNOWN LIMITATION (deferred — see deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂"):
-// the generator inlines the factory expression VERBATIM without package-qualifying
-// identifiers from the registration package. For this fixture the factory body
-// references formbfix-local names (IWidget, NewWidget), so the inlined text is NOT
-// compilable inside the emitted `codegen` package. This test therefore pins the
-// EXACT (currently non-compilable) inline output to catch silent regressions and
-// deliberately does NOT assert the product compiles. The earlier
-// strings.Contains("r.f_") && strings.Contains("(r)") assertion was a tautology
-// that masked this gap; full form-B codegen (AST package-qualification +
-// dependency extraction) is a deferred follow-up.
+// Since the Task-0 godi-gen extension (gois story 2-1), inlining into a
+// DIFFERENT package than the registration package-qualifies the factory body's
+// registration-package identifiers (IWidget → formbfix.IWidget) and imports
+// that package — closing the deferred-work.md "form-B codegen 完整支持依赖型/跨包
+// 工厂" qualification gap that previously made this fixture's inline
+// non-compilable. This test pins the exact qualified inline plus the emitted
+// import.
 func TestGenerator_FormB_InlinesFactoryExpression(t *testing.T) {
 	src, err := generate("testdata/formb", "codegen")
 	testutil.NoError(t, err)
 
 	code := string(src)
 	testutil.True(t, strings.Contains(code,
-		"r.f_IWidget = (func(p godi.Provider) IWidget { return NewWidget() })(r)"),
-		"form-B factory expression must be inlined verbatim as (factoryExpr)(r) (D-2); the "+
-			"inlined identifiers are unqualified — a known deferred limitation (see deferred-work.md)")
+		"r.f_IWidget = (func(p godi.Provider) formbfix.IWidget { return formbfix.NewWidget() })(r)"),
+		"a form-B factory inlined into a different package must package-qualify "+
+			"registration-package identifiers (D-2 + Task-0 qualification)")
+	testutil.True(t, strings.Contains(code,
+		`"github.com/gonewx/godi/cmd/godi-gen/testdata/formb"`),
+		"the emitted container must import the registration package the qualified "+
+			"factory body references")
 }
 
 // TestGenerator_NoNewImpl_ExitsNonZero covers AC2/NFR2 at the PROCESS boundary.
