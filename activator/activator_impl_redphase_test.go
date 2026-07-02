@@ -1,6 +1,4 @@
-//go:build atdd_redphase
-
-// ATDD red-phase scaffold for Story 6.5 — ActivatorUtilities IMPL-LAYER
+// ATDD scaffold for Story 6.5 — ActivatorUtilities IMPL-LAYER
 // construction-selection detail (dotnet DI.Tests/ActivatorUtilitiesTests.cs).
 //
 // This file is DISTINCT from activator_redphase_test.go (Story 2.6, which ported

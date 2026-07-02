@@ -33,6 +33,11 @@ func CreateInstance[T any](provider godi.Provider, ctors []any, args ...any) (re
 		}
 	}()
 
+	if provider == nil {
+		var zero T
+		return zero, fmt.Errorf("activator: provider must not be nil (maps ArgumentNullException)")
+	}
+
 	if len(ctors) == 0 {
 		return zeroConstruct[T]()
 	}
@@ -135,7 +140,9 @@ func selectBestMatch(provider godi.Provider, candidates []ctor, args []any, targ
 
 	best := pickBest(matches)
 	if best == nil {
-		return nil, nil, fmt.Errorf("activator: ambiguous constructors — multiple equally-valid matches")
+		// dotnet: "Multiple constructors for type '{0}' were found with length {1}."
+		return nil, nil, fmt.Errorf("activator: multiple constructors for type %s were found with length %d",
+			targetType, bestMatchLength(matches))
 	}
 
 	if best.explicitMatched < len(args) {
@@ -237,6 +244,19 @@ func pickBest(matches []matchResult) *matchResult {
 
 	if ambiguous {
 		return nil
+	}
+	return best
+}
+
+// bestMatchLength reports the parameter count of the longest satisfiable ctor
+// among matches — the "best length" at which the ambiguity arose. Mirrors
+// dotnet's MultipleCtorsFoundWithBestLength message which names this length.
+func bestMatchLength(matches []matchResult) int {
+	best := 0
+	for i := range matches {
+		if n := matches[i].c.ft.NumIn(); n > best {
+			best = n
+		}
 	}
 	return best
 }
