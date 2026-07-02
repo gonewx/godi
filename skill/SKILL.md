@@ -114,7 +114,7 @@ Key rules:
 
 ### Open generic helpers (Mechanism A)
 
-For generic service types, define a per-service helper that forwards to a godi marker:
+For generic service types, define a per-service helper that forwards to godi markers:
 
 ```go
 func AddRepository[T any](r *godi.Registry) *godi.Registry {
@@ -129,6 +129,31 @@ func register() {
 ```
 
 The generator follows the helper, substitutes type arguments, and materializes the closed registrations.
+
+A helper body may contain **multiple marker statements**, mixing Form A and Form B — the way to register a service bundle (e.g. the dotnet Options "four-piece" pattern) in one call:
+
+```go
+func AddOptions[T Entity[T]](r *godi.Registry) *godi.Registry {
+    godi.AddSingleton[Options[T], UnnamedOptionsManager[T]](r)
+    godi.AddSingletonFactory[OptionsMonitor[T]](r, func(p godi.Provider) OptionsMonitor[T] {
+        return NewOptionsMonitor[T](
+            godi.GetRequired[OptionsFactory[T]](p),
+            godi.GetServices[ConfigureOptions[T]](p), // never-registered → empty slice, fine
+            godi.GetRequired[OptionsMonitorCache[T]](p),
+        )
+    })
+    godi.AddTransientFactory[OptionsFactory[T]](r, func(p godi.Provider) OptionsFactory[T] {
+        return NewOptionsFactory[T](godi.GetServices[ConfigureOptions[T]](p))
+    })
+    return godi.AddSingleton[OptionsMonitorCache[T], OptionsCache[T]](r)
+}
+```
+
+Guarantees:
+- Form-B factory text is rewritten on closure: `T` → the concrete type, package qualifiers remapped to the generated file's imports (two service packages sharing a name get numbered aliases automatically).
+- `godi.Get*` calls inside a factory body are read as **assembly-order dependencies** — a singleton factory may `GetRequired` a service registered later in the body (like the cache above); the generator assembles it first.
+
+Limits (generation-time warning, never a silent drop): helper must live in the analyzed package, single type parameter, unkeyed markers only, and every body statement must be a marker call (or a final `return r`).
 
 ## Resolution API
 
