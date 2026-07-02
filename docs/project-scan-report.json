@@ -1,0 +1,32 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-07-02T13:00:00Z",
+    "last_updated": "2026-07-02T13:00:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "deep",
+  "project_root": "/mnt/disk0/project/auth/godi",
+  "project_knowledge": "/mnt/disk0/project/auth/godi/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-07-02T13:00:00Z",
+      "summary": "Classified as monolith with 1 part, type=library, Go 1.27"
+    }
+  ],
+  "current_step": "step_2",
+  "findings": {
+    "project_classification": "monolith, 1 part, Go 1.27 library (DI framework)"
+  },
+  "project_types": [
+    {
+      "part_id": "godi",
+      "project_type_id": "library",
+      "display_name": "Go Library"
+    }
+  ],
+  "outputs_generated": ["project-scan-report.json"],
+  "resume_instructions": "Starting from step 2"
+}
