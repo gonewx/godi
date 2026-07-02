@@ -35,7 +35,7 @@ func CreateInstance[T any](provider godi.Provider, ctors []any, args ...any) (re
 
 	if provider == nil {
 		var zero T
-		return zero, fmt.Errorf("activator: provider must not be nil (maps ArgumentNullException)")
+		return zero, fmt.Errorf("activator: provider must not be nil")
 	}
 
 	if len(ctors) == 0 {

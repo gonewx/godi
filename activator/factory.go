@@ -67,6 +67,12 @@ func CreateFactory[T any](ctors []any, argTypes ...reflect.Type) (func(godi.Prov
 			}
 		}()
 
+		// maps ArgumentNullException — guard before any parameter resolution
+		if provider == nil {
+			var zero T
+			return zero, fmt.Errorf("activator: provider must not be nil")
+		}
+
 		paramValues := make([]reflect.Value, len(plan))
 		for i, p := range plan {
 			switch p.source {
@@ -77,10 +83,6 @@ func CreateFactory[T any](ctors []any, argTypes ...reflect.Type) (func(godi.Prov
 				}
 				paramValues[i] = reflect.ValueOf(args[p.argIndex])
 			case fromProvider:
-				if provider == nil {
-					var zero T
-					return zero, fmt.Errorf("activator: provider must not be nil (maps ArgumentNullException)")
-				}
 				paramType := fn.Type().In(i)
 				svc := provider.GetService(paramType)
 				if svc == nil {
