@@ -91,10 +91,12 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
 		emitKeyedTransientMethods(&buf, keyedTransients, "r", "*Root", reg, disposables)
 		emitTypedAccessors(&buf, singletons, scoped, "r", "*Root")
+		emitGenericGetMethods(&buf, "r", "*Root")
 		emitGetServiceLifetimes(&buf, singletons, scoped, transients, disposables)
 		emitIsServiceLifetimes(&buf, services)
 	} else {
 		emitTypedAccessors(&buf, singletons, nil, "r", "*Root")
+		emitGenericGetMethods(&buf, "r", "*Root")
 		emitGetServiceSingletonsOnly(&buf, singletons, disposables)
 		emitIsServiceSingletonsOnly(&buf, singletons)
 	}
@@ -871,6 +873,7 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	if !hasLifetimes {
 		emitScopeLegacy(buf)
 		emitTypedAccessors(buf, singletons, nil, "s", "*scope")
+		emitGenericGetMethods(buf, "s", "*scope")
 		return
 	}
 	emitScopeStruct(buf, scoped, disposables, keyedScoped)
@@ -885,6 +888,7 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 	emitTransientMethods(buf, transients, "s", "*scope", reg, disposables)
 	emitKeyedTransientMethods(buf, keyedTransients, "s", "*scope", reg, disposables)
 	emitTypedAccessors(buf, singletons, scoped, "s", "*scope")
+	emitGenericGetMethods(buf, "s", "*scope")
 }
 
 func emitScopeLegacy(buf *bytes.Buffer) {
@@ -1231,6 +1235,19 @@ func emitTypedAccessors(buf *bytes.Buffer, singletons, scoped []plan.Service, re
 		expr := recv + ".f_" + s.Name
 		fmt.Fprintf(buf, "func (%s %s) %s() %s { return %s }\n\n", recv, typeName, s.Name, s.GoType, expr)
 	}
+}
+
+func emitGenericGetMethods(buf *bytes.Buffer, recv, typeName string) {
+	fmt.Fprintf(buf, "func (%s %s) Get[T any]() (T, bool) {\n", recv, typeName)
+	fmt.Fprintf(buf, "\tv := %s.GetService(reflect.TypeFor[T]())\n", recv)
+	fmt.Fprintf(buf, "\tif v == nil {\n\t\tvar zero T\n\t\treturn zero, false\n\t}\n")
+	fmt.Fprintf(buf, "\tt, ok := v.(T)\n")
+	fmt.Fprintf(buf, "\treturn t, ok\n}\n\n")
+
+	fmt.Fprintf(buf, "func (%s %s) GetRequired[T any]() T {\n", recv, typeName)
+	fmt.Fprintf(buf, "\tif v, ok := %s.Get[T](); ok {\n\t\treturn v\n\t}\n", recv)
+	fmt.Fprintf(buf, "\tgodi.GetRequiredPanic[T]()\n")
+	fmt.Fprintf(buf, "\tpanic(\"unreachable\")\n}\n\n")
 }
 
 func concatServices(slices ...[]plan.Service) []plan.Service {

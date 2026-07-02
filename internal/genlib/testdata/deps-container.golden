@@ -29,6 +29,24 @@ func (r *Root) Dep() *svc.Dep { return r.f_Dep }
 
 func (r *Root) Consumer() *svc.Consumer { return r.f_Consumer }
 
+func (r *Root) Get[T any]() (T, bool) {
+	v := r.GetService(reflect.TypeFor[T]())
+	if v == nil {
+		var zero T
+		return zero, false
+	}
+	t, ok := v.(T)
+	return t, ok
+}
+
+func (r *Root) GetRequired[T any]() T {
+	if v, ok := r.Get[T](); ok {
+		return v
+	}
+	godi.GetRequiredPanic[T]()
+	panic("unreachable")
+}
+
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
 	if r.closed {
@@ -130,3 +148,21 @@ func (s *scope) Close() error  { return nil }
 func (s *scope) Dep() *svc.Dep { return s.root.f_Dep }
 
 func (s *scope) Consumer() *svc.Consumer { return s.root.f_Consumer }
+
+func (s *scope) Get[T any]() (T, bool) {
+	v := s.GetService(reflect.TypeFor[T]())
+	if v == nil {
+		var zero T
+		return zero, false
+	}
+	t, ok := v.(T)
+	return t, ok
+}
+
+func (s *scope) GetRequired[T any]() T {
+	if v, ok := s.Get[T](); ok {
+		return v
+	}
+	godi.GetRequiredPanic[T]()
+	panic("unreachable")
+}

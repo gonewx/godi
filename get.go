@@ -63,3 +63,11 @@ func GetServices[T any](p Provider) []T {
 	}
 	return out
 }
+
+// GetRequiredPanic panics with an error naming type T as unregistered. It is
+// called by the generated container's GetRequired[T]() method to raise a miss
+// panic without pulling "fmt" into generated code (D-2). The panic value is
+// byte-identical to what the free function GetRequired[T] produces (get.go:47).
+func GetRequiredPanic[T any]() {
+	panic(fmt.Errorf("godi: no service registered for type %s", reflect.TypeFor[T]()))
+}
