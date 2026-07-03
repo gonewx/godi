@@ -27,13 +27,21 @@ var reservedMethodNames = map[string]struct{}{
 func (r *Registry) Validate() []error {
 	var errs []error
 
-	seen := make(map[string]struct{}, len(r.services)+len(r.keyedServices))
+	seenGoType := make(map[string]string, len(r.services)+len(r.keyedServices))
 	allServices := append(r.services[:len(r.services):len(r.services)], r.keyedServices...)
 	for _, s := range allServices {
-		if _, dup := seen[s.Name]; dup {
+		if firstGoType, dup := seenGoType[s.Name]; dup {
+			// Include both colliding GoTypes (fully package-qualified) so a
+			// name collision between two distinct types that normalize to the
+			// same generated identifier (e.g. two different packages'
+			// *Config, or two named interfaces with the same short name) is
+			// diagnosable from the error alone. Service names are not
+			// package-qualified by design (cmd/godi-gen/main.go
+			// serviceBaseName/serviceTypeIdent) — this is the deliberate
+			// safety net for that collision, not a bug in the name choice.
 			errs = append(errs, fmt.Errorf(
-				"duplicate service name: %q registered more than once",
-				s.Name,
+				"duplicate service name: %q registered more than once (%s and %s both produced this name; service names are not package-qualified — register one with an explicit distinct name or keep them keyed apart)",
+				s.Name, firstGoType, s.GoType,
 			))
 		}
 		if _, reserved := reservedMethodNames[s.Name]; reserved {
@@ -42,7 +50,7 @@ func (r *Registry) Validate() []error {
 				s.Name,
 			))
 		}
-		seen[s.Name] = struct{}{}
+		seenGoType[s.Name] = s.GoType
 	}
 
 	for _, s := range allServices {
