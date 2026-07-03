@@ -212,7 +212,11 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 	}
 
 	reg := plan.NewRegistry()
-	imports := newImportSet()
+	localImportPath := ""
+	if pkgName == pkg.Name {
+		localImportPath = pkg.PkgPath
+	}
+	imports := newImportSet(localImportPath)
 	var genErrs []string
 
 	// keyedConstValues tracks (GoType, constant value string) to detect
@@ -396,7 +400,13 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 
 		// Qualify the ctor by the emitted file's identifier for its package —
 		// the assigned alias when the package's name clashes with another import.
-		s.Ctor = imports.aliasOf(implPkg) + ".New" + implName
+		// Same-package constructors stay bare because an emitted file cannot import
+		// its own package.
+		if qualifier := imports.aliasOf(implPkg); qualifier != "" {
+			s.Ctor = qualifier + ".New" + implName
+		} else {
+			s.Ctor = "New" + implName
+		}
 		if typeArgs := impl.TypeArgs(); typeArgs != nil && typeArgs.Len() > 0 {
 			args := make([]string, typeArgs.Len())
 			for i := range args {
@@ -1478,9 +1488,10 @@ func factoryDeps(pkg *packages.Package, expr ast.Expr, tparams *types.TypeParamL
 // genlib's emitImports sorts and re-dedupes (and always adds reflect + godi),
 // so only the user service packages need to flow through here.
 type importSet struct {
-	aliases map[string]string // package path → emitted identifier
-	taken   map[string]string // emitted identifier → package path (or "" for reserved)
-	order   []importEntry
+	localPath string
+	aliases   map[string]string // package path → emitted identifier
+	taken     map[string]string // emitted identifier → package path (or "" for reserved)
+	order     []importEntry
 }
 
 type importEntry struct {
@@ -1489,10 +1500,11 @@ type importEntry struct {
 	alias string // the identifier the emitted file binds — == name when no clash
 }
 
-func newImportSet() *importSet {
+func newImportSet(localPath string) *importSet {
 	s := &importSet{
-		aliases: make(map[string]string),
-		taken:   make(map[string]string),
+		localPath: localPath,
+		aliases:   make(map[string]string),
+		taken:     make(map[string]string),
 	}
 	// Seed each name genlib's own imports may bind with the path that
 	// legitimately owns it: that exact path keeps its name (a factory body's
@@ -1521,6 +1533,9 @@ func (s *importSet) aliasOf(p *types.Package) string {
 	path := p.Path()
 	if path == godiPkgPath {
 		return "godi"
+	}
+	if path == s.localPath {
+		return ""
 	}
 	if path == "" {
 		return p.Name()

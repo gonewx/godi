@@ -76,7 +76,7 @@ func TestGenerator_HelperFormB_SamePackageKeepsBareIdents(t *testing.T) {
 
 	code := string(src)
 	testutil.True(t, strings.Contains(code,
-		"return NewOptionsMonitor[*optionsfix.MyCfg]("),
+		"return NewOptionsMonitor[*MyCfg]("),
 		"same-package emit must keep the factory's bare constructor identifier bare")
 }
 

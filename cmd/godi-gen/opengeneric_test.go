@@ -30,9 +30,9 @@ func TestGenerator_PerServiceHelper_RecognizedAndReduced(t *testing.T) {
 
 	code := string(src)
 	// Both closed instantiations are materialized as resolvable services (AC1).
-	testutil.True(t, strings.Contains(code, "reflect.TypeFor[opengenericfix.IBox[opengenericfix.IDep]]()"),
+	testutil.True(t, strings.Contains(code, "reflect.TypeFor[IBox[IDep]]()"),
 		"helper AddBox[IDep] must materialize the closed IBox[IDep] service (Mechanism A)")
-	testutil.True(t, strings.Contains(code, "reflect.TypeFor[opengenericfix.IBox[opengenericfix.IOther]]()"),
+	testutil.True(t, strings.Contains(code, "reflect.TypeFor[IBox[IOther]]()"),
 		"helper AddBox[IOther] must materialize the closed IBox[IOther] service (Mechanism A)")
 }
 
@@ -47,9 +47,9 @@ func TestGenerator_PerServiceHelper_InjectsClosedDependency(t *testing.T) {
 	testutil.NoError(t, err)
 
 	code := string(src)
-	testutil.True(t, strings.Contains(code, "opengenericfix.NewBox[opengenericfix.IDep](r.f_Dep)"),
+	testutil.True(t, strings.Contains(code, "NewBox[IDep](r.f_Dep)"),
 		"closed Box[IDep] must inject the registered IDep dependency (AC2: ctor signature instantiated)")
-	testutil.True(t, strings.Contains(code, "opengenericfix.NewBox[opengenericfix.IOther](r.f_Other)"),
+	testutil.True(t, strings.Contains(code, "NewBox[IOther](r.f_Other)"),
 		"closed Box[IOther] must inject the registered IOther dependency (AC2)")
 }
 
