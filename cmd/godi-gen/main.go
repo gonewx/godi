@@ -278,9 +278,9 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 		}
 
 		if rg.form == "B" {
-			// Form B names the service after its interface's short name; a non-named
-			// type argument (*Foo, []Foo) would yield an illegal field name like
-			// f_*pkg.Foo and a non-compilable container. Require a valid identifier.
+			// Form B names the service after its service type. Named types keep their
+			// historical short name; concrete pointer/slice/etc. service types are
+			// normalized by serviceBaseName into a valid identifier.
 			// For keyed services, the Name contains "#key" suffix which is sanitized
 			// later — check only the base part before the "#".
 			baseName := s.Name
@@ -289,9 +289,8 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 			}
 			if !token.IsIdentifier(baseName) {
 				genErrs = append(genErrs, fmt.Sprintf(
-					"form-B service: type argument %s is not a named type — "+
-						"Add{Lifetime}Factory[I] requires I to be a named interface "+
-						"(would emit illegal field name f_%s)", s.GoType, s.Name))
+					"form-B service: type argument %s produced invalid service name %q",
+					s.GoType, s.Name))
 				continue
 			}
 			// Form B escape hatch (D-2): inline the factory expression, rewritten
@@ -1057,13 +1056,34 @@ func serviceBaseName(rg registration) string {
 		named, _ = rg.iType.(*types.Named)
 	}
 	if named == nil {
-		return shortTypeName(rg.iType)
+		return serviceTypeIdent(rg.iType)
 	}
 	base := named.Obj().Name()
 	if targs := named.TypeArgs(); targs != nil && targs.Len() > 0 {
 		base += "_" + sanitizeIdent(typeArgsString(targs))
 	}
 	return base
+}
+
+func serviceTypeIdent(t types.Type) string {
+	switch tt := t.(type) {
+	case *types.Pointer:
+		return "Ptr_" + serviceTypeIdent(tt.Elem())
+	case *types.Slice:
+		return "Slice_" + serviceTypeIdent(tt.Elem())
+	case *types.Array:
+		return "Array_" + serviceTypeIdent(tt.Elem())
+	case *types.Map:
+		return "Map_" + serviceTypeIdent(tt.Key()) + "_" + serviceTypeIdent(tt.Elem())
+	case *types.Named:
+		base := tt.Obj().Name()
+		if targs := tt.TypeArgs(); targs != nil && targs.Len() > 0 {
+			base += "_" + sanitizeIdent(typeArgsString(targs))
+		}
+		return base
+	default:
+		return sanitizeIdent(types.TypeString(t, func(p *types.Package) string { return p.Name() }))
+	}
 }
 
 // typeArgsString renders a closed generic's type arguments package-NAME qualified
