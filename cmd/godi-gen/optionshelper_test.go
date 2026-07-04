@@ -126,6 +126,37 @@ func TestGenerator_HelperExpansions_StayIndependent(t *testing.T) {
 		"the MyCfg closure's factory must not mention OtherCfg (closures must not cross-type)")
 }
 
+func TestGenerator_FormBMultiRegistration_GetsDistinctNamesAndCollectionOrder(t *testing.T) {
+	src, err := generate("testdata/formbmulti", "codegen")
+	testutil.NoError(t, err)
+
+	code := string(src)
+	for _, want := range []string{
+		"f_IWidget    formbmulti.IWidget",
+		"f_IWidget__2 formbmulti.IWidget",
+		"r.f_IWidget = (func(godi.Provider) formbmulti.IWidget { return formbmulti.Widget",
+	} {
+		testutil.True(t, strings.Contains(code, want), "generated code missing: "+want)
+	}
+	testutil.True(t, strings.Contains(code, "return []any{r.f_IWidget, r.f_IWidget__2}"),
+		"GetServices for duplicate Form B registrations must preserve registration order")
+}
+
+func TestGenerator_SingletonOrdersTransientFactoryCollectionDeps(t *testing.T) {
+	src, err := generate("testdata/transientcollectiondeps", "codegen")
+	testutil.NoError(t, err)
+
+	code := string(src)
+	setup := strings.Index(code, "r.f_ISetup = ")
+	monitor := strings.Index(code, "r.f_IMonitor = ")
+	testutil.True(t, setup >= 0 && monitor >= 0,
+		"generated root must wire both ISetup and IMonitor")
+	testutil.True(t, setup < monitor,
+		"singleton collection deps captured by a transient factory must be wired before the singleton that constructs that factory")
+	testutil.True(t, strings.Contains(code, "godi.GetServices[transientcollectiondeps.ISetup](p)"),
+		"transient factory must still capture the collection via GetServices")
+}
+
 // TestGenerator_RewrittenOutput_Compiles is the compile-level guard the
 // string-match tests cannot give: the pre-extension form-B inline was known
 // NON-compilable (unqualified identifiers, missing imports), and only a real

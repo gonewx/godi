@@ -130,6 +130,10 @@ type registration struct {
 	keyed    bool          // true for AddKeyed* markers
 	keyExpr  ast.Expr      // keyed only: the key argument expression
 	keyText  string        // keyed only: rendered key expression source text
+	// nameSuffix disambiguates duplicate raw service names while preserving
+	// GoType grouping for GetServices. Zero means no suffix; positive values
+	// render as "__N" where N is 2 for the second duplicate, 3 for the third, etc.
+	nameSuffix int
 
 	// factoryTP/factoryTA carry the per-service helper's type parameters and the
 	// call's closed type arguments for a form-B marker forwarded from a helper
@@ -186,6 +190,14 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 			regs[i].keyed = false
 			regs[i].keyExpr = nil
 			regs[i].keyText = ""
+		}
+	}
+	rawNameCounts := make(map[string]int, len(regs))
+	for i := range regs {
+		raw := rawServiceName(regs[i])
+		rawNameCounts[raw]++
+		if rawNameCounts[raw] > 1 {
+			regs[i].nameSuffix = rawNameCounts[raw]
 		}
 	}
 
@@ -1029,6 +1041,14 @@ func warnUnrecognized(pkg *packages.Package, call *ast.CallExpr, suspected bool,
 // form B has no implementation, so it names the service after its interface.
 // Keyed services append #keyExpr for uniqueness (D-2).
 func serviceName(rg registration) string {
+	base := rawServiceName(rg)
+	if rg.nameSuffix > 1 {
+		base += fmt.Sprintf("__%d", rg.nameSuffix)
+	}
+	return base
+}
+
+func rawServiceName(rg registration) string {
 	base := serviceBaseName(rg)
 	if rg.keyed && rg.keyText != "" {
 		return base + "#" + rg.keyText

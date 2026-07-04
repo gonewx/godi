@@ -1,6 +1,9 @@
 package plan
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Lifetime distinguishes the three DI lifetimes (AD-1). This story only
 // exercises Singleton, but Scoped and Transient are defined now so that
@@ -174,18 +177,43 @@ func (r *Registry) SingletonsTopo() []Service {
 	out := make([]Service, 0, len(r.services))
 
 	var visit func(s Service)
+	var visitSingletonDepsOf func(s Service)
+	var visitDep func(dep string)
+	visitDep = func(dep string) {
+		if strings.HasPrefix(dep, "[]") {
+			goType := dep[2:]
+			for _, name := range r.byGoType[goType] {
+				if d, ok := r.byName[name]; ok {
+					if d.Lifetime == Singleton {
+						visit(d)
+					} else {
+						visitSingletonDepsOf(d)
+					}
+				}
+			}
+			return
+		}
+		d, ok := r.byName[dep]
+		if !ok {
+			return
+		}
+		if d.Lifetime == Singleton {
+			visit(d)
+			return
+		}
+		visitSingletonDepsOf(d)
+	}
+	visitSingletonDepsOf = func(s Service) {
+		for _, dep := range s.Deps {
+			visitDep(dep)
+		}
+	}
 	visit = func(s Service) {
 		if _, done := visited[s.Name]; done {
 			return
 		}
 		visited[s.Name] = struct{}{}
-		for _, dep := range s.Deps {
-			d, ok := r.byName[dep]
-			if !ok || d.Lifetime != Singleton {
-				continue
-			}
-			visit(d)
-		}
+		visitSingletonDepsOf(s)
 		out = append(out, s)
 	}
 
