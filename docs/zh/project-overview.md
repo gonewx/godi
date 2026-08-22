@@ -123,28 +123,33 @@ DSL 提供两种注册形态，交叉三种生命周期与无键/键控：
 
 ## Quick Start
 
-在注册文件里用 DSL 标记声明服务（generator 只静态读取，从不执行）：
+在注册文件里用 DSL 标记声明服务（generator 只静态读取，从不执行用户代码）：
 
 ```go
 package myapp
 
 import "github.com/gonewx/godi"
 
-// go:generate godi-gen -pkg container -out container_gen.go .
-func Register(r *godi.Registry) *godi.Registry {
-    godi.AddSingleton[Clock, SystemClock](r)      // 形态 A：发现 NewSystemClock
-    godi.AddScoped[Repo, SQLRepo](r)              // 作用域生命周期
-    godi.AddTransientFactory[Logger](r, func(p godi.Provider) Logger {
-        return NewLogger(godi.GetRequired[Config](p)) // 形态 B：工厂逃生舱
+//go:generate godi-gen -pkg myapp -out container_gen.go .
+
+func register() {
+    var r godi.Registry
+
+    godi.AddSingleton[Clock, SystemClock](&r)     // 形态 A：发现 NewSystemClock
+    godi.AddScoped[Repo, SQLRepo](&r)             // 形态 A：装配 NewSQLRepo(Clock)
+    godi.AddTransientFactory[Logger](&r, func(p godi.Provider) Logger {
+        return NewLogger(godi.GetRequired[Clock](p)) // 形态 B：工厂逃生舱
     })
-    return r
 }
 ```
 
-运行 `go generate ./...` 产出 `container_gen.go` 后，即可解析服务：
+运行 `go generate ./...` 产出 `container_gen.go` 后，即可从生成的容器解析服务：
 
 ```go
-root := container.NewRoot()
+root, err := myapp.NewRoot()
+if err != nil {
+    return err
+}
 defer root.Close()
 
 clock := godi.GetRequired[Clock](root)   // 单例

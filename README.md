@@ -1,57 +1,67 @@
-# godi
+# godi — Compile-time Dependency Injection
 
-编译期依赖注入容器（Go）。用静态标记声明依赖图，由代码生成器产出装配代码——**主路径零反射**。
+> Go dependency-injection library · `github.com/gonewx/godi`
 
-## 特点
+English | [中文](./README.zh-CN.md)
 
-- **编译期装配** — `godi-gen` 经 `go/packages` + `go/types` 静态读取 DSL 调用，从不执行它们；产出的容器是普通 Go 代码
-- **图非法则不产码** — 循环依赖、captive dependency、缺失注册在 `go generate` 阶段即失败，坏图生不出二进制
-- **三种生命周期** — singleton / scoped / transient，作用域按 LIFO 释放
-- **键控服务与开放泛型** — `AddKeyed*` 系列；开放泛型走显式封闭注册
-- **仅一个外部依赖** — `golang.org/x/tools`，且只被生成器使用
+---
 
-## 要求
+Declare the dependency graph with static markers; a code generator emits plain Go wiring code — **zero reflection on the main path**.
 
-Go 1.27+（依赖具体类型上的方法级类型参数）。
+## Features
 
-## 安装
+| Capability | Description |
+| --- | --- |
+| **Compile-time assembly** | `godi-gen` statically reads DSL calls via `go/packages` + `go/types`, never executing them; the emitted container is ordinary Go code |
+| **Illegal graphs never build** | cycles, captive dependencies, and missing registrations fail at `go generate` — a bad graph cannot produce a binary |
+| **Three lifetimes** | singleton / scoped / transient, scopes dispose LIFO |
+| **Keyed services & open generics** | `AddKeyed*` family; open generics via explicit closed registrations |
+| **One external dependency** | `golang.org/x/tools`, and only the generator uses it |
+
+## Requirements
+
+Go 1.27+ (relies on method-level type parameters on concrete types).
+
+## Installation
 
 ```bash
 go get github.com/gonewx/godi
 ```
 
-## 使用
+## Quick Start
 
-声明依赖图（这是静态标记，不在运行时执行）：
+### 1. Declare the dependency graph
+
+This is a static marker — it never runs. Form A discovers `New{Impl}`
+constructors by strict naming convention; when no suitable constructor exists,
+a form B factory is the escape hatch:
 
 ```go
-//go:generate godi-gen -pkg di -out container_gen.go .
-
 package di
 
 import "github.com/gonewx/godi"
 
+//go:generate godi-gen -pkg di -out container_gen.go .
+
 func register() {
     var r godi.Registry
 
-    godi.AddSingleton[Config, *AppConfig](&r)
-    godi.AddScoped[Repository, *PgRepository](&r)
-    godi.AddTransient[Handler, *UserHandler](&r)
-
-    godi.AddSingletonFactory[Logger](&r, func(p godi.Provider) Logger {
-        return NewLogger(godi.GetRequired[Config](p))
+    godi.AddSingleton[Config, AppConfig](&r)   // form A: finds NewAppConfig
+    godi.AddScoped[Repo, PgRepo](&r)           // scoped lifetime
+    godi.AddTransientFactory[Logger](&r, func(p godi.Provider) Logger {
+        return NewLogger(godi.GetRequired[Config](p)) // form B: factory escape hatch
     })
 }
 ```
 
-生成容器：
+### 2. Generate the container
 
 ```bash
 go install github.com/gonewx/godi/cmd/godi-gen@latest
 go generate ./...
 ```
 
-解析服务：
+### 3. Resolve services
 
 ```go
 root, err := di.NewRoot()
@@ -60,24 +70,45 @@ if err != nil {
 }
 defer root.Close()
 
-cfg := godi.GetRequired[Config](root)      // 缺失即 panic
-log, ok := godi.Get[Logger](root)          // 缺失返回 false
-all := godi.GetServices[Handler](root)     // 全部实现
+cfg := godi.GetRequired[Config](root)   // panics on miss
+log, ok := godi.Get[Logger](root)       // returns false on miss
+all := godi.GetServices[Repo](root)     // every implementation
 ```
 
-作用域（`CreateScope` 是生成容器上的方法）：
+### Scopes
 
 ```go
 scope := root.CreateScope()
-defer scope.Close()   // 按 LIFO 释放该作用域内的 Disposable
+defer scope.Close()   // disposes Disposables in this scope, LIFO
 
-repo := godi.GetRequired[Repository](scope)
+repo := godi.GetRequired[Repo](scope)
 ```
 
-## 生成物
+## Generated Output
 
-`container_gen.go` 是**构建输入**，应当提交入库——消费方无需安装生成器即可构建。修改 DSL 后须重跑 `go generate ./...`，并确保 `git status --porcelain` 为空（防装配漂移）。
+`container_gen.go` is a **build input** — commit it, so consumers can build
+without installing the generator. After changing a DSL declaration, re-run
+`go generate ./...` and make sure `git status --porcelain` stays empty
+(guards against assembly drift).
 
-## 许可证
+## Documentation
 
-MIT，见 [LICENSE](./LICENSE)。
+Full documentation is bilingual (`docs/en` / `docs/zh`) — start at the index:
+
+| Language | Index |
+| --- | --- |
+| English | [docs/en/index.md](./docs/en/index.md) |
+| 中文 | [docs/zh/index.md](./docs/zh/index.md) |
+
+| Topic | Content |
+| --- | --- |
+| [Testing Guide](./TESTING.md) | Test framework, commands, best practices |
+| [Divergence notes](./conformance/) | Behavioral differences from .NET DI (Activator / Async / CallSite / Extensions / Open Generic) |
+
+## License
+
+MIT, see [LICENSE](./LICENSE).
+
+---
+
+[中文版 →](./README.zh-CN.md)

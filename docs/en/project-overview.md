@@ -128,25 +128,35 @@ Six free generic functions layer typed ergonomics over that face:
 
 ## Quick Start
 
+Declare services in a registration file using DSL markers — the generator
+reads them statically, never executing user code:
+
 ```go
-// registration.go — a pure static-marker file, read by the generator.
 package myapp
 
 import "github.com/gonewx/godi"
 
-func Register(r *godi.Registry) *godi.Registry {
-    godi.AddSingleton[Clock, SystemClock](r)          // form A: wires NewSystemClock
-    godi.AddScoped[Repo, SQLRepo](r)                  // form A: wires NewSQLRepo(Clock)
-    godi.AddTransientFactory[Logger](r, func(p godi.Provider) Logger {
-        return NewLogger(godi.GetRequired[Clock](p))  // form B: inlined factory
+//go:generate godi-gen -pkg myapp -out container_gen.go .
+
+func register() {
+    var r godi.Registry
+
+    godi.AddSingleton[Clock, SystemClock](&r)        // form A: wires NewSystemClock
+    godi.AddScoped[Repo, SQLRepo](&r)                // form A: wires NewSQLRepo(Clock)
+    godi.AddTransientFactory[Logger](&r, func(p godi.Provider) Logger {
+        return NewLogger(godi.GetRequired[Clock](p)) // form B: inlined factory
     })
-    return r
 }
 ```
 
+After `go generate ./...` emits `container_gen.go`, resolve services from the
+generated container:
+
 ```go
-// After `go generate ./...`, resolve from the generated container:
-root := myapp.NewRoot()
+root, err := myapp.NewRoot()
+if err != nil {
+    return err
+}
 defer root.Close()
 
 clock := godi.GetRequired[Clock](root)
