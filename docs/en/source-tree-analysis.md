@@ -4,8 +4,8 @@
 
 ```text
 godi/                          # Module root (github.com/gonewx/godi)
-├── go.mod                     # Go 1.27, golang.org/x/tools v0.47.0 (sole external dep)
-├── mise.toml                  # Toolchain pin: go 1.27rc1
+├── go.mod                     # Go 1.27, golang.org/x/tools v0.49.0 (sole external dep)
+├── mise.toml                  # Toolchain pin: go 1.27.0
 ├── Makefile                   # test / conformance / golden / cover / vet / fmt / tidy / check targets
 ├── TESTING.md                 # Test framework documentation
 ├── doc.go                     # Root package godoc

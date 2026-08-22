@@ -3,18 +3,21 @@
 ## 环境准备
 
 godi 的 Go 工具链由 [mise](https://mise.jdx.dev) 在项目级锁定（`mise.toml`），当前
-锁定 `go = "1.27rc1"`（Go 1.27 GA 前的临时版本，GA 后升到正式补丁版）。Go 1.27 是
+锁定 `go = "1.27.0"`（Go 1.27 已于 2026-08-19 GA，锁定当前正式补丁版）。Go 1.27 是
 必需的：它解锁具体结构体上的方法级类型参数（AD-5），支撑 `provider.Get[T]()` 泛型
 方法 API。
 
 ```bash
-mise install                       # 安装锁定的 Go 工具链（含 go 1.27rc1）
+mise install                       # 安装锁定的 Go 工具链（含 go 1.27.0）
 eval "$(mise activate bash)"       # 在当前 shell 激活 mise（或用 mise exec -- ...）
-go version                         # 应显示 go1.27rc1
+go version                         # 应显示 go1.27.0
 ```
 
 激活 mise 后，`go` 自动解析到锁定版本。唯一外部依赖是 `golang.org/x/tools`
-（v0.47.0，供 generator 静态分析），无需 testify 等测试依赖——套件仅用标准库。
+（v0.49.0，供 generator 静态分析），无需 testify 等测试依赖——套件仅用标准库。
+
+> Go 1.27 解锁方法级类型参数（AD-5）。升级到更新 **minor** 时同时升 `mise.toml`
+> 与 `go.mod` 的 `go` 指令；1.27.x 补丁版通常只需调整 `mise.toml`。
 
 ## 常用命令
 
@@ -95,6 +98,6 @@ godi 是库，没有部署步骤：发布 = 打 semver tag，消费者把 `go ge
 | --- | --- |
 | `go: command not found` 或 Go 版本不对 | 当前 shell 未激活 mise。运行 `mise install` 后 `eval "$(mise activate bash)"`（或用 `mise exec -- go ...`） |
 | `go.work lists go 1.23.1, but ... requires go >= 1.26` | 父 `go.work` 早于 godi 的 go 指令。把 `/mnt/disk0/project/auth/go.work` 的 `go` 行提到相应版本（同级成员仍有效） |
-| `cannot find toolchain ... go1.27` / 下载失败 | Go 1.27 尚未 GA。GA 前保持 `go.mod`/`mise.toml` 与锁定版一致 |
+| `cannot find toolchain ... go1.27` / 下载失败 | mise 无法为当前平台拉取锁定的工具链。确认 mise 可拉取该 patch（`mise ls-remote go \| grep 1.27`）后重跑 `mise install`；如需换 patch，调整 `mise.toml` 的锁定项 |
 | `golden: read testdata/...: no such file` | golden 基准缺失。用 `go test ./... -update-golden` 创建，提交前审 diff |
 | golden mismatch | 产码字节变了。若属预期，跑 `make golden` 并提交新基准；否则是真实回归 |

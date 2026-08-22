@@ -3,12 +3,12 @@
 ## Prerequisites
 
 The Go toolchain is pinned project-wide by [mise](https://mise.jdx.dev) via
-`mise.toml` (`go = "1.27rc1"`). With mise activated in your shell, `go` resolves
+`mise.toml` (`go = "1.27.0"`). With mise activated in your shell, `go` resolves
 to the pinned version automatically:
 
 ```bash
-mise install          # install the pinned Go toolchain (go 1.27rc1)
-go version            # → go1.27rc1
+mise install          # install the pinned Go toolchain (go 1.27.0)
+go version            # → go1.27.0
 ```
 
 No third-party dependencies are required to build or test: the suite uses the
@@ -16,9 +16,10 @@ standard library only (no testify), keeping the library's dependency surface
 minimal. The only external module dependency is `golang.org/x/tools`, used by the
 generator for static analysis.
 
-> Go 1.27 unlocks method-level type parameters (AD-5). Until GA, the pin stays at
-> `1.27rc1`; bump `mise.toml` **and** the `go` directive in `go.mod` together when
-> the GA patch ships.
+> Go 1.27 unlocks method-level type parameters (AD-5). Go 1.27 GA shipped on
+> 2026-08-19; the pin is the stable `1.27.0` release. When moving to a newer
+> **minor**, raise `mise.toml` **and** the `go` directive in `go.mod` together;
+> 1.27.x patch bumps usually touch `mise.toml` alone.
 
 ## Common Commands
 
@@ -105,6 +106,6 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install`, then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
 | `go.work lists go 1.23.1, but ... requires go >= 1.26` | The parent `go.work` predates godi's `go` directive. Raise the `go` line in the parent `go.work` (siblings stay valid). |
-| `cannot find toolchain ... go1.27` / download fails | Go 1.27 GA may not be published for your platform yet. Keep the `1.27rc1` pin until GA ships. |
+| `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |

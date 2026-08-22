@@ -2,6 +2,6 @@
 #
 # Go 1.27 unlocks method-level type parameters on concrete structs (AD-5),
 # enabling the `provider.Get[T]()` generic-method API (Story 6-6).
-# Using 1.27rc1 until GA; bump to GA patch when released.
+# GA released 2026-08-19; pinned to the then-current stable patch (re-pin as patches ship).
 [tools]
-go = "1.27rc1"
+go = "1.27.0"

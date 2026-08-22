@@ -15,8 +15,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # Honor the project's mise.toml so CI uses the exact pinned Go toolchain.
-      # Bump obligation: when Go 1.27 reaches GA, raise mise.toml + the go.mod
-      # `go` directive together (ARCHITECTURE-SPINE Open Items / IR M-1).
+      # Bump obligation fulfilled: Go 1.27 GA shipped 2026-08-19; mise.toml and
+      # the go.mod `go` directive are both at 1.27 (ARCHITECTURE-SPINE / IR M-1).
       - name: Set up toolchain (mise)
         uses: jdx/mise-action@v2
 

@@ -5,8 +5,9 @@
 // compilable minimal container to a temp dir.
 //
 // Activated in Story 1.1 Task 3 (main.go stub + testdata fixture +
-// golang.org/x/tools v0.47.0 in go.mod; the original //go:build atdd_redphase
-// red-phase guard was removed and emitMinimalContainer implemented).
+// golang.org/x/tools (then v0.47.0) in go.mod; the original //go:build
+// atdd_redphase red-phase guard was removed and emitMinimalContainer
+// implemented).
 //
 // Regression risk R1: this test emits ONLY to t.TempDir() and is NOT wired to
 // `//go:generate`, so the CI Generate gate stays a clean no-op.

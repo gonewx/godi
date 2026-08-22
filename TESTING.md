@@ -12,21 +12,21 @@ lives at the module root rather than in a test directory.
 ## Setup
 
 The Go toolchain is pinned project-wide by [mise](https://mise.jdx.dev) via
-`mise.toml` (`go = "1.26.2"`). With mise activated in your shell, `go` resolves
+`mise.toml` (`go = "1.27.0"`). With mise activated in your shell, `go` resolves
 to the pinned version automatically:
 
 ```bash
 mise install          # install the pinned Go toolchain
-go version            # → go1.26.2
+go version            # → go1.27.0
 ```
 
 No third-party dependencies are required: the suite uses the standard library
 only (no testify), keeping the library's dependency surface minimal.
 
-> The architecture targets **Go 1.27** (`ARCHITECTURE-SPINE` Stack table), which
-> is pre-GA (~2026-08). When it ships, bump `mise.toml` **and** the `go`
-> directive in `go.mod` to 1.27 — that unblocks the `provider.Get[T]()`
-> generic-method API noted in the spine's Open Items.
+> The architecture targets **Go 1.27** (`ARCHITECTURE-SPINE` Stack table). Go 1.27
+> GA shipped on 2026-08-19; both `mise.toml` **and** the `go` directive in
+> `go.mod` are at 1.27, which unblocked the `provider.Get[T]()` generic-method
+> API that landed in Story 6.6.
 
 ## Running tests
 
@@ -117,7 +117,7 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install` then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
 | `go.work lists go 1.23.1, but ... requires go >= 1.26` | The parent `go.work` predates godi's go directive. Raise the `go` line in `/mnt/disk0/project/auth/go.work` to `1.26` (siblings stay valid). |
-| `cannot find toolchain ... go1.27` / download fails | Go 1.27 is not GA yet. Keep `go.mod`/`mise.toml` at 1.26 until it ships (~2026-08). |
+| `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |
 

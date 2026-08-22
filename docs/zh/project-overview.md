@@ -23,10 +23,10 @@ godi 的核心价值主张有三点：
 
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| Go | 1.27（当前 1.27rc1） | 启用方法级类型参数（AD-5），支撑 `provider.Get[T]()` 泛型方法 API |
-| golang.org/x/tools | v0.47.0 | 唯一外部依赖，提供 `go/packages`，供 generator 静态分析 |
-| golang.org/x/mod | v0.37.0 | x/tools 的间接依赖 |
-| golang.org/x/sync | v0.21.0 | x/tools 的间接依赖 |
+| Go | 1.27（工具链锁定 go 1.27.0） | 启用方法级类型参数（AD-5），支撑 `provider.Get[T]()` 泛型方法 API |
+| golang.org/x/tools | v0.49.0 | 唯一外部依赖，提供 `go/packages`，供 generator 静态分析（NFR6） |
+| golang.org/x/mod | v0.39.0 | x/tools 的间接依赖 |
+| golang.org/x/sync | v0.22.0 | x/tools 的间接依赖 |
 | .NET DI（移植基线） | 10 / v10.0.9 | 行为契约与验收口径的蓝本 |
 | mise | — | 项目级工具链锁定（`mise.toml`） |
 

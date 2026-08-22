@@ -26,8 +26,10 @@ deliberately non-generic `Provider` interface, rather than as methods on it.
 | Component | Version / Choice | Notes |
 | --- | --- | --- |
 | Go | 1.27 | `go.mod` `go 1.27`; unlocks method-level type parameters (AD-5) |
-| Toolchain pin | go 1.27rc1 | `mise.toml`, bumped to GA patch when released |
-| golang.org/x/tools | v0.47.0 | sole external dep; `go/packages` for static analysis (NFR6) |
+| Toolchain pin | go 1.27.0 | `mise.toml`; GA shipped 2026-08-19, pinned to the then-current stable patch |
+| golang.org/x/tools | v0.49.0 | sole external dep; `go/packages` for static analysis (NFR6) |
+| golang.org/x/mod | v0.39.0 | indirect dep of x/tools |
+| golang.org/x/sync | v0.22.0 | indirect dep of x/tools |
 | Baseline semantics | .NET 10, v10.0.9 | the conformance corpus is ported from this release |
 | Test framework | stdlib only | no testify; assertions are thin wrappers over `testing.TB` |
 | Module path | `github.com/gonewx/godi` | package `godi` sits at the module root |

@@ -74,7 +74,7 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 │       └── doc.go
 │
 ├── Makefile                       # test/conformance/golden/cover/vet/fmt/check 等目标
-├── mise.toml                      # 工具链锁定：go = 1.27rc1
+├── mise.toml                      # 工具链锁定：go = 1.27.0
 ├── go.mod / go.sum                # 模块 github.com/gonewx/godi，go 1.27
 ├── TESTING.md                     # 测试框架结构与运行指南
 └── .github/workflows/test.yml     # CI：mise-action + vet + build + generate gate + race/coverage
