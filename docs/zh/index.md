@@ -20,6 +20,7 @@
 | [README（英文主文件）](../../README.md) | 项目根 | 特点、快速开始、生成物说明 |
 | [README 中文版](../../README.zh-CN.md) | 项目根 | 上者的中文镜像 |
 | [测试指南](../../TESTING.md) | 项目根 | 测试框架、运行命令、最佳实践 |
+| [变更日志](../../CHANGELOG.zh-CN.md) | 项目根 | 各版本的变更与升级步骤 |
 | [Activator 差异](../../conformance/ACTIVATOR_DIVERGENCE.md) | conformance/ | 与 dotnet 的语义差异 |
 | [Async 差异](../../conformance/ASYNC_DIVERGENCE.md) | conformance/ | AsyncDisposable 语义差异 |
 | [CallSite 差异](../../conformance/CALLSITE_DIVERGENCE.md) | conformance/ | CallSiteFactory 语义差异 |

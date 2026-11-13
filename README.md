@@ -118,6 +118,7 @@ Full documentation is bilingual (`docs/en` / `docs/zh`) — start at the index:
 | Topic | Content |
 | --- | --- |
 | [Testing Guide](./TESTING.md) | Test framework, commands, best practices |
+| [Changelog](./CHANGELOG.md) | Changes per release, upgrade steps |
 | [Divergence notes](./conformance/) | Behavioral differences from .NET DI (Activator / Async / CallSite / Extensions / Open Generic) |
 
 ## License

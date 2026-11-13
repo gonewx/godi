@@ -115,6 +115,7 @@ repo := godi.GetRequired[Repo](scope)
 | 主题 | 内容 |
 | --- | --- |
 | [测试指南](./TESTING.md) | 测试框架、运行命令、最佳实践 |
+| [变更日志](./CHANGELOG.zh-CN.md) | 各版本的变更与升级步骤 |
 | [语义差异说明](./conformance/) | 与 .NET DI 的行为差异（Activator / Async / CallSite / Extensions / Open Generic） |
 
 ## 许可证

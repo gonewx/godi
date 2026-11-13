@@ -1,0 +1,126 @@
+English | [中文](./CHANGELOG.zh-CN.md)
+
+# Changelog
+
+All notable changes to godi are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+the policy in the README's [Versioning](./README.md#versioning) section.
+
+The generator (`cmd/godi-gen`) and the library are one module and share one
+version number.
+
+## [Unreleased]
+
+This release changes the shape of generated containers and several run-time
+behaviors. Every existing container must be regenerated; see "Upgrading" below.
+
+### Upgrading
+
+1. Upgrade the library, then record the generator as a tool so both stay at the
+   same version: `go get -tool github.com/gonewx/godi/cmd/godi-gen`.
+2. Change each directive to
+   `//go:generate go tool godi-gen -pkg <name> -out container_gen.go .`
+   and run `go generate ./...`.
+3. Replace `==` comparisons on the error returned by `NewRoot()` with
+   `errors.Is` / `errors.As`.
+4. Review form B factories that return an instance owned outside the container
+   (a package-level connection, `os.Stdout`). The container now closes it; wrap
+   it in a type without `Close` / `CloseAsync` to keep it open.
+5. Review service types registered with more than one lifetime: the last
+   registration now wins.
+
+### Changed
+
+- **Breaking:** `NewRoot()` returns construction failures as an error instead
+  of panicking, and wraps the cause in `godi.BuildError`. This covers a panic in
+  a singleton constructor or factory, a dependency cycle reached during
+  construction, and a form B factory that asks for an unregistered service.
+- **Breaking:** scoped services are built on first resolution. `NewRoot()` and
+  `CreateScope()` no longer construct any scoped service, so a scoped
+  constructor that returns an error no longer fails them; the error is raised as
+  a panic when that service is first resolved. Scoped disposables are released
+  in reverse order of creation.
+- **Breaking:** whatever a form B factory returns is tracked for disposal when
+  its dynamic type implements `io.Closer` or `godi.AsyncDisposable`, including
+  instances held outside the container. Containers with form B services gain a
+  `CloseAsync` method.
+- **Breaking:** when one service type is registered with several lifetimes,
+  `GetService` returns the last registration and `GetServices` returns all of
+  them in registration order, in both providers. Previously a fixed
+  singleton → scoped → transient priority decided the result.
+- **Breaking:** a godi marker call the generator cannot read (for example inside
+  an unsupported generic helper) is an error. Previously it was a warning and
+  the registration was silently dropped.
+- **Breaking:** removed `SingletonsTopo`, `ScopedTopo`, `KeyedSingletonsTopo`
+  and `KeyedScopedTopo` from `plan.Registry`. Generated containers no longer
+  depend on a static wiring order.
+- The documented way to run the generator is the `go.mod` `tool` directive
+  (`go get -tool …`, then `go tool godi-gen`) instead of `go install …@latest`.
+
+### Added
+
+- The generator type-checks the container it is about to emit and writes
+  nothing when the check fails. Seven shapes that used to produce a file that
+  did not compile are now either emitted correctly or rejected at generation
+  time.
+- Marker calls with inferred type arguments, such as
+  `godi.AddSingletonFactory(&r, func(p godi.Provider) Logger { … })`, are
+  recognized.
+- `godi.BuildError`, `godi.CircularDependencyError` and
+  `godi.ErrCircularDependency` describe `NewRoot()` failures.
+- `godi.CloseGuard`, a re-entrant once-only close helper used by generated
+  containers.
+- `runtime.Disposer.TrackAny`, which tracks a value for disposal by its dynamic
+  type.
+- README "Known Limitations" sections in both languages.
+
+### Fixed
+
+- Generated containers no longer inject nil into a scoped service that depends
+  on `[]T`, or on another scoped service through a transient.
+- A form B factory given as a named function no longer receives dependencies
+  that have not been built yet.
+- A form B factory registered without a key can resolve a keyed singleton.
+- Resolving disposable transients from several goroutines no longer loses
+  disposal tracking. `Disposer` is now safe for concurrent use.
+- Calling the container's `Close()` from inside a disposable's `Close()` no
+  longer deadlocks the runtime provider.
+- Regeneration no longer fails on the previous `container_gen.go` after a
+  constructor signature changes or a registered type is renamed or removed.
+- Keyed form A constructors returning `(T, error)`, two services sharing a
+  transient whose constructor returns an error, and a container whose only
+  disposable is a form A transient now generate code that compiles.
+
+## [0.1.1] - 2026-08-22
+
+Toolchain and dependency closeout; no API changes.
+
+### Changed
+
+- Pinned the toolchain to Go 1.27.0 (GA 2026-08-19) through `mise.toml`.
+- Upgraded `golang.org/x/tools` from v0.47.0 to v0.49.0; generator output is
+  byte-identical.
+- Reworked the README and the Quick Start in both languages and synced the
+  guides to the GA toolchain.
+
+## [0.1.0] - 2026-07-31
+
+First public release.
+
+### Added
+
+- Compile-time dependency injection: static marker calls declare the graph, and
+  `godi-gen` emits the wiring code through `go/packages` static analysis, with
+  no reflection on the main path.
+- Three lifetimes (singleton, scoped, transient), keyed services, explicitly
+  closed registration of open generics, LIFO disposal per scope, and no output
+  for an illegal graph.
+- Requires Go 1.27 or later.
+
+[Unreleased]: https://github.com/gonewx/godi/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/gonewx/godi/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/gonewx/godi/releases/tag/v0.1.0
+
+---
+
+[中文版 →](./CHANGELOG.zh-CN.md)

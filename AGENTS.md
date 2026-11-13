@@ -14,6 +14,8 @@ commit.
 | --- | --- |
 | `README.md` | English primary (rendered by GitHub by default) |
 | `README.zh-CN.md` | Chinese mirror of `README.md`, section structure 1:1 |
+| `CHANGELOG.md` | English primary changelog; release notes are cut from it |
+| `CHANGELOG.zh-CN.md` | Chinese mirror of `CHANGELOG.md`, same versions and entries |
 | `docs/index.md` | Language router linking to both indexes |
 | `docs/en/*.md` | English docs (`index`, `project-overview`, `architecture`, `source-tree-analysis`, `development-guide`) |
 | `docs/zh/*.md` | Chinese mirrors of `docs/en/*.md`, section structure 1:1 |
@@ -30,6 +32,10 @@ commit.
 - New root-level docs get one row in both `docs/{en,zh}/index.md`
   "Existing Documentation" tables.
 - All relative link targets must exist; verify before committing.
+- Every user-visible change adds an entry under `## [Unreleased]` in BOTH
+  changelog files in the same commit; mark breaking changes `**Breaking:**` /
+  `**破坏性变更：**`. Section headings (`### Changed` …) stay in English in
+  both files.
 - Code comments inside examples follow each file's language; identifiers,
   lifetimes, and DSL function names stay verbatim (`AddScopedFactory`,
   `singleton / scoped / transient`, 形态 A / 形态 B ↔ form A / form B).

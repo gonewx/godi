@@ -19,6 +19,7 @@
 |---|---|---|
 | [README](../../README.md) | project root | Features, Quick Start, generated output |
 | [Testing Guide](../../TESTING.md) | project root | Test framework, commands, best practices |
+| [Changelog](../../CHANGELOG.md) | project root | Changes per release, upgrade steps |
 | [Activator Divergence](../../conformance/ACTIVATOR_DIVERGENCE.md) | conformance/ | Semantic divergence from dotnet |
 | [Async Divergence](../../conformance/ASYNC_DIVERGENCE.md) | conformance/ | AsyncDisposable divergence |
 | [CallSite Divergence](../../conformance/CALLSITE_DIVERGENCE.md) | conformance/ | CallSiteFactory divergence |
