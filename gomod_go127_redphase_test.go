@@ -7,6 +7,7 @@
 package godi_test
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -29,11 +30,15 @@ func TestGoMod_DeclaresGo127(t *testing.T) {
 
 // --- 6.6-MOD-002 (AC1, P0) — workspace go.work stays in lockstep -----------
 
-// TestGoWork_DeclaresGo127: the parent auth workspace's go.work (godi is a
-// workspace member, not a standalone module) must declare `go 1.27` too —
-// AC1's explicit "workspace consistency" requirement.
+// TestGoWork_DeclaresGo127: when godi is checked out inside a workspace, the
+// parent go.work must declare `go 1.27` too — AC1's explicit "workspace
+// consistency" requirement. A standalone checkout (CI, or any clone outside
+// that workspace) has no parent go.work and nothing to keep in lockstep.
 func TestGoWork_DeclaresGo127(t *testing.T) {
 	raw, err := os.ReadFile("../go.work")
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("no parent go.work: standalone checkout")
+	}
 	testutil.NoError(t, err)
 	src := string(raw)
 
