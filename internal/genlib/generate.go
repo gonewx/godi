@@ -305,13 +305,13 @@ func emitLazyAccessor(buf *bytes.Buffer, recv, recvType string, s plan.Service, 
 	case s.FactoryExpr != "":
 		fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
 	case s.CtorErr:
-		args := accessorDepArgs(buf, s.Deps, depCtx, reg)
+		args := ctorDepArgs(buf, s.Deps, depCtx, reg, "panic(err)")
 		fmt.Fprintf(buf, "\tv, err := %s(%s)\n", s.Ctor, args)
 		fmt.Fprintf(buf, "\tif err != nil {\n")
 		fmt.Fprintf(buf, "\t\tpanic(err)\n")
 		fmt.Fprintf(buf, "\t}\n")
 	default:
-		args := accessorDepArgs(buf, s.Deps, depCtx, reg)
+		args := ctorDepArgs(buf, s.Deps, depCtx, reg, "panic(err)")
 		fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
 	}
 	fmt.Fprintf(buf, "\t%s.f_%s = v\n", recv, n)
@@ -321,15 +321,17 @@ func emitLazyAccessor(buf *bytes.Buffer, recv, recvType string, s plan.Service, 
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-// accessorDepArgs renders a lazy accessor's constructor arguments in receiver
-// context ctx. A transient dependency whose constructor returns an error is
-// first bound to a temporary named after its argument position — d<i>, or
-// d<i>_<j> for element j of a slice argument — and its error panics.
-func accessorDepArgs(buf *bytes.Buffer, deps []string, ctx string, reg *plan.Registry) string {
+// ctorDepArgs renders a constructor's arguments in receiver context ctx, for a
+// lazy accessor and a transient's New<N>() alike. A transient dependency whose
+// constructor returns an error is first bound to a temporary named after its
+// argument position — d<i>, or d<i>_<j> for element j of a slice argument, so
+// the same dependency taken twice gets two temporaries — and its error is
+// handled by errAction ("panic(err)" or "return nil, err").
+func ctorDepArgs(buf *bytes.Buffer, deps []string, ctx string, reg *plan.Registry, errAction string) string {
 	errTemp := func(name, svc string) string {
 		fmt.Fprintf(buf, "\t%s, err := %s.New%s()\n", name, ctx, svc)
 		fmt.Fprintf(buf, "\tif err != nil {\n")
-		fmt.Fprintf(buf, "\t\tpanic(err)\n")
+		fmt.Fprintf(buf, "\t\t%s\n", errAction)
 		fmt.Fprintf(buf, "\t}\n")
 		return name
 	}
@@ -401,78 +403,12 @@ func emitTrack(buf *bytes.Buffer, recv, expr string, s plan.Service) {
 	}
 }
 
-// depArgsForCtx renders a service's dependencies as constructor arguments, with
-// the access expression determined by the receiver context and each dependency's
-// lifetime.
-func depArgsForCtx(deps []string, recv string, reg *plan.Registry) string {
-	if len(deps) == 0 {
-		return ""
-	}
-	parts := make([]string, len(deps))
-	for i, d := range deps {
-		parts[i] = depExpr(d, recv, reg)
-	}
-	return strings.Join(parts, ", ")
-}
-
-func depExpr(dep, recv string, reg *plan.Registry) string {
-	if strings.HasPrefix(dep, "[]") {
-		return sliceDepExpr(dep, recv, reg)
-	}
-	return singleDepExpr(dep, recv, reg)
-}
-
-func sliceDepExpr(dep, recv string, reg *plan.Registry) string {
-	goType := dep[2:]
-	services := reg.ServicesByGoType(goType)
-	if len(services) == 0 {
-		return dep + "{}"
-	}
-	parts := make([]string, len(services))
-	for i, s := range services {
-		parts[i] = singleDepExpr(s.Name, recv, reg)
-	}
-	return dep + "{" + strings.Join(parts, ", ") + "}"
-}
-
 func singleDepExpr(dep, recv string, reg *plan.Registry) string {
 	s, ok := reg.Lookup(dep)
 	if !ok {
 		return recv + ".f_" + dep
 	}
-	if s.Lifetime == plan.Transient && s.CtorErr {
-		return "dep_" + dep
-	}
 	return serviceExpr(recv, s)
-}
-
-// emitErrTransientDeps pre-emits temp variables for transient dependencies whose
-// constructors return error. The temp var is named dep_{Name} and error is handled
-// via errAction (e.g. "return nil, err" or "panic(err)").
-func emitErrTransientDeps(buf *bytes.Buffer, deps []string, recv string, reg *plan.Registry, errAction string) {
-	for _, d := range deps {
-		if strings.HasPrefix(d, "[]") {
-			goType := d[2:]
-			for _, s := range reg.ServicesByGoType(goType) {
-				if s.Lifetime != plan.Transient || !s.CtorErr {
-					continue
-				}
-				fmt.Fprintf(buf, "\tdep_%s, err := %s.New%s()\n", s.Name, recv, s.Name)
-				fmt.Fprintf(buf, "\tif err != nil {\n")
-				fmt.Fprintf(buf, "\t\t%s\n", errAction)
-				fmt.Fprintf(buf, "\t}\n")
-			}
-			continue
-		}
-		s, ok := reg.Lookup(d)
-		if !ok || s.Lifetime != plan.Transient || !s.CtorErr {
-			continue
-		}
-		fmt.Fprintf(buf, "\tdep_%s, err := %s.New%s()\n", d, recv, d)
-		fmt.Fprintf(buf, "\tif err != nil {\n")
-		fmt.Fprintf(buf, "\t\t%s\n", errAction)
-		fmt.Fprintf(buf, "\t}\n")
-	}
 }
 
 // emitTransientMethods writes New<N>() for every transient, keyed or not (<N>
@@ -491,8 +427,7 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 			fmt.Fprintf(buf, "}\n\n")
 		} else if s.CtorErr {
 			fmt.Fprintf(buf, "func (%s %s) New%s() (%s, error) {\n", recv, typeName, n, s.GoType)
-			emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
-			args := depArgsForCtx(s.Deps, recv, reg)
+			args := ctorDepArgs(buf, s.Deps, recv, reg, "return nil, err")
 			if disp {
 				fmt.Fprintf(buf, "\tv, err := %s(%s)\n", s.Ctor, args)
 				fmt.Fprintf(buf, "\tif err != nil {\n")
@@ -506,8 +441,7 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 			fmt.Fprintf(buf, "}\n\n")
 		} else {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, n, s.GoType)
-			emitErrTransientDeps(buf, s.Deps, recv, reg, "panic(err)")
-			args := depArgsForCtx(s.Deps, recv, reg)
+			args := ctorDepArgs(buf, s.Deps, recv, reg, "panic(err)")
 			if disp {
 				fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
 				emitTrack(buf, recv, "v", s)

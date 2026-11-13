@@ -67,6 +67,14 @@ func TestLazySingleton_ConstructorErrorsBecomeNewRootError(t *testing.T) {
 	runLazyFixture(t, "lazyctorerr")
 }
 
+// TestTransient_DuplicateErrorReturningDependency (F-2): a transient taking the
+// same error-returning transient twice must generate (one temporary per
+// argument position, as in the lazy accessors) and receive two distinct
+// instances.
+func TestTransient_DuplicateErrorReturningDependency(t *testing.T) {
+	runLazyFixture(t, "lazytransientdupdep")
+}
+
 // emittedFunc returns the emitted source of the function whose header starts
 // with header, up to (not including) the next top-level func.
 func emittedFunc(t *testing.T, code, header string) string {

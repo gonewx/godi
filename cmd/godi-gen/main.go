@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gonewx/godi/internal/genlib"
@@ -79,6 +80,11 @@ func main() {
 // will live (typeCheckOutput). outPath is the -out file; "" means stdout. On any
 // error it returns nil output (NFR2: a rejected graph emits zero bytes).
 func generate(srcDir, pkgName, outPath string) ([]byte, error) {
+	if outPath != "" {
+		if err := checkOutDir(outPath); err != nil {
+			return nil, err
+		}
+	}
 	pkg, err := loadPackage(srcDir)
 	if err != nil {
 		return nil, err
@@ -97,24 +103,86 @@ func generate(srcDir, pkgName, outPath string) ([]byte, error) {
 	return src, nil
 }
 
+// checkOutDir rejects an -out whose directory does not exist (or is not a
+// directory) before anything is loaded or type-checked: that is a usage error,
+// not a type error in the emitted container.
+func checkOutDir(outPath string) error {
+	dir := filepath.Dir(outPath)
+	fi, err := os.Stat(dir)
+	switch {
+	case os.IsNotExist(err):
+		return fmt.Errorf("output directory %s does not exist (no output written)", dir)
+	case err != nil:
+		return fmt.Errorf("output directory %s: %w (no output written)", dir, err)
+	case !fi.IsDir():
+		return fmt.Errorf("output directory %s is not a directory (no output written)", dir)
+	}
+	return nil
+}
+
 // loadPackage statically loads the single registration package at dir with full
-// type information. Type checking MUST succeed: Info.Instances is populated by
-// the type checker, so any load/type error would leave the markers unreadable.
+// type information. Type checking MUST succeed for the hand-written files:
+// Info.Instances is populated by the type checker, so a load/type error there
+// would leave the markers unreadable.
 //
-// Files in dir that godi-gen itself generated earlier (first line equals
-// generatedHeader) are stubbed to bare package clauses via generatedFileOverlay:
-// in the in-place layout a stale container_gen.go would otherwise fail to
-// type-check (or parse) after a constructor signature changes and block the
-// very regeneration that fixes it.
+// In the in-place layout dir also holds godi-gen's previous product (a file
+// whose first line equals generatedHeader). Hand-written code in the package
+// may refer to its declarations (Root, NewRoot, typed accessors), so it stays
+// visible, but once a constructor signature changes it no longer type-checks
+// (or, after an interrupted write, no longer parses) and must not block the
+// very regeneration that fixes it. Hence three steps:
+//
+//  1. Load as is. Errors located in a generated file are ignored; any other
+//     error, including one without a usable position, is real. With no real
+//     error, this load is the result.
+//  2. Otherwise retry with every generated file stubbed to its package clause
+//     (generatedFileOverlay) — a broken previous product nothing refers to.
+//     An error-free retry is the result.
+//  3. Otherwise fail, reporting step 1's real errors: the retry's errors
+//     (undefined: Root …) are artifacts of the stubs.
 func loadPackage(dir string) (*packages.Package, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("load %q: %w", dir, err)
 	}
-	overlay, err := generatedFileOverlay(absDir)
+	stubs, err := generatedFileOverlay(absDir)
 	if err != nil {
 		return nil, fmt.Errorf("load %q: %w", dir, err)
 	}
+
+	pkg, err := loadOnce(dir, nil)
+	if err != nil {
+		return nil, err
+	}
+	var real []string
+	for _, e := range pkg.Errors {
+		if _, generated := stubs[loadErrorFile(e, absDir)]; !generated {
+			real = append(real, e.Error())
+		}
+	}
+	if len(real) == 0 && pkg.Types != nil && pkg.TypesInfo != nil {
+		return pkg, nil
+	}
+
+	if len(stubs) > 0 {
+		if retry, err := loadOnce(dir, stubs); err == nil && len(retry.Errors) == 0 {
+			return retry, nil
+		}
+	}
+
+	if len(real) == 0 {
+		// Only generated-file errors, yet no usable type information.
+		for _, e := range pkg.Errors {
+			real = append(real, e.Error())
+		}
+	}
+	return nil, fmt.Errorf("package %q failed to load/type-check:\n%s",
+		dir, strings.Join(real, "\n"))
+}
+
+// loadOnce runs one packages.Load of the package at dir with overlay and
+// returns the single package, errors and all.
+func loadOnce(dir string, overlay map[string][]byte) (*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
 			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
@@ -129,16 +197,46 @@ func loadPackage(dir string) (*packages.Package, error) {
 	if len(pkgs) != 1 {
 		return nil, fmt.Errorf("load %q: expected exactly 1 package, got %d", dir, len(pkgs))
 	}
-	pkg := pkgs[0]
-	if len(pkg.Errors) > 0 {
-		msgs := make([]string, len(pkg.Errors))
-		for i, e := range pkg.Errors {
-			msgs[i] = e.Error()
+	return pkgs[0], nil
+}
+
+// loadErrorFile returns the absolute path of the file e is located in, or ""
+// when e.Pos carries no file:line position. e.Pos is "file:line:col" or
+// "file:line"; a relative file (as go list reports some errors) is relative to
+// the package directory absDir.
+func loadErrorFile(e packages.Error, absDir string) string {
+	file := e.Pos
+	stripped := 0
+	for stripped < 2 {
+		i := strings.LastIndexByte(file, ':')
+		if i < 0 {
+			break
 		}
-		return nil, fmt.Errorf("package %q failed to load/type-check:\n%s",
-			dir, strings.Join(msgs, "\n"))
+		if _, err := strconv.Atoi(file[i+1:]); err != nil {
+			break
+		}
+		file = file[:i]
+		stripped++
 	}
-	return pkg, nil
+	if stripped == 0 || file == "" {
+		return ""
+	}
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(absDir, file)
+	}
+	return filepath.Clean(file)
+}
+
+// isGeneratedSyntax reports whether the source file file was parsed from
+// carries generatedHeader (hasGeneratedHeader). An unreadable file counts as
+// hand-written.
+func isGeneratedSyntax(fset *token.FileSet, file *ast.File) bool {
+	tf := fset.File(file.FileStart)
+	if tf == nil {
+		return false
+	}
+	src, err := os.ReadFile(tf.Name())
+	return err == nil && hasGeneratedHeader(src)
 }
 
 // registration captures one statically-read DSL marker. Reading happens in two
@@ -484,6 +582,11 @@ func collectRegistrations(pkg *packages.Package) ([]registration, []string) {
 	var errs []string
 
 	for _, file := range pkg.Syntax {
+		// A previous godi-gen product is visible to the load (loadPackage) but
+		// is output, not registration input.
+		if isGeneratedSyntax(pkg.Fset, file) {
+			continue
+		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {

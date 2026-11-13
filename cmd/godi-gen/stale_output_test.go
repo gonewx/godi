@@ -7,7 +7,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -32,7 +31,9 @@ func TestGenerate_IgnoresStaleGeneratedOutput(t *testing.T) {
 // whose body does not parse must not block regeneration either, including when
 // the package clause itself is broken. The broken file is written at run time
 // (and removed afterwards) instead of being committed: an unparseable .go file
-// under testdata/ would make the CI `gofmt -l` step fail.
+// under testdata/ would make the CI `gofmt -l` step fail. Its name is unique
+// per run (runtimeFileName) so concurrent test processes never remove each
+// other's file; the header, not the name, marks it as generated.
 func TestGenerate_IgnoresSyntacticallyBrokenGeneratedOutput(t *testing.T) {
 	cases := []struct {
 		name string
@@ -42,17 +43,9 @@ func TestGenerate_IgnoresSyntacticallyBrokenGeneratedOutput(t *testing.T) {
 		{"broken package clause", "pack age garbageoutput {{{ this is not Go <<<\n"},
 	}
 	dir := filepath.Join("testdata", "garbageoutput")
-	stale := filepath.Join(dir, "container_gen.go")
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Cleanup(func() {
-				if err := os.Remove(stale); err != nil && !os.IsNotExist(err) {
-					t.Errorf("remove %s: %v", stale, err)
-				}
-			})
-			if err := os.WriteFile(stale, []byte(generatedHeader+"\n"+tc.body), 0o644); err != nil {
-				t.Fatal(err)
-			}
+			writeRuntimeFile(t, runtimeFileName(dir, "container_gen"), generatedHeader+"\n"+tc.body)
 			if _, err := generate(dir, "garbageoutput", ""); err != nil {
 				t.Fatal(err)
 			}
