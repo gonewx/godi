@@ -26,7 +26,13 @@ Go 1.27+ (relies on method-level type parameters on concrete types).
 
 ```bash
 go get github.com/gonewx/godi
+go get -tool github.com/gonewx/godi/cmd/godi-gen
 ```
+
+The second command records the generator as a `tool` in your `go.mod`.
+`go tool godi-gen` then always runs the generator at the version of
+`github.com/gonewx/godi` your module requires, so the generator and the library
+cannot drift apart.
 
 ## Quick Start
 
@@ -41,7 +47,7 @@ package di
 
 import "github.com/gonewx/godi"
 
-//go:generate godi-gen -pkg di -out container_gen.go .
+//go:generate go tool godi-gen -pkg di -out container_gen.go .
 
 func register() {
     var r godi.Registry
@@ -57,7 +63,6 @@ func register() {
 ### 2. Generate the container
 
 ```bash
-go install github.com/gonewx/godi/cmd/godi-gen@latest
 go generate ./...
 ```
 
@@ -99,7 +104,7 @@ without installing the generator. After changing a DSL declaration, re-run
 - **Form B factories are inlined as source text.** The factory expression is copied verbatim into the generated container, so it cannot capture local variables or parameters of the registration function. Such a capture is usually rejected at generation time, but if the package happens to have a package-level identifier of the same name, the factory silently binds to that identifier instead. Values known only at run time (configuration, an existing connection) can currently reach a factory only through package-level variables.
 - **Form B products are owned by the container.** Whatever a form B factory returns is tracked for disposal when its dynamic type satisfies `io.Closer` or `godi.AsyncDisposable`. A factory that returns an instance the container already tracks — for example one it resolved from the provider to expose under a second interface — gets that instance closed more than once, so its `Close` must be idempotent. A factory that returns an instance held outside the container, such as a database connection in a package-level variable or `os.Stdout`, hands it over to the container as well: if its dynamic type has `Close() error` or `CloseAsync(ctx) error`, closing the container closes it (`root.Close()`, or `root.CloseAsync(ctx)` for a `CloseAsync`-only instance), even when the registered service type has no `Close`. To keep such an instance open, return a wrapper type that has no `Close` or `CloseAsync` method and forwards the service's methods to the instance.
 - **Registration order is source position, not call order.** The generator orders all marker calls in the package by file name, then by offset within the file, regardless of call relationships or control flow: markers inside helper functions and inside `if` branches all take effect, and their source position decides "last registration wins" and collection order. To make a registration take precedence, place it later in source — further down the same file, or in a file whose name sorts later.
-- **The generator and the library versions must match.** A regenerated container calls helper symbols in the library; when the generator is newer than the `github.com/gonewx/godi` version in `go.mod`, the container fails the type-check and generation is rejected. Install the generator at the same version as the `github.com/gonewx/godi` requirement in `go.mod`, not `@latest`.
+- **The generator and the library versions must match.** A regenerated container calls helper symbols in the library, so a generator newer than the `github.com/gonewx/godi` version in `go.mod` emits a container that fails the type-check, and generation is rejected. Running the generator as `go tool godi-gen` (see [Installation](#installation)) keeps the two at the same version; a generator installed separately with `go install` is not tied to `go.mod` and can drift. After upgrading the library, regenerate every container.
 
 ## Documentation
 

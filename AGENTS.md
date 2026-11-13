@@ -48,6 +48,13 @@ Checked against source on 2026-08-22 — re-verify if the generator changes:
    the bare impl type name — the generator resolves constructors via
    `Lookup("New" + implName)` (`cmd/godi-gen/main.go`). Example bodies must be
    self-consistent: never resolve a service that is not registered.
+4. Consumers run the generator through the `tool` directive: install with
+   `go get -tool github.com/gonewx/godi/cmd/godi-gen`, and write the directive
+   as `//go:generate go tool godi-gen -pkg <name> -out container_gen.go .`.
+   Never document `go install …@latest`: it lets the generator drift from the
+   library version in `go.mod` (checked 2026-11-13). This repository's own
+   `conformance/codegen` directive uses `go run` on the in-module package and
+   is not the consumer form.
 
 Canonical Quick Start example lives in `README.md`; `README.zh-CN.md` and
 `docs/{en,zh}/project-overview.md` must stay consistent with it.

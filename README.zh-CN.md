@@ -26,7 +26,12 @@ Go 1.27+（依赖具体类型上的方法级类型参数）。
 
 ```bash
 go get github.com/gonewx/godi
+go get -tool github.com/gonewx/godi/cmd/godi-gen
 ```
+
+第二条命令把生成器作为 `tool` 记入你的 `go.mod`。此后 `go tool godi-gen`
+运行的始终是模块所依赖的那个 `github.com/gonewx/godi` 版本的生成器，
+生成器与库不会出现版本不一致。
 
 ## 快速开始
 
@@ -40,7 +45,7 @@ package di
 
 import "github.com/gonewx/godi"
 
-//go:generate godi-gen -pkg di -out container_gen.go .
+//go:generate go tool godi-gen -pkg di -out container_gen.go .
 
 func register() {
     var r godi.Registry
@@ -56,7 +61,6 @@ func register() {
 ### 2. 生成容器
 
 ```bash
-go install github.com/gonewx/godi/cmd/godi-gen@latest
 go generate ./...
 ```
 
@@ -97,7 +101,7 @@ repo := godi.GetRequired[Repo](scope)
 - **形态 B 工厂按源码文本内联。** 工厂表达式会被原样复制进生成的容器，所以它不能捕获注册函数里的局部变量或参数。捕获了的话通常会在生成时被拒绝；但如果包里恰好有同名的包级标识符，工厂会静默地绑定到那个包级标识符上。运行时才知道的值（配置、已有的连接）目前只能通过包级变量交给工厂。
 - **形态 B 的产物归容器所有。** 形态 B 工厂返回的值只要动态类型满足 `io.Closer` 或 `godi.AsyncDisposable`，就会被追踪并在关闭时释放。如果工厂返回的是容器已经在追踪的实例（例如为了以第二个接口暴露它而从 provider 里解析出来的那个），这个实例会被关闭不止一次，所以它的 `Close` 必须是幂等的。工厂返回容器之外持有的实例时（例如放在包级变量里的数据库连接，或者 `os.Stdout`），容器同样会接管它：只要它的动态类型有 `Close() error` 或 `CloseAsync(ctx) error`，关闭容器时就会关掉它（`root.Close()`；只有 `CloseAsync` 的实例由 `root.CloseAsync(ctx)` 关闭），即使注册的服务类型本身不含 `Close`。想让这样的实例保持打开，就返回一个没有 `Close`、也没有 `CloseAsync` 方法的包装类型，由它把服务的方法转发给该实例。
 - **注册顺序是源码位置，不是调用顺序。** 生成器按文件名、再按文件内偏移排列包里所有的标记调用，不看调用关系和控制流：放在辅助函数里的标记、`if` 分支里的标记都会生效，并按它们在源码中的位置参与“后注册者胜出”和集合顺序。想让某条注册后生效，就让它在源码里排在后面——同一个文件里靠后，或放进文件名排序靠后的文件。
-- **生成器与库的版本必须一致。** 重新生成的容器会调用库里的辅助符号；生成器比 `go.mod` 里 `github.com/gonewx/godi` 的版本新时，容器通不过类型检查，生成会被拒绝。安装生成器时使用与 `go.mod` 里 `github.com/gonewx/godi` 相同的版本，而不是 `@latest`。
+- **生成器与库的版本必须一致。** 重新生成的容器会调用库里的辅助符号，所以生成器比 `go.mod` 里 `github.com/gonewx/godi` 的版本新时，产出的容器通不过类型检查，生成会被拒绝。用 `go tool godi-gen` 运行生成器（见[安装](#安装)）可以让两者保持同一版本；用 `go install` 单独安装的生成器不受 `go.mod` 约束，可能与库不一致。升级库之后，要重新生成所有容器。
 
 ## 文档
 

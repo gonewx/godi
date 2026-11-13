@@ -221,14 +221,15 @@ func register() {
 // myapp/gen.go
 package myapp
 
-//go:generate godi-gen -pkg myapp -out container_gen.go .
+//go:generate go tool godi-gen -pkg myapp -out container_gen.go .
 ```
 
 ### 3. Run the generator
 
 ```bash
-# Install the generator
-go install github.com/gonewx/godi/cmd/godi-gen@latest
+# Record the generator as a tool in go.mod (once per module). `go tool godi-gen`
+# then runs it at the version of github.com/gonewx/godi that go.mod requires.
+go get -tool github.com/gonewx/godi/cmd/godi-gen
 
 # Generate
 go generate ./...

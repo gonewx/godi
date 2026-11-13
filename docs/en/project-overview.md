@@ -138,7 +138,7 @@ package myapp
 
 import "github.com/gonewx/godi"
 
-//go:generate godi-gen -pkg myapp -out container_gen.go .
+//go:generate go tool godi-gen -pkg myapp -out container_gen.go .
 
 func register() {
     var r godi.Registry
@@ -150,6 +150,10 @@ func register() {
     })
 }
 ```
+
+Record the generator as a tool once per module with
+`go get -tool github.com/gonewx/godi/cmd/godi-gen`; `go tool godi-gen` then runs
+it at the version of `github.com/gonewx/godi` that `go.mod` requires.
 
 After `go generate ./...` emits `container_gen.go`, resolve services from the
 generated container:

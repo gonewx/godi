@@ -130,7 +130,7 @@ package myapp
 
 import "github.com/gonewx/godi"
 
-//go:generate godi-gen -pkg myapp -out container_gen.go .
+//go:generate go tool godi-gen -pkg myapp -out container_gen.go .
 
 func register() {
     var r godi.Registry
@@ -142,6 +142,10 @@ func register() {
     })
 }
 ```
+
+每个模块执行一次 `go get -tool github.com/gonewx/godi/cmd/godi-gen`，把生成器作为 tool
+记入 `go.mod`；此后 `go tool godi-gen` 运行的就是 `go.mod` 所依赖的那个
+`github.com/gonewx/godi` 版本的生成器。
 
 运行 `go generate ./...` 产出 `container_gen.go` 后，即可从生成的容器解析服务：
 
