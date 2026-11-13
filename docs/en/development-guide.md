@@ -50,8 +50,9 @@ go test ./... -update-golden # rewrite golden fixtures (review the diff!)
 - **Standard-library assertions only.** Assertions in `internal/testutil` are thin
   wrappers over a `testing.TB` seam (`Equal`, `Nil`, `Panics`, ...) — no testify.
   Their failure behavior is itself unit-tested via a fake `TB`.
-- **Red-phase build tags.** ATDD scaffolds carry `//go:build atdd_redphase` and are
-  inert until the tag is removed to activate them (`*_redphase_test.go`).
+- **Red-phase file names.** `*_redphase_test.go` files were written as ATDD
+  red-phase scaffolds; their build tags have since been removed, so they now
+  compile and run as part of the default test suite.
 - **Golden files.** Generator emission tests compare emitted bytes against
   `internal/genlib/testdata/*.golden`; `-update-golden` rewrites them — always
   review the diff before committing.

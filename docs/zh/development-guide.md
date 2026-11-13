@@ -50,8 +50,8 @@ go test ./... -update-golden  # 重写 golden 基准（审 diff 后再提交！�
 - **纯标准库断言（无 testify）**：`internal/testutil` 提供基于 `TB` seam 的轻量
   断言（`Equal`/`Nil`/`Panics` 等），失败行为本身用假 `TB` 做单元测试，保持依赖面
   最小。
-- **红灯标签**：ATDD 红灯脚手架带 `//go:build atdd_redphase`，默认不编译；删标签即
-  激活该用例。
+- **红灯文件名**：`*_redphase_test.go` 这些文件名是 ATDD 红灯阶段留下的；构建标签
+  都已移除，它们现在是默认测试套件的一部分，正常编译运行。
 - **golden 文件**：generator 产码测试对比 `testdata/*.golden` 字节基准；变更后用
   `make golden` 重生成并审 diff。
 - **双 Provider conformance**：一致性套件写一次、跑两个 Provider——`ProviderFactory`

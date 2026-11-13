@@ -7,19 +7,19 @@ import (
 	"github.com/gonewx/godi/conformance/fakes"
 )
 
-// container_gen.go is produced from the form-A registration below by the real
+// container_gen.go is produced from the registrations below by the real
 // godi-gen static-analysis CLI (Story 2.1). Running `go generate ./...` from the
 // module root re-emits it; TestCodegen_RegenComparison guards that the committed
-// file stays byte-identical to a fresh run (AD-14: deterministic output, no
-// hand-fork). Run under GOWORK=off so the generator analyzes this package in
+// file stays byte-identical to a fresh run (AD-14: deterministic output, never
+// edited by hand). Run under GOWORK=off so the generator analyzes this package in
 // isolation from the auth workspace's sibling modules.
 //
 //go:generate go run github.com/gonewx/godi/cmd/godi-gen -pkg codegen -out container_gen.go .
 
 // register is the static registration source the generator analyzes (AD-7): the
-// AddSingleton markers are read from go/types, never executed. It mirrors the
-// runtime oracle's registration (spec_test.go's rtFactory) so both providers are
-// built from one logical source (AD-14). Form A: FakeService has no dependency;
+// godi.Add… markers are read from go/types, never executed. It mirrors the
+// runtime oracle's registration (spec_test.go's rtFactory); the two are kept
+// equivalent by hand (AD-14 / AD-15). Form A: FakeService has no dependency;
 // FakeConsumer depends on IFakeService, discovered through NewFakeConsumer's
 // signature.
 func register() {

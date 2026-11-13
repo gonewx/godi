@@ -129,6 +129,8 @@ The harness encodes the spine's testing invariants — see
 | **AD-17** nil key routes to unkeyed; AnyKey semantics | `GetKeyedService` contract + sample case |
 
 **Acceptance target** (`_bmad-output/specs/spec-godi/`): 116 specification cases +
-52 fakes. M1 replacement points are documented inline in `conformance/harness.go`:
-alias `Provider`/`Scope` to `godi.Provider`/`godi.Scope`, wire the two real
-factories (runtime oracle + codegen), and port the 116 cases into `spec_test.go`.
+52 fakes. `Provider` / `Scope` in `conformance/harness.go` are aliases of
+`godi.Provider` / `godi.Scope`. `conformance/spec_test.go` defines the two real
+factories — `rtFactory` (runtime oracle) and `cgFactory` (generated container) —
+and runs the ported cases against both through `RunSuite` / `AssertEquivalent`;
+further case groups live in the other `conformance/spec_*_test.go` files.

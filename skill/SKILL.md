@@ -153,7 +153,7 @@ Guarantees:
 - Form-B factory text is rewritten on closure: `T` → the concrete type, package qualifiers remapped to the generated file's imports (two service packages sharing a name get numbered aliases automatically).
 - A singleton factory may `GetRequired` a service registered later in the body (like the cache above): singleton and scoped services are built by their own lazy accessors (transients by `New<Name>()` on each resolution), so the dependency is constructed when the factory first resolves it.
 
-Limits (generation-time warning, never a silent drop): helper must live in the analyzed package, single type parameter, unkeyed markers only, and every body statement must be a marker call (or a final `return r`).
+Limits: the helper must be defined in the analyzed package (a helper from another package is not followed — its markers are not read), have a single type parameter, forward to unkeyed markers only, and every body statement must be a marker call (or a final `return r`). A same-package helper that breaks these rules is a generation-time error — generation is rejected — never a silent drop.
 
 ## Resolution API
 
@@ -302,7 +302,7 @@ func NewService(dep IDep) (*Service, error) {
 }
 ```
 
-The generated `NewRoot()` propagates the error.
+For a singleton, the generated `NewRoot()` returns the error wrapped — check it with `errors.Is` / `errors.As`, not `==`. For a scoped or transient service, `NewRoot()` and `CreateScope()` do not fail; the error is raised as a panic when that service is first resolved (unless a singleton depends on it, in which case `NewRoot()` returns it).
 
 ### Slice dependencies (multi-impl injection)
 
@@ -330,6 +330,7 @@ godi.AddSingletonFactory[IService](&r, func(p godi.Provider) IService {
 - **`godi.ErrProviderClosed`** — panicked when resolving after `Close()` is called
 - **`godi.AnyKeySingleResolveError(t)`** — panicked when `GetKeyedService` is called with `AnyKey`
 - **`godi.AnyKeyRegistrationError(t)`** — panicked when `AnyKey` is used as a registration key
+- **`godi.ErrCircularDependency`** — a cycle the generator could not see (it passes through form-B factories) is detected at construction time: `NewRoot()` returns an error, or resolution panics with an error value, that `errors.Is(err, godi.ErrCircularDependency)` matches
 - Generator exits non-zero with zero bytes on any validation failure (NFR2)
 
 ## Gotchas

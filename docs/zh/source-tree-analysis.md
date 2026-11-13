@@ -95,9 +95,9 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 
 ## 关键约定
 
-- **红灯脚手架 `//go:build atdd_redphase`**：ATDD 红灯阶段的用例带此构建标签（Go 中
-  `test.skip` 的等价物），默认不编译；删标签即激活。fixture 的 `init` panic 作为
-  绊线，证明 AD-7 静态分析从不执行用户代码。红灯隔离常配 `GOWORK=off`。
+- **红灯文件名 `*_redphase_test.go`**：这些文件名是 ATDD 红灯阶段留下的；当时的
+  `//go:build atdd_redphase` 构建标签都已移除，它们现在是默认测试套件的一部分。
+  fixture 的 `init` panic 作为绊线，证明 AD-7 静态分析从不执行用户代码。
 - **golden 文件 `testdata/*.golden`**：generator 产码测试的字节基准。`Golden(t,
   name, got)` 对比 `testdata/<name>.golden`；`-update-golden` 重写（提交前审 diff）。
 - **唯一产码路径 `genlib.Generate`**：所有代码发射都经此函数（AD-2），先 `Validate`
@@ -110,5 +110,5 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 | 后缀 | 含义 |
 | --- | --- |
 | `*_test.go` | 常规单元/集成测试，默认参与编译运行 |
-| `*_redphase_test.go` | 带 `//go:build atdd_redphase` 标签的红灯脚手架，默认不编译，删标签激活 |
+| `*_redphase_test.go` | ATDD 红灯阶段写下的测试；已不带构建标签，与其他 `*_test.go` 一样默认编译运行 |
 | `testdata/*.golden` | 产码字节基准，由 `-update-golden` 生成/更新 |

@@ -93,7 +93,11 @@ repo := godi.GetRequired[Repo](scope)
 
 - **并发。** `NewRoot()` 返回之后，从 `Root` 解析 singleton、解析不（直接或间接）依赖 scoped 服务的 transient、以及调用 `CreateScope`，可以在多个 goroutine 中并发进行。scoped 实例不行：每个 `Scope` 同一时刻只能由一个 goroutine 使用，也不要让跨 goroutine 共享的 `Root` 去解析任何涉及 scoped 的东西——scoped 服务本身、依赖它的 transient，或者对含有 scoped 注册的类型调用 `GetServices`。所有解析结束之后再调用 `Close`。
 - **形态 B 工厂在运行时校验，而不是在 `go generate` 时。** 缺失注册、captive 依赖、循环依赖这三项检查只对形态 A（`New{Impl}`）构造函数是静态的。单例的形态 B 工厂如果解析了未注册的服务或构成循环，`NewRoot()` 会返回 error；作用域的形态 B 工厂出现同样问题时，会在所属作用域内首次解析该服务时 panic。单例工厂通过具名函数或键控注册去解析 scoped 服务时，不会有任何诊断。
-- **形态 B 的产物归容器所有。** 形态 B 工厂返回的值只要满足 `io.Closer` 或 `godi.AsyncDisposable`，就会被追踪并在关闭时释放。如果工厂返回的是容器已经在追踪的实例（例如为了以第二个接口暴露它而从 provider 里解析出来的那个），这个实例会被关闭不止一次，所以它的 `Close` 必须是幂等的。
+- **构造错误出现的时机因生命周期而异。** singleton 的构造函数返回 error 时，`NewRoot()` 返回包了一层的 error——用 `errors.Is` / `errors.As` 判断，不要用 `==`。scoped 或 transient 的构造函数返回 error 时，`NewRoot()` 和 `CreateScope()` 都不会失败；error 会在首次解析该服务时以 panic 的形式出现（除非有 singleton 依赖它，那样的话 `NewRoot()` 会按上面的方式返回它）。
+- **形态 B 工厂按源码文本内联。** 工厂表达式会被原样复制进生成的容器，所以它不能捕获注册函数里的局部变量或参数。捕获了的话通常会在生成时被拒绝；但如果包里恰好有同名的包级标识符，工厂会静默地绑定到那个包级标识符上。运行时才知道的值（配置、已有的连接）目前只能通过包级变量交给工厂。
+- **形态 B 的产物归容器所有。** 形态 B 工厂返回的值只要动态类型满足 `io.Closer` 或 `godi.AsyncDisposable`，就会被追踪并在关闭时释放。如果工厂返回的是容器已经在追踪的实例（例如为了以第二个接口暴露它而从 provider 里解析出来的那个），这个实例会被关闭不止一次，所以它的 `Close` 必须是幂等的。工厂返回容器之外持有的实例时（例如放在包级变量里的数据库连接，或者 `os.Stdout`），容器同样会接管它：只要它的动态类型有 `Close() error` 或 `CloseAsync(ctx) error`，关闭容器时就会关掉它（`root.Close()`；只有 `CloseAsync` 的实例由 `root.CloseAsync(ctx)` 关闭），即使注册的服务类型本身不含 `Close`。想让这样的实例保持打开，就返回一个没有 `Close`、也没有 `CloseAsync` 方法的包装类型，由它把服务的方法转发给该实例。
+- **注册顺序是源码位置，不是调用顺序。** 生成器按文件名、再按文件内偏移排列包里所有的标记调用，不看调用关系和控制流：放在辅助函数里的标记、`if` 分支里的标记都会生效，并按它们在源码中的位置参与“后注册者胜出”和集合顺序。想让某条注册后生效，就让它在源码里排在后面——同一个文件里靠后，或放进文件名排序靠后的文件。
+- **生成器与库的版本必须一致。** 重新生成的容器会调用库里的辅助符号；生成器比 `go.mod` 里 `github.com/gonewx/godi` 的版本新时，容器通不过类型检查，生成会被拒绝。安装生成器时使用与 `go.mod` 里 `github.com/gonewx/godi` 相同的版本，而不是 `@latest`。
 
 ## 文档
 

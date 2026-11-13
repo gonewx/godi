@@ -331,7 +331,8 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 	// indexed so a constructor may inject either form. Keyed services are NOT
 	// indexed here — keyed and unkeyed are independent namespaces (D-3).
 	// elemIndex additionally maps a service type to ALL registrations carrying it
-	// (multi-impl), for factoryDeps' GetServices ordering constraints.
+	// (multi-impl), so factoryDeps can read a GetServices call as a dependency
+	// on each of them (validation only).
 	depIndex := make(map[string]string, len(regs)*2)
 	elemIndex := make(map[string][]string, len(regs))
 	for _, rg := range regs {
@@ -775,7 +776,8 @@ func appendMarkerRegistration(out []registration, pkg *packages.Package, markerN
 // nil when the call is not a generic instantiation of a function. The bare-ident
 // form is what distinguishes a local helper call from a godi marker selector.
 // Marker recognition uses markerCallee instead (type arguments may be
-// inferred); genericCallee remains for factoryDeps' godi.Get[…] ordering hints.
+// inferred); genericCallee remains for factoryDeps, which reads a factory's
+// godi.Get[…] calls as dependencies for validation only.
 func genericCallee(call *ast.CallExpr) *ast.Ident {
 	var x ast.Expr
 	switch fun := call.Fun.(type) {

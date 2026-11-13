@@ -79,6 +79,20 @@ func Marked(fn any) MarkedConstructor
 
 Marks a constructor for activator best-match selection.
 
+### CloseGuard
+
+```go
+type CloseGuard struct{ /* unexported */ }
+
+func (g *CloseGuard) Closed() bool
+func (g *CloseGuard) Close(release func() error) error
+```
+
+Shared close-once state of a provider or scope, used by the runtime provider and by every generated `Root` and scope (as a `guard godi.CloseGuard` field). The zero value is an open guard; it must not be copied after first use.
+
+- `Closed` — reports whether `Close` has started
+- `Close` — the first caller marks the guard closed, runs `release` and caches its error; any other caller (including a re-entrant one from inside `release`) returns the cached error, or nil if `release` has not finished yet. Never blocks.
+
 ## Registration Functions (Static Markers)
 
 All return `*Registry` for chaining. None execute at runtime.
@@ -143,12 +157,27 @@ func AnyKeySingleResolveError(t reflect.Type) error  // GetKeyedService + AnyKey
 func AnyKeyRegistrationError(t reflect.Type) error    // AnyKey used as registration key
 func ProviderClosedError() error                      // returns ErrProviderClosed
 func GetRequiredPanic[T any]()                        // used by generated code
+
+var ErrCircularDependency = errors.New("godi: circular dependency")
+func CircularDependencyError(service string) error    // wraps ErrCircularDependency; used by generated code
+func BuildError(recovered any) error                  // NewRoot's error for a value recovered during construction; used by generated code
 ```
+
+- `ErrCircularDependency` — a cycle through form-B factories is detected at construction time; `NewRoot()`'s error or the resolution panic value matches it with `errors.Is`
+- `BuildError` — an error value stays reachable through `errors.Is` / `errors.As`; any other value is formatted with `%v`
 
 ## Async Helpers
 
 ```go
 func CreateAsyncScope(p Provider) AsyncScope     // NewAsyncScope(p.CreateScope())
+```
+
+## Runtime Helpers
+
+Package `github.com/gonewx/godi/runtime`, consumed by generated containers.
+
+```go
+func (d *Disposer) TrackAny(v any)   // tracks v by its dynamic type: io.Closer → Track, else godi.AsyncDisposable → TrackAsync; nil or neither → not tracked
 ```
 
 ## Generator CLI

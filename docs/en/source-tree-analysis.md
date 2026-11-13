@@ -69,7 +69,7 @@ from the .NET reference.
 
 | Convention | Detail |
 | --- | --- |
-| Red-phase scaffold | Files carry the `//go:build atdd_redphase` build tag — inert until the tag is removed to activate them |
+| Red-phase file names | `*_redphase_test.go` files began as ATDD red-phase scaffolds; their build tags have been removed and they run in the default test suite |
 | Golden files | Generator emission fixtures live in `internal/genlib/testdata/*.golden`, regenerated with `-update-golden` |
 | Sole code-emission path | All generated Go flows through `genlib.Generate` (AD-2) |
 | Sole reflective construction point | `reflect.Value.Call` appears only in `activator.CreateInstance[T]` (AD-13) |
@@ -80,7 +80,7 @@ from the .NET reference.
 | Pattern | Meaning |
 | --- | --- |
 | `*_test.go` | Active tests, compiled and run normally |
-| `*_redphase_test.go` | ATDD red-phase scaffolds gated by the `atdd_redphase` build tag; excluded from the default build until activated |
+| `*_redphase_test.go` | Tests written during the ATDD red phase; they no longer carry a build tag and are compiled and run like any `*_test.go` |
 
 Tests live beside the code they exercise (no dedicated `tests/` tree), which is
 why `TESTING.md` sits at the module root rather than in a test directory.
