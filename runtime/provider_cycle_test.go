@@ -79,8 +79,8 @@ func TestBuild_Cycle_NoCycle_ValidGraph(t *testing.T) {
 
 // TestBuild_Cycle_KeyedSingleton: keyed singleton A(key) self-resolves →
 // circular. Build must return an error mentioning keyed type + key, exercising
-// the materializingKeyed guard on the keyedSingletonFactories path
-// (runtime/provider.go:184-191).
+// the materializing guard on the keyed singleton group path
+// (resolver.keyedGroup in runtime/provider.go).
 func TestBuild_Cycle_KeyedSingleton(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddKeyedSingleton(b, "k1", func(p godi.Provider) *cycleA {
@@ -103,7 +103,7 @@ func TestBuild_Cycle_KeyedSingleton(t *testing.T) {
 }
 
 // TestBuild_Cycle_KeyedSingleton_DirectAB: keyed A(k1) resolves keyed B(k2),
-// keyed B(k2) resolves keyed A(k1) → circular. Exercises cross-key materializingKeyed
+// keyed B(k2) resolves keyed A(k1) → circular. Exercises the cross-key materializing
 // guard.
 func TestBuild_Cycle_KeyedSingleton_DirectAB(t *testing.T) {
 	b := runtime.NewBuilder()

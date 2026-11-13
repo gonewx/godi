@@ -20,8 +20,9 @@
 //   - enumerable      = REGISTRATION-ORDER slots
 //
 // This reproduces "closed preferred" (touch-point 6/7, D-5: register closed AFTER
-// open) and "mixed enumerable" (touch-point 8, D-3: all transient to avoid the
-// 2.4 mixed-lifetime unhandled axis) entirely from the registration source — a
+// open) and "mixed enumerable" (touch-point 8, D-3: all transient; mixed
+// lifetimes under one service type now also resolve in registration order, eval
+// fix A4, but this scenario keeps one lifetime) entirely from the registration source — a
 // deliberate AD-4/AD-10 tradeoff, NOT a defect, explicitly annotated below.
 //
 // This file began as an ATDD red-phase scaffold behind //go:build atdd_redphase;
@@ -52,8 +53,8 @@ import (
 // providers enumerate the SAME logical closed set, same order, never hand-forked).
 // ClosedFakeOpenGenericService[T] takes NO injected value (mirrors dotnet's
 // non-generic FakeService whose Value is default null) — so the factory just
-// constructs it. Transient (D-3: same service type stays single-lifetime to avoid
-// the 2.4 mixed-lifetime unhandled axis; lifetime does not affect slot order).
+// constructs it. Transient (D-3: the scenario keeps one lifetime per service
+// type; lifetime does not affect slot order, mixed lifetimes included — eval fix A4).
 func addClosedFakeOpenGenericRT[T any](b *runtime.Builder) {
 	runtime.AddTransient[fakes.IFakeOpenGenericService[T]](b, func(godi.Provider) fakes.IFakeOpenGenericService[T] {
 		return fakes.NewClosedFakeOpenGenericService[T]()

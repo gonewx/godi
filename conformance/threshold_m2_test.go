@@ -35,7 +35,7 @@ var dotnetServiceProviderValidationMap = []m2MethodMapping{
 	{DotnetMethod: "GetService_Throws_WhenGetServiceForScopedServiceIsCalledOnRootViaTransient", DotnetFile: "SPVTests", GodiTest: "spec_validation: TestSPV_RootResolveScopedViaTransient_GoAdaptation", Status: adapted, Note: "godi root-scoped: transient with scoped dep resolves from root"},
 
 	// Group C: polymorphic / multi-impl scope mix
-	{DotnetMethod: "GetService_DoesNotThrow_WhenGetServiceForPolymorphicServiceIsCalledOnRoot_AndTheLastOneIsNotScoped", DotnetFile: "SPVTests", GodiTest: "spec_validation: TestSPV_PolymorphicLastNotScoped_BuildSucceeds", Status: adapted, Note: "godi resolves by lifetime priority (singleton>scoped>transient), not dotnet last-descriptor-wins"},
+	{DotnetMethod: "GetService_DoesNotThrow_WhenGetServiceForPolymorphicServiceIsCalledOnRoot_AndTheLastOneIsNotScoped", DotnetFile: "SPVTests", GodiTest: "spec_validation: TestSPV_PolymorphicLastNotScoped_BuildSucceeds", Status: covered},
 
 	// Group N/A: ServiceKey attribute (Go has no attributes, AD-13)
 	{DotnetMethod: "BuildServiceProvider_AnyKey_ServiceKeyWithStronglyTypedArgument", DotnetFile: "SPVTests", GodiTest: "", Status: na, Note: "Go has no [ServiceKey] attribute; requires runtime reflection to inject key into ctor param (AD-13 forbids reflect-based construction on main path)"},

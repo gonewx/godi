@@ -48,6 +48,10 @@ type Root struct {
 	st_IFakeInstanceService                                uint8
 	f_IFakeFormBDisposableSingleton                        fakes.IFakeFormBDisposableSingleton
 	st_IFakeFormBDisposableSingleton                       uint8
+	f_MixedSingletonFirst                                  fakes.IMixedA
+	st_MixedSingletonFirst                                 uint8
+	f_MixedSingletonLast                                   fakes.IMixedB
+	st_MixedSingletonLast                                  uint8
 	f_FakeScopedService                                    fakes.IFakeScopedService
 	st_FakeScopedService                                   uint8
 	f_FakeDisposableScoped                                 fakes.IFakeDisposableScoped
@@ -120,6 +124,8 @@ func NewRoot() (root *Root, err error) {
 	r.get_FakeReplaceFinalOne()
 	r.get_IFakeInstanceService()
 	r.get_IFakeFormBDisposableSingleton()
+	r.get_MixedSingletonFirst()
+	r.get_MixedSingletonLast()
 	r.get_KeyedServiceOne__service1_()
 	r.get_KeyedServiceTwo__service2_()
 	r.get_KeyedServiceOne__both_()
@@ -482,6 +488,44 @@ func (r *Root) get_IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSin
 	r.f_IFakeFormBDisposableSingleton = v
 	r.disp.TrackAny(v)
 	r.st_IFakeFormBDisposableSingleton = 2
+	return v
+}
+
+func (r *Root) get_MixedSingletonFirst() fakes.IMixedA {
+	if r.st_MixedSingletonFirst == 2 {
+		return r.f_MixedSingletonFirst
+	}
+	if r.st_MixedSingletonFirst == 1 {
+		panic(godi.CircularDependencyError("MixedSingletonFirst"))
+	}
+	r.st_MixedSingletonFirst = 1
+	defer func() {
+		if r.st_MixedSingletonFirst != 2 {
+			r.st_MixedSingletonFirst = 0
+		}
+	}()
+	v := fakes.NewMixedSingletonFirst()
+	r.f_MixedSingletonFirst = v
+	r.st_MixedSingletonFirst = 2
+	return v
+}
+
+func (r *Root) get_MixedSingletonLast() fakes.IMixedB {
+	if r.st_MixedSingletonLast == 2 {
+		return r.f_MixedSingletonLast
+	}
+	if r.st_MixedSingletonLast == 1 {
+		panic(godi.CircularDependencyError("MixedSingletonLast"))
+	}
+	r.st_MixedSingletonLast = 1
+	defer func() {
+		if r.st_MixedSingletonLast != 2 {
+			r.st_MixedSingletonLast = 0
+		}
+	}()
+	v := fakes.NewMixedSingletonLast()
+	r.f_MixedSingletonLast = v
+	r.st_MixedSingletonLast = 2
 	return v
 }
 
@@ -951,6 +995,14 @@ func (r *Root) NewFakeSyncAsyncDisposable() *fakes.FakeSyncAsyncDisposable {
 	return v
 }
 
+func (r *Root) NewMixedTransientLast() fakes.IMixedA {
+	return fakes.NewMixedTransientLast()
+}
+
+func (r *Root) NewMixedTransientFirst() fakes.IMixedB {
+	return fakes.NewMixedTransientFirst()
+}
+
 func (r *Root) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -1011,6 +1063,10 @@ func (r *Root) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSinglet
 	return r.get_IFakeFormBDisposableSingleton()
 }
 
+func (r *Root) MixedSingletonFirst() fakes.IMixedA { return r.get_MixedSingletonFirst() }
+
+func (r *Root) MixedSingletonLast() fakes.IMixedB { return r.get_MixedSingletonLast() }
+
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.get_FakeScopedService() }
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped {
@@ -1049,44 +1105,16 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return r.get_FakeConsumer()
-	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-		return r.get_FakeDisposableSingleton()
-	case reflect.TypeFor[fakes.IPocoClass]():
-		return r.get_PocoClass()
-	case reflect.TypeFor[fakes.IClassImplementingIterable]():
-		return r.get_ClassImplementingIterable()
-	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-		return r.get_ClassInheritingAbstract()
-	case reflect.TypeFor[fakes.IGenSlotA]():
-		return r.get_GenSlotA()
-	case reflect.TypeFor[fakes.IGenSlotB]():
-		return r.get_GenSlotB()
-	case reflect.TypeFor[fakes.IAnyKeyService]():
-		return r.get_AnyKeyServiceA()
-	case reflect.TypeFor[fakes.IStructFakeService]():
-		return r.get_StructFakeService()
-	case reflect.TypeFor[fakes.IStructConsumer]():
-		return r.get_StructConsumer()
-	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-		return r.get_StructFakeTwo()
-	case reflect.TypeFor[fakes.ISelfComparable]():
-		return r.get_SelfComparable()
-	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-		return r.get_FakeReplaceFinalOne()
-	case reflect.TypeFor[fakes.IFakeInstanceService]():
-		return r.get_IFakeInstanceService()
-	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-		return r.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.get_FakeScopedService()
-	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-		return r.get_FakeDisposableScoped()
-	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-		return r.get_IFakeFormBDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return r.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 		return r.NewFakeTransientWithScopedDep()
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return r.get_FakeDisposableSingleton()
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+		return r.get_FakeDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 		return r.NewFakeDisposableTransient()
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
@@ -1097,22 +1125,54 @@ func (r *Root) GetService(t reflect.Type) any {
 		return r.NewFakeOpenGenericService_fakes_IFakeService()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 		return r.NewFakeOpenGenericService_fakes_IFakeConsumer()
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return r.get_PocoClass()
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return r.get_ClassImplementingIterable()
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return r.get_ClassInheritingAbstract()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
 		return r.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
 		return r.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 		return r.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()
+	case reflect.TypeFor[fakes.IGenSlotA]():
+		return r.get_GenSlotA()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 		return r.NewClosedFakeOpenGenericService_fakes_IGenSlotA()
+	case reflect.TypeFor[fakes.IGenSlotB]():
+		return r.get_GenSlotB()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return r.get_AnyKeyServiceA()
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return r.get_StructFakeService()
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return r.get_StructConsumer()
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return r.get_StructFakeTwo()
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return r.get_SelfComparable()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
 	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 		return r.NewFakeAsyncOnlyDisposable()
 	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 		return r.NewFakeSyncAsyncDisposable()
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return r.get_FakeReplaceFinalOne()
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
+		return r.get_IFakeInstanceService()
+	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
+		return r.get_IFakeFormBDisposableSingleton()
+	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
+		return r.get_IFakeFormBDisposableScoped()
+	case reflect.TypeFor[fakes.IMixedA]():
+		return r.NewMixedTransientLast()
+	case reflect.TypeFor[fakes.IMixedB]():
+		return r.get_MixedSingletonLast()
 	}
 	return nil
 }
@@ -1187,6 +1247,10 @@ func (r *Root) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
 		return true
+	case reflect.TypeFor[fakes.IMixedA]():
+		return true
+	case reflect.TypeFor[fakes.IMixedB]():
+		return true
 	}
 	return false
 }
@@ -1209,11 +1273,11 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 			return true
 		case "singleton-factory":
 			return true
-		case "scoped":
-			return true
 		case "transient":
 			return true
 		case "transient-factory":
+			return true
+		case "scoped":
 			return true
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
@@ -1272,12 +1336,12 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 			return r.get_KeyedServiceTwo__both_()
 		case "singleton-factory":
 			return r.get_KeyedServiceOne__singleton_factory_()
-		case "scoped":
-			return r.get_KeyedServiceOne__scoped_()
 		case "transient":
 			return r.NewKeyedServiceOne__transient_()
 		case "transient-factory":
 			return r.NewIKeyedService__transient_factory_()
+		case "scoped":
+			return r.get_KeyedServiceOne__scoped_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
@@ -1324,44 +1388,16 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.get_FakeService()}
 		case reflect.TypeFor[fakes.IFakeConsumer]():
 			return []any{r.get_FakeConsumer()}
-		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-			return []any{r.get_FakeDisposableSingleton()}
-		case reflect.TypeFor[fakes.IPocoClass]():
-			return []any{r.get_PocoClass()}
-		case reflect.TypeFor[fakes.IClassImplementingIterable]():
-			return []any{r.get_ClassImplementingIterable()}
-		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-			return []any{r.get_ClassInheritingAbstract()}
-		case reflect.TypeFor[fakes.IGenSlotA]():
-			return []any{r.get_GenSlotA()}
-		case reflect.TypeFor[fakes.IGenSlotB]():
-			return []any{r.get_GenSlotB()}
-		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{r.get_AnyKeyServiceA()}
-		case reflect.TypeFor[fakes.IStructFakeService]():
-			return []any{r.get_StructFakeService()}
-		case reflect.TypeFor[fakes.IStructConsumer]():
-			return []any{r.get_StructConsumer()}
-		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-			return []any{r.get_StructFakeOne(), r.get_StructFakeTwo()}
-		case reflect.TypeFor[fakes.ISelfComparable]():
-			return []any{r.get_SelfComparable()}
-		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-			return []any{r.get_FakeReplaceFinalTwo(), r.get_FakeReplaceFinalOne()}
-		case reflect.TypeFor[fakes.IFakeInstanceService]():
-			return []any{r.get_IFakeInstanceService()}
-		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-			return []any{r.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.get_FakeScopedService()}
-		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-			return []any{r.get_FakeDisposableScoped()}
-		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-			return []any{r.get_IFakeFormBDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeTransientService]():
 			return []any{r.NewFakeTransientService()}
 		case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 			return []any{r.NewFakeTransientWithScopedDep()}
+		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+			return []any{r.get_FakeDisposableSingleton()}
+		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+			return []any{r.get_FakeDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 			return []any{r.NewFakeDisposableTransient()}
 		case reflect.TypeFor[fakes.IFakeMultipleService]():
@@ -1372,22 +1408,54 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.NewFakeOpenGenericService_fakes_IFakeService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IFakeConsumer()}
+		case reflect.TypeFor[fakes.IPocoClass]():
+			return []any{r.get_PocoClass()}
+		case reflect.TypeFor[fakes.IClassImplementingIterable]():
+			return []any{r.get_ClassImplementingIterable()}
+		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+			return []any{r.get_ClassInheritingAbstract()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IPocoClass(), r.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IClassImplementingIterable(), r.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IClassInheritingAbstract(), r.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()}
+		case reflect.TypeFor[fakes.IGenSlotA]():
+			return []any{r.get_GenSlotA()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 			return []any{r.NewFakeOpenGenericService_fakes_IGenSlotA(), r.NewClosedFakeOpenGenericService_fakes_IGenSlotA()}
+		case reflect.TypeFor[fakes.IGenSlotB]():
+			return []any{r.get_GenSlotB()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 			return []any{r.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), r.NewFakeOpenGenericService_fakes_IGenSlotB(), r.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{r.get_AnyKeyServiceA()}
+		case reflect.TypeFor[fakes.IStructFakeService]():
+			return []any{r.get_StructFakeService()}
+		case reflect.TypeFor[fakes.IStructConsumer]():
+			return []any{r.get_StructConsumer()}
+		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+			return []any{r.get_StructFakeOne(), r.get_StructFakeTwo()}
+		case reflect.TypeFor[fakes.ISelfComparable]():
+			return []any{r.get_SelfComparable()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 			return []any{r.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
 		case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 			return []any{r.NewFakeAsyncOnlyDisposable()}
 		case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 			return []any{r.NewFakeSyncAsyncDisposable()}
+		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+			return []any{r.get_FakeReplaceFinalTwo(), r.get_FakeReplaceFinalOne()}
+		case reflect.TypeFor[fakes.IFakeInstanceService]():
+			return []any{r.get_IFakeInstanceService()}
+		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
+			return []any{r.get_IFakeFormBDisposableSingleton()}
+		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
+			return []any{r.get_IFakeFormBDisposableScoped()}
+		case reflect.TypeFor[fakes.IMixedA]():
+			return []any{r.get_MixedSingletonFirst(), r.NewMixedTransientLast()}
+		case reflect.TypeFor[fakes.IMixedB]():
+			return []any{r.NewMixedTransientFirst(), r.get_MixedSingletonLast()}
 		}
 		return nil
 	}
@@ -1419,12 +1487,12 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{r.get_KeyedServiceOne__both_(), r.get_KeyedServiceTwo__both_()}
 		case "singleton-factory":
 			return []any{r.get_KeyedServiceOne__singleton_factory_()}
-		case "scoped":
-			return []any{r.get_KeyedServiceOne__scoped_()}
 		case "transient":
 			return []any{r.NewKeyedServiceOne__transient_()}
 		case "transient-factory":
 			return []any{r.NewIKeyedService__transient_factory_()}
+		case "scoped":
+			return []any{r.get_KeyedServiceOne__scoped_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
@@ -1514,44 +1582,16 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.root.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return s.root.get_FakeConsumer()
-	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-		return s.root.get_FakeDisposableSingleton()
-	case reflect.TypeFor[fakes.IPocoClass]():
-		return s.root.get_PocoClass()
-	case reflect.TypeFor[fakes.IClassImplementingIterable]():
-		return s.root.get_ClassImplementingIterable()
-	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-		return s.root.get_ClassInheritingAbstract()
-	case reflect.TypeFor[fakes.IGenSlotA]():
-		return s.root.get_GenSlotA()
-	case reflect.TypeFor[fakes.IGenSlotB]():
-		return s.root.get_GenSlotB()
-	case reflect.TypeFor[fakes.IAnyKeyService]():
-		return s.root.get_AnyKeyServiceA()
-	case reflect.TypeFor[fakes.IStructFakeService]():
-		return s.root.get_StructFakeService()
-	case reflect.TypeFor[fakes.IStructConsumer]():
-		return s.root.get_StructConsumer()
-	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-		return s.root.get_StructFakeTwo()
-	case reflect.TypeFor[fakes.ISelfComparable]():
-		return s.root.get_SelfComparable()
-	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-		return s.root.get_FakeReplaceFinalOne()
-	case reflect.TypeFor[fakes.IFakeInstanceService]():
-		return s.root.get_IFakeInstanceService()
-	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-		return s.root.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.get_FakeScopedService()
-	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-		return s.get_FakeDisposableScoped()
-	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-		return s.get_IFakeFormBDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return s.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 		return s.NewFakeTransientWithScopedDep()
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return s.root.get_FakeDisposableSingleton()
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+		return s.get_FakeDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 		return s.NewFakeDisposableTransient()
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
@@ -1562,22 +1602,54 @@ func (s *scope) GetService(t reflect.Type) any {
 		return s.NewFakeOpenGenericService_fakes_IFakeService()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 		return s.NewFakeOpenGenericService_fakes_IFakeConsumer()
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return s.root.get_PocoClass()
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return s.root.get_ClassImplementingIterable()
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return s.root.get_ClassInheritingAbstract()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
 		return s.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
 		return s.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 		return s.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()
+	case reflect.TypeFor[fakes.IGenSlotA]():
+		return s.root.get_GenSlotA()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 		return s.NewClosedFakeOpenGenericService_fakes_IGenSlotA()
+	case reflect.TypeFor[fakes.IGenSlotB]():
+		return s.root.get_GenSlotB()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 		return s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return s.root.get_AnyKeyServiceA()
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return s.root.get_StructFakeService()
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return s.root.get_StructConsumer()
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return s.root.get_StructFakeTwo()
+	case reflect.TypeFor[fakes.ISelfComparable]():
+		return s.root.get_SelfComparable()
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()
 	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 		return s.NewFakeAsyncOnlyDisposable()
 	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 		return s.NewFakeSyncAsyncDisposable()
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return s.root.get_FakeReplaceFinalOne()
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
+		return s.root.get_IFakeInstanceService()
+	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
+		return s.root.get_IFakeFormBDisposableSingleton()
+	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
+		return s.get_IFakeFormBDisposableScoped()
+	case reflect.TypeFor[fakes.IMixedA]():
+		return s.NewMixedTransientLast()
+	case reflect.TypeFor[fakes.IMixedB]():
+		return s.root.get_MixedSingletonLast()
 	}
 	return nil
 }
@@ -1588,43 +1660,15 @@ func (s *scope) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeConsumer]():
 		return true
-	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-		return true
-	case reflect.TypeFor[fakes.IPocoClass]():
-		return true
-	case reflect.TypeFor[fakes.IClassImplementingIterable]():
-		return true
-	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-		return true
-	case reflect.TypeFor[fakes.IGenSlotA]():
-		return true
-	case reflect.TypeFor[fakes.IGenSlotB]():
-		return true
-	case reflect.TypeFor[fakes.IAnyKeyService]():
-		return true
-	case reflect.TypeFor[fakes.IStructFakeService]():
-		return true
-	case reflect.TypeFor[fakes.IStructConsumer]():
-		return true
-	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-		return true
-	case reflect.TypeFor[fakes.ISelfComparable]():
-		return true
-	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-		return true
-	case reflect.TypeFor[fakes.IFakeInstanceService]():
-		return true
-	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-		return true
 	case reflect.TypeFor[fakes.IFakeScopedService]():
-		return true
-	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-		return true
-	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
 		return true
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return true
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+		return true
+	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
 		return true
 	case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 		return true
@@ -1636,21 +1680,53 @@ func (s *scope) IsService(t reflect.Type) bool {
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 		return true
+	case reflect.TypeFor[fakes.IPocoClass]():
+		return true
+	case reflect.TypeFor[fakes.IClassImplementingIterable]():
+		return true
+	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 		return true
+	case reflect.TypeFor[fakes.IGenSlotA]():
+		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 		return true
+	case reflect.TypeFor[fakes.IGenSlotB]():
+		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
+		return true
+	case reflect.TypeFor[fakes.IAnyKeyService]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeService]():
+		return true
+	case reflect.TypeFor[fakes.IStructConsumer]():
+		return true
+	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+		return true
+	case reflect.TypeFor[fakes.ISelfComparable]():
 		return true
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 		return true
 	case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 		return true
 	case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
+		return true
+	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeInstanceService]():
+		return true
+	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
+		return true
+	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
+		return true
+	case reflect.TypeFor[fakes.IMixedA]():
+		return true
+	case reflect.TypeFor[fakes.IMixedB]():
 		return true
 	}
 	return false
@@ -1681,12 +1757,12 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 			return s.root.get_KeyedServiceTwo__both_()
 		case "singleton-factory":
 			return s.root.get_KeyedServiceOne__singleton_factory_()
-		case "scoped":
-			return s.get_KeyedServiceOne__scoped_()
 		case "transient":
 			return s.NewKeyedServiceOne__transient_()
 		case "transient-factory":
 			return s.NewIKeyedService__transient_factory_()
+		case "scoped":
+			return s.get_KeyedServiceOne__scoped_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
@@ -1733,44 +1809,16 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.get_FakeService()}
 		case reflect.TypeFor[fakes.IFakeConsumer]():
 			return []any{s.root.get_FakeConsumer()}
-		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-			return []any{s.root.get_FakeDisposableSingleton()}
-		case reflect.TypeFor[fakes.IPocoClass]():
-			return []any{s.root.get_PocoClass()}
-		case reflect.TypeFor[fakes.IClassImplementingIterable]():
-			return []any{s.root.get_ClassImplementingIterable()}
-		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-			return []any{s.root.get_ClassInheritingAbstract()}
-		case reflect.TypeFor[fakes.IGenSlotA]():
-			return []any{s.root.get_GenSlotA()}
-		case reflect.TypeFor[fakes.IGenSlotB]():
-			return []any{s.root.get_GenSlotB()}
-		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{s.root.get_AnyKeyServiceA()}
-		case reflect.TypeFor[fakes.IStructFakeService]():
-			return []any{s.root.get_StructFakeService()}
-		case reflect.TypeFor[fakes.IStructConsumer]():
-			return []any{s.root.get_StructConsumer()}
-		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-			return []any{s.root.get_StructFakeOne(), s.root.get_StructFakeTwo()}
-		case reflect.TypeFor[fakes.ISelfComparable]():
-			return []any{s.root.get_SelfComparable()}
-		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-			return []any{s.root.get_FakeReplaceFinalTwo(), s.root.get_FakeReplaceFinalOne()}
-		case reflect.TypeFor[fakes.IFakeInstanceService]():
-			return []any{s.root.get_IFakeInstanceService()}
-		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-			return []any{s.root.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.get_FakeScopedService()}
-		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-			return []any{s.get_FakeDisposableScoped()}
-		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-			return []any{s.get_IFakeFormBDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeTransientService]():
 			return []any{s.NewFakeTransientService()}
 		case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
 			return []any{s.NewFakeTransientWithScopedDep()}
+		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
+			return []any{s.root.get_FakeDisposableSingleton()}
+		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
+			return []any{s.get_FakeDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeDisposableTransient]():
 			return []any{s.NewFakeDisposableTransient()}
 		case reflect.TypeFor[fakes.IFakeMultipleService]():
@@ -1781,22 +1829,54 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.NewFakeOpenGenericService_fakes_IFakeService()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeConsumer]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IFakeConsumer()}
+		case reflect.TypeFor[fakes.IPocoClass]():
+			return []any{s.root.get_PocoClass()}
+		case reflect.TypeFor[fakes.IClassImplementingIterable]():
+			return []any{s.root.get_ClassImplementingIterable()}
+		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
+			return []any{s.root.get_ClassInheritingAbstract()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IPocoClass]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IPocoClass(), s.NewConstrainedFakeOpenGenericService_fakes_IPocoClass()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IClassImplementingIterable(), s.NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IClassInheritingAbstract(), s.NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract()}
+		case reflect.TypeFor[fakes.IGenSlotA]():
+			return []any{s.root.get_GenSlotA()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotA]]():
 			return []any{s.NewFakeOpenGenericService_fakes_IGenSlotA(), s.NewClosedFakeOpenGenericService_fakes_IGenSlotA()}
+		case reflect.TypeFor[fakes.IGenSlotB]():
+			return []any{s.root.get_GenSlotB()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IGenSlotB]]():
 			return []any{s.NewClosedFakeOpenGenericService_fakes_IGenSlotB(), s.NewFakeOpenGenericService_fakes_IGenSlotB(), s.NewInstanceFakeOpenGenericService_fakes_IGenSlotB()}
+		case reflect.TypeFor[fakes.IAnyKeyService]():
+			return []any{s.root.get_AnyKeyServiceA()}
+		case reflect.TypeFor[fakes.IStructFakeService]():
+			return []any{s.root.get_StructFakeService()}
+		case reflect.TypeFor[fakes.IStructConsumer]():
+			return []any{s.root.get_StructConsumer()}
+		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
+			return []any{s.root.get_StructFakeOne(), s.root.get_StructFakeTwo()}
+		case reflect.TypeFor[fakes.ISelfComparable]():
+			return []any{s.root.get_SelfComparable()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.ISelfComparable]]():
 			return []any{s.NewClassWithSelfReferencingConstraint_fakes_ISelfComparable()}
 		case reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]():
 			return []any{s.NewFakeAsyncOnlyDisposable()}
 		case reflect.TypeFor[*fakes.FakeSyncAsyncDisposable]():
 			return []any{s.NewFakeSyncAsyncDisposable()}
+		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
+			return []any{s.root.get_FakeReplaceFinalTwo(), s.root.get_FakeReplaceFinalOne()}
+		case reflect.TypeFor[fakes.IFakeInstanceService]():
+			return []any{s.root.get_IFakeInstanceService()}
+		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
+			return []any{s.root.get_IFakeFormBDisposableSingleton()}
+		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
+			return []any{s.get_IFakeFormBDisposableScoped()}
+		case reflect.TypeFor[fakes.IMixedA]():
+			return []any{s.root.get_MixedSingletonFirst(), s.NewMixedTransientLast()}
+		case reflect.TypeFor[fakes.IMixedB]():
+			return []any{s.NewMixedTransientFirst(), s.root.get_MixedSingletonLast()}
 		}
 		return nil
 	}
@@ -1828,12 +1908,12 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 			return []any{s.root.get_KeyedServiceOne__both_(), s.root.get_KeyedServiceTwo__both_()}
 		case "singleton-factory":
 			return []any{s.root.get_KeyedServiceOne__singleton_factory_()}
-		case "scoped":
-			return []any{s.get_KeyedServiceOne__scoped_()}
 		case "transient":
 			return []any{s.NewKeyedServiceOne__transient_()}
 		case "transient-factory":
 			return []any{s.NewIKeyedService__transient_factory_()}
+		case "scoped":
+			return []any{s.get_KeyedServiceOne__scoped_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
@@ -2091,6 +2171,14 @@ func (s *scope) NewFakeSyncAsyncDisposable() *fakes.FakeSyncAsyncDisposable {
 	return v
 }
 
+func (s *scope) NewMixedTransientLast() fakes.IMixedA {
+	return fakes.NewMixedTransientLast()
+}
+
+func (s *scope) NewMixedTransientFirst() fakes.IMixedB {
+	return fakes.NewMixedTransientFirst()
+}
+
 func (s *scope) NewKeyedServiceOne__transient_() fakes.IKeyedService {
 	return fakes.NewKeyedServiceOne()
 }
@@ -2152,6 +2240,10 @@ func (s *scope) IFakeInstanceService() fakes.IFakeInstanceService {
 func (s *scope) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSingleton {
 	return s.root.get_IFakeFormBDisposableSingleton()
 }
+
+func (s *scope) MixedSingletonFirst() fakes.IMixedA { return s.root.get_MixedSingletonFirst() }
+
+func (s *scope) MixedSingletonLast() fakes.IMixedB { return s.root.get_MixedSingletonLast() }
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.get_FakeScopedService() }
 

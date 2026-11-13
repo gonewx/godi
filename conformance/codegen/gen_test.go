@@ -477,6 +477,11 @@ func conformanceRegistry() *plan.Registry {
 		FactoryExpr: "func(p godi.Provider) fakes.IFakeFormBDisposableScoped {\n\treturn fakes.NewFakeFormBCloser()\n}",
 		Lifetime:    plan.Scoped,
 	})
+	// Eval fix A4: mirrors the mixed-lifetime registrations in registration.go.
+	reg.Service(plan.Service{Name: "MixedSingletonFirst", GoType: "fakes.IMixedA", Ctor: "fakes.NewMixedSingletonFirst", Lifetime: plan.Singleton})
+	reg.Service(plan.Service{Name: "MixedTransientLast", GoType: "fakes.IMixedA", Ctor: "fakes.NewMixedTransientLast", Lifetime: plan.Transient})
+	reg.Service(plan.Service{Name: "MixedTransientFirst", GoType: "fakes.IMixedB", Ctor: "fakes.NewMixedTransientFirst", Lifetime: plan.Transient})
+	reg.Service(plan.Service{Name: "MixedSingletonLast", GoType: "fakes.IMixedB", Ctor: "fakes.NewMixedSingletonLast", Lifetime: plan.Singleton})
 	return reg
 }
 

@@ -395,9 +395,9 @@ func TestSPV_RootResolveScopedViaTransient_GoAdaptation(t *testing.T) {
 
 // 5.4-SPV-08: GetService_DoesNotThrow_WhenGetServiceForPolymorphicServiceIsCalledOnRoot
 // dotnet: validateScopes doesn't throw when last registration is not scoped.
-// godi: root-scoped semantics → Build + resolve succeed regardless of lifetime mix.
-// Runtime resolves by lifetime priority (singleton > scoped > transient), not
-// dotnet's "last descriptor wins" — only Assert Build success + non-nil resolve.
+// godi: root-scoped semantics → Build + resolve succeed regardless of lifetime mix,
+// and, as in dotnet, the last descriptor wins whatever its lifetime (eval fix A4):
+// the transient valBar3 registered after the scoped valBar is resolved.
 func TestSPV_PolymorphicLastNotScoped_BuildSucceeds(t *testing.T) {
 	b := runtime.NewBuilder()
 	runtime.AddScoped[valIBar](b, func(p godi.Provider) valIBar {
@@ -413,7 +413,7 @@ func TestSPV_PolymorphicLastNotScoped_BuildSucceeds(t *testing.T) {
 
 	got := provider.GetService(reflect.TypeFor[valIBar]())
 	testutil.NotNil(t, got)
-	testutil.Equal(t, reflect.TypeOf(got).String(), "*conformance.valBar")
+	testutil.Equal(t, reflect.TypeOf(got).String(), "*conformance.valBar3")
 }
 
 // 5.4-SPV-15: GetService_DoesNotThrow_WhenGetServiceForServiceWithMultipleImplementationScopesWhereLastIsNotScoped

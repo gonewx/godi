@@ -72,9 +72,10 @@ func register() {
 	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IGenSlotA], fakes.ClosedFakeOpenGenericService[fakes.IGenSlotA]](&r) // closed — LAST → wins single resolve
 
 	// Story 4.3 (AC3, 接触点 8): mixed open/closed enumerable in dotnet slot order
-	// [closed#1, open-produced, instance]. ALL transient (D-3: mixed-lifetime
-	// multi-registration under one service type is an unhandled axis; same
-	// lifetime stays on the proven path; lifetime doesn't affect slot order).
+	// [closed#1, open-produced, instance]. ALL transient: lifetime doesn't affect
+	// slot order. Mixing lifetimes under one service type is supported too — both
+	// providers resolve such registrations in registration order (eval fix A4,
+	// covered by IMixedA / IMixedB below) — but this scenario keeps one lifetime.
 	godi.AddSingleton[fakes.IGenSlotB, fakes.GenSlotB](&r)                                                                       // element
 	godi.AddTransient[fakes.IFakeOpenGenericService[fakes.IGenSlotB], fakes.ClosedFakeOpenGenericService[fakes.IGenSlotB]](&r)   // closed#1 → enumerable[0]
 	AddFakeOpenGenericService[fakes.IGenSlotB](&r)                                                                               // open-produced → enumerable[1]
@@ -226,6 +227,17 @@ func register() {
 	godi.AddScopedFactory[fakes.IFakeFormBDisposableScoped](&r, func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
 		return fakes.NewFakeFormBCloser()
 	})
+
+	// Eval fix A4: one service type registered with mixed lifetimes resolves in
+	// registration order, as in dotnet — GetService returns the LAST registration
+	// whatever its lifetime, GetKeyedServices(t, nil) returns all of them in
+	// registration order, each element keeping its own lifetime. IMixedA is
+	// singleton then transient, IMixedB transient then singleton; the runtime
+	// leg (spec_mixed_lifetime_test.go) registers the same sequence.
+	godi.AddSingleton[fakes.IMixedA, fakes.MixedSingletonFirst](&r)
+	godi.AddTransient[fakes.IMixedA, fakes.MixedTransientLast](&r)
+	godi.AddTransient[fakes.IMixedB, fakes.MixedTransientFirst](&r)
+	godi.AddSingleton[fakes.IMixedB, fakes.MixedSingletonLast](&r)
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper
