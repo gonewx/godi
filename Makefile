@@ -30,7 +30,7 @@ CHANGELOG_SECTION = index($$0, h) == 1 { p = 1; next } \
 	p { s = 1; print }
 
 # Targets with prerequisites (ci, release-check, release-tag) rely on their
-# order.
+# order: cheap checks run before the full gate.
 .NOTPARALLEL:
 
 .DEFAULT_GOAL := help
@@ -171,8 +171,8 @@ release-notes: ## Print the release notes for VERSION=vX.Y.Z (its section of CHA
 	fi; \
 	printf '%s\n' "$$notes"
 
-.PHONY: release-tag
-release-tag: release-check ## Create the annotated tag VERSION=vX.Y.Z locally, with the release notes as its message.
+.PHONY: release-tag-preflight
+release-tag-preflight: # Cheap checks that run before the full gate: right branch, tag not taken.
 	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
 	if [ "$$branch" != "$(MAIN_BRANCH)" ]; then \
 		echo "error: releases are tagged on $(MAIN_BRANCH), not on $$branch" >&2; \
@@ -181,8 +181,11 @@ release-tag: release-check ## Create the annotated tag VERSION=vX.Y.Z locally, w
 	if git rev-parse -q --verify "refs/tags/$$VERSION" >/dev/null; then \
 		echo "error: tag $$VERSION already exists" >&2; \
 		exit 1; \
-	fi; \
-	notes="$$($(MAKE) -s --no-print-directory release-notes)" || exit 1; \
+	fi
+
+.PHONY: release-tag
+release-tag: release-tag-preflight release-check ## Create the annotated tag VERSION=vX.Y.Z locally, with the release notes as its message.
+	@notes="$$($(MAKE) -s --no-print-directory release-notes)" || exit 1; \
 	printf '%s\n\n%s\n' "$$VERSION" "$$notes" | git tag $(GIT_TAG_FLAGS) "$$VERSION" --cleanup=whitespace -F - || exit 1; \
 	echo "tagged $$VERSION at $$(git rev-parse --short HEAD); publish it with 'make release-push VERSION=$$VERSION'"
 
