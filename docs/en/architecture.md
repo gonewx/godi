@@ -101,8 +101,12 @@ result forces zero-byte generator output (AD-3).
 ## Disposer Pattern
 
 `runtime.Disposer` releases in **LIFO** order via `Track` / `TrackAsync` /
-`CloseAll` / `CloseAllAsync`. Disposability is auto-detected statically:
-`io.Closer` via `Track`, `godi.AsyncDisposable` via `TrackAsync` (AD-11).
+`CloseAll` / `CloseAllAsync`. Generated containers and the runtime provider
+both track through `TrackAny`, which dispatches on the dynamic type:
+`io.Closer` via `Track`, otherwise `godi.AsyncDisposable` via `TrackAsync`.
+The generator emits it for form A implementations that are statically
+disposable (AD-11) and for every form B product, whose type is unknown at
+generation time.
 Ownership follows AD-12: **transient disposables are tracked by the scope that
 created them; singletons are tracked only by the root.** Generated containers
 consume the exported disposer directly.

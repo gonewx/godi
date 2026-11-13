@@ -68,8 +68,8 @@ type Service struct {
 	// statically via types.Implements against the REAL interface type read from
 	// the godi package (Story 6.3, D-7 — not a hand-synthesized signature, since
 	// context.Context is a named type). A service may be BOTH Disposable and
-	// AsyncDisposable (a both-disposable); genlib emits the unchanged Track for
-	// the sync/both path and TrackAsync only for the async-only path (D-8).
+	// AsyncDisposable (a both-disposable); genlib emits disp.TrackAny for either,
+	// which dispatches on the dynamic type at run time.
 	AsyncDisposable bool
 	// Key holds the key expression source text for keyed registrations (AD-17).
 	// Empty = unkeyed service. The generator reads this from the AST via

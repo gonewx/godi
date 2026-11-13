@@ -165,7 +165,6 @@ func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync 
 	uniq["github.com/gonewx/godi"] = struct{}{}
 	if disposables {
 		uniq["github.com/gonewx/godi/runtime"] = struct{}{}
-		uniq["io"] = struct{}{}
 	}
 	type userImport struct {
 		alias string // "" for a plain import
@@ -191,9 +190,6 @@ func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync 
 	fmt.Fprintf(buf, "import (\n")
 	if hasAsync {
 		fmt.Fprintf(buf, "\t\"context\"\n")
-	}
-	if disposables {
-		fmt.Fprintf(buf, "\t\"io\"\n")
 	}
 	fmt.Fprintf(buf, "\t\"reflect\"\n\n")
 	fmt.Fprintf(buf, "\t\"github.com/gonewx/godi\"\n")
@@ -286,61 +282,30 @@ func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service
 	fmt.Fprintf(buf, "}\n\n")
 }
 
-// trackArg renders the argument to disp.Track / disp.TrackAsync for a value of
-// declared type goType. An interface-typed service (e.g.
-// fakes.IFakeDisposableSingleton) is type-asserted to the disposer interface —
-// the UNCHANGED Story 2.3 form that keeps sync goldens byte-identical. A concrete
-// pointer-typed service (e.g. *fakes.FakeAsyncOnlyDisposable) already implements
-// the disposer interface and is passed directly, because a type assertion on a
-// non-interface operand does not compile.
-func trackArg(expr, goType, iface string) string {
-	if strings.HasPrefix(goType, "*") {
-		return expr
-	}
-	return expr + ".(" + iface + ")"
+// tracksDisposal reports whether instances of s are handed to the disposer. A
+// form-A service is tracked only when its impl is statically known to be
+// disposable; a form-B (FactoryExpr) product's type is unknown at generation
+// time, so it is always tracked and TrackAny decides at run time — mirroring
+// the runtime provider, which asserts every instance.
+func tracksDisposal(s plan.Service) bool {
+	return s.Disposable || s.AsyncDisposable || s.FactoryExpr != ""
 }
 
-// emitFieldTrack writes the disp.Track / disp.TrackAsync line for a disposable
-// field expression fieldExpr (declared type goType), tracked into recv.disp
-// (D-8 dispatch): a Disposable service — including a both-disposable — keeps the
-// UNCHANGED sync Track path; an async-only service uses TrackAsync. Nothing is
-// written for a non-disposable service.
-func emitFieldTrack(buf *bytes.Buffer, recv, fieldExpr, goType string, s plan.Service) {
-	switch {
-	case s.Disposable:
-		fmt.Fprintf(buf, "\t%s.disp.Track(%s)\n", recv, trackArg(fieldExpr, goType, "io.Closer"))
-	case s.AsyncDisposable:
-		fmt.Fprintf(buf, "\t%s.disp.TrackAsync(%s)\n", recv, trackArg(fieldExpr, goType, "godi.AsyncDisposable"))
+// emitTrack writes `recv.disp.TrackAny(expr)` for a tracked service (see
+// tracksDisposal); nothing is written otherwise. TrackAny dispatches on the
+// dynamic type (io.Closer → Track, else godi.AsyncDisposable → TrackAsync), so
+// the emitted call needs no type assertion and the container never imports io.
+func emitTrack(buf *bytes.Buffer, recv, expr string, s plan.Service) {
+	if tracksDisposal(s) {
+		fmt.Fprintf(buf, "\t%s.disp.TrackAny(%s)\n", recv, expr)
 	}
-}
-
-// emitValueTrack writes the disp.Track / disp.TrackAsync line for a disposable
-// transient's local value v. concrete=true (ctor path — v is the constructor's
-// concrete return type) passes v directly; concrete=false (factory path — v has
-// the declared goType, possibly an interface) asserts per trackArg. Same D-8
-// dispatch as emitFieldTrack.
-func emitValueTrack(buf *bytes.Buffer, recv, goType string, concrete bool, s plan.Service) {
-	var iface, method string
-	switch {
-	case s.Disposable:
-		iface, method = "io.Closer", "Track"
-	case s.AsyncDisposable:
-		iface, method = "godi.AsyncDisposable", "TrackAsync"
-	default:
-		return
-	}
-	arg := "v"
-	if !concrete {
-		arg = trackArg("v", goType, iface)
-	}
-	fmt.Fprintf(buf, "\t%s.disp.%s(%s)\n", recv, method, arg)
 }
 
 func emitWiringBlock(buf *bytes.Buffer, services []plan.Service, recv string, reg *plan.Registry) {
 	for _, s := range services {
 		if s.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\t%s.f_%s = (%s)(%s)\n", recv, s.Name, s.FactoryExpr, recv)
-			emitFieldTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s.GoType, s)
+			emitTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s)
 			continue
 		}
 		emitErrTransientDeps(buf, s.Deps, recv, reg, "return nil, err")
@@ -350,11 +315,11 @@ func emitWiringBlock(buf *bytes.Buffer, services []plan.Service, recv string, re
 			fmt.Fprintf(buf, "\tif err != nil {\n")
 			fmt.Fprintf(buf, "\t\treturn nil, err\n")
 			fmt.Fprintf(buf, "\t}\n")
-			emitFieldTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s.GoType, s)
+			emitTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s)
 			continue
 		}
 		fmt.Fprintf(buf, "\t%s.f_%s = %s(%s)\n", recv, s.Name, s.Ctor, args)
-		emitFieldTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s.GoType, s)
+		emitTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, s.Name), s)
 	}
 }
 
@@ -363,12 +328,12 @@ func emitKeyedWiringBlock(buf *bytes.Buffer, services []plan.Service, recv strin
 		fname := keyedFieldName(s)
 		if s.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\t%s.f_%s = (%s)(%s)\n", recv, fname, s.FactoryExpr, recv)
-			emitFieldTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, fname), s.GoType, s)
+			emitTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, fname), s)
 			continue
 		}
 		args := depArgsForCtx(s.Deps, recv, reg)
 		fmt.Fprintf(buf, "\t%s.f_%s = %s(%s)\n", recv, fname, s.Ctor, args)
-		emitFieldTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, fname), s.GoType, s)
+		emitTrack(buf, recv, fmt.Sprintf("%s.f_%s", recv, fname), s)
 	}
 }
 
@@ -464,16 +429,13 @@ func emitErrTransientDeps(buf *bytes.Buffer, deps []string, recv string, reg *pl
 
 func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, typeName string, reg *plan.Registry, disposables bool) {
 	for _, s := range transients {
-		disp := s.Disposable || s.AsyncDisposable
+		disp := tracksDisposal(s)
 		if s.FactoryExpr != "" {
+			// A form-B product is always tracked (tracksDisposal).
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, s.Name, s.GoType)
-			if disp {
-				fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
-				emitValueTrack(buf, recv, s.GoType, false, s)
-				fmt.Fprintf(buf, "\treturn v\n")
-			} else {
-				fmt.Fprintf(buf, "\treturn (%s)(%s)\n", s.FactoryExpr, recv)
-			}
+			fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
+			emitTrack(buf, recv, "v", s)
+			fmt.Fprintf(buf, "\treturn v\n")
 			fmt.Fprintf(buf, "}\n\n")
 		} else if s.CtorErr {
 			fmt.Fprintf(buf, "func (%s %s) New%s() (%s, error) {\n", recv, typeName, s.Name, s.GoType)
@@ -484,7 +446,7 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 				fmt.Fprintf(buf, "\tif err != nil {\n")
 				fmt.Fprintf(buf, "\t\treturn nil, err\n")
 				fmt.Fprintf(buf, "\t}\n")
-				emitValueTrack(buf, recv, s.GoType, true, s)
+				emitTrack(buf, recv, "v", s)
 				fmt.Fprintf(buf, "\treturn v, nil\n")
 			} else {
 				fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
@@ -496,7 +458,7 @@ func emitTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, ty
 			args := depArgsForCtx(s.Deps, recv, reg)
 			if disp {
 				fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
-				emitValueTrack(buf, recv, s.GoType, true, s)
+				emitTrack(buf, recv, "v", s)
 				fmt.Fprintf(buf, "\treturn v\n")
 			} else {
 				fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)
@@ -758,7 +720,7 @@ func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.R
 		for _, svc := range scopedWiring {
 			if svc.FactoryExpr != "" {
 				fmt.Fprintf(buf, "\ts.f_%s = (%s)(s)\n", svc.Name, svc.FactoryExpr)
-				emitFieldTrack(buf, "s", fmt.Sprintf("s.f_%s", svc.Name), svc.GoType, svc)
+				emitTrack(buf, "s", fmt.Sprintf("s.f_%s", svc.Name), svc)
 			} else {
 				emitErrTransientDeps(buf, svc.Deps, "s", reg, "panic(err)")
 				args := depArgsForCreateScope(svc.Deps, reg)
@@ -770,7 +732,7 @@ func emitCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *plan.R
 				} else {
 					fmt.Fprintf(buf, "\ts.f_%s = %s(%s)\n", svc.Name, svc.Ctor, args)
 				}
-				emitFieldTrack(buf, "s", fmt.Sprintf("s.f_%s", svc.Name), svc.GoType, svc)
+				emitTrack(buf, "s", fmt.Sprintf("s.f_%s", svc.Name), svc)
 			}
 		}
 		emitKeyedWiringBlock(buf, keyedScopedWiring, "s", reg)
@@ -1162,7 +1124,7 @@ func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *p
 	for _, svc := range scopedWiring {
 		if svc.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\tns.f_%s = (%s)(ns)\n", svc.Name, svc.FactoryExpr)
-			emitFieldTrack(buf, "ns", fmt.Sprintf("ns.f_%s", svc.Name), svc.GoType, svc)
+			emitTrack(buf, "ns", fmt.Sprintf("ns.f_%s", svc.Name), svc)
 		} else {
 			emitErrTransientDeps(buf, svc.Deps, "ns", reg, "panic(err)")
 			args := depArgsForNestedScope(svc.Deps, reg)
@@ -1174,18 +1136,18 @@ func emitScopeCreateScope(buf *bytes.Buffer, scopedWiring []plan.Service, reg *p
 			} else {
 				fmt.Fprintf(buf, "\tns.f_%s = %s(%s)\n", svc.Name, svc.Ctor, args)
 			}
-			emitFieldTrack(buf, "ns", fmt.Sprintf("ns.f_%s", svc.Name), svc.GoType, svc)
+			emitTrack(buf, "ns", fmt.Sprintf("ns.f_%s", svc.Name), svc)
 		}
 	}
 	for _, svc := range keyedScopedWiring {
 		fname := keyedFieldName(svc)
 		if svc.FactoryExpr != "" {
 			fmt.Fprintf(buf, "\tns.f_%s = (%s)(ns)\n", fname, svc.FactoryExpr)
-			emitFieldTrack(buf, "ns", fmt.Sprintf("ns.f_%s", fname), svc.GoType, svc)
+			emitTrack(buf, "ns", fmt.Sprintf("ns.f_%s", fname), svc)
 		} else {
 			args := depArgsForNestedScope(svc.Deps, reg)
 			fmt.Fprintf(buf, "\tns.f_%s = %s(%s)\n", fname, svc.Ctor, args)
-			emitFieldTrack(buf, "ns", fmt.Sprintf("ns.f_%s", fname), svc.GoType, svc)
+			emitTrack(buf, "ns", fmt.Sprintf("ns.f_%s", fname), svc)
 		}
 	}
 	fmt.Fprintf(buf, "\treturn ns\n")
@@ -1298,27 +1260,27 @@ func concatServices(slices ...[]plan.Service) []plan.Service {
 	return out
 }
 
-// hasDisposables reports whether any service opts into release (sync io.Closer
-// OR async godi.AsyncDisposable, Story 6.3). It gates the disp field, the
-// runtime import, and NewDisposer — so a purely-async-disposable container still
-// gets a disposer. For a purely-sync container this equals Story 2.3's behavior
-// (byte-identical goldens).
+// hasDisposables reports whether any service is tracked for release (see
+// tracksDisposal: a sync or async disposable, or any form-B product). It gates
+// the disp field, the runtime import, and NewDisposer.
 func hasDisposables(services []plan.Service) bool {
 	for _, s := range services {
-		if s.Disposable || s.AsyncDisposable {
+		if tracksDisposal(s) {
 			return true
 		}
 	}
 	return false
 }
 
-// hasAsyncDisposables reports whether any service opts into async release
-// (godi.AsyncDisposable). It gates the emitted `context` import and the
-// CloseAsync methods on Root/scope — independent of hasDisposables so a
-// purely-sync disposable container emits neither (D-8).
+// hasAsyncDisposables reports whether any service may need async release: an
+// AsyncDisposable, or a form-B product whose type is unknown at generation time
+// (it might implement godi.AsyncDisposable). It gates the emitted `context`
+// import and the CloseAsync methods on Root/scope — independent of
+// hasDisposables so a purely-sync form-A disposable container emits neither
+// (D-8).
 func hasAsyncDisposables(services []plan.Service) bool {
 	for _, s := range services {
-		if s.AsyncDisposable {
+		if s.AsyncDisposable || s.FactoryExpr != "" {
 			return true
 		}
 	}
@@ -1348,23 +1310,20 @@ func keyedFieldName(s plan.Service) string {
 func emitKeyedTransientMethods(buf *bytes.Buffer, transients []plan.Service, recv, typeName string, reg *plan.Registry, disposables bool) {
 	for _, s := range transients {
 		fname := keyedFieldName(s)
-		disp := s.Disposable || s.AsyncDisposable
+		disp := tracksDisposal(s)
 		if s.FactoryExpr != "" {
+			// A form-B product is always tracked (tracksDisposal).
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, fname, s.GoType)
-			if disp {
-				fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
-				emitValueTrack(buf, recv, s.GoType, false, s)
-				fmt.Fprintf(buf, "\treturn v\n")
-			} else {
-				fmt.Fprintf(buf, "\treturn (%s)(%s)\n", s.FactoryExpr, recv)
-			}
+			fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
+			emitTrack(buf, recv, "v", s)
+			fmt.Fprintf(buf, "\treturn v\n")
 			fmt.Fprintf(buf, "}\n\n")
 		} else {
 			fmt.Fprintf(buf, "func (%s %s) New%s() %s {\n", recv, typeName, fname, s.GoType)
 			args := depArgsForCtx(s.Deps, recv, reg)
 			if disp {
 				fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
-				emitValueTrack(buf, recv, s.GoType, true, s)
+				emitTrack(buf, recv, "v", s)
 				fmt.Fprintf(buf, "\treturn v\n")
 			} else {
 				fmt.Fprintf(buf, "\treturn %s(%s)\n", s.Ctor, args)

@@ -18,8 +18,7 @@ import (
 // dynamic value lets CloseAllAsync re-assert godi.AsyncDisposable on a
 // both-disposable that was tracked through the sync Track path (prefer-async,
 // D-3/D-4). The field-type change is internal to runtime — generated code only
-// calls Track/TrackAsync/CloseAll/CloseAllAsync and never touches items, so the
-// existing sync emit path (and its goldens) is unaffected.
+// calls TrackAny/CloseAll/CloseAllAsync and never touches items.
 type Disposer struct {
 	items []any
 }
@@ -28,10 +27,9 @@ func NewDisposer() *Disposer {
 	return &Disposer{}
 }
 
-// Track records a synchronous (io.Closer) disposable — the UNCHANGED Story 2.3
-// signature. Both-disposables (io.Closer + godi.AsyncDisposable) also enter
-// here because the caller asserts io.Closer first (D-3), so the existing codegen
-// emit stays `disp.Track(x.(io.Closer))` and its goldens remain byte-identical.
+// Track records a synchronous (io.Closer) disposable. Both-disposables
+// (io.Closer + godi.AsyncDisposable) also enter here because TrackAny asserts
+// io.Closer first (D-3).
 func (d *Disposer) Track(c io.Closer) {
 	d.items = append(d.items, c)
 }
@@ -41,6 +39,24 @@ func (d *Disposer) Track(c io.Closer) {
 // error (AC3); CloseAllAsync releases it via CloseAsync.
 func (d *Disposer) TrackAsync(ad godi.AsyncDisposable) {
 	d.items = append(d.items, ad)
+}
+
+// TrackAny records v by its dynamic type: an io.Closer (including a
+// both-disposable) via Track, otherwise a godi.AsyncDisposable via TrackAsync.
+// A nil v, or one that is neither, is not tracked. It is the single tracking
+// entry point for both the runtime provider and generated containers — the
+// latter cannot know a form-B factory's product type at generation time.
+func (d *Disposer) TrackAny(v any) {
+	if v == nil {
+		return
+	}
+	if c, ok := v.(io.Closer); ok {
+		d.Track(c)
+		return
+	}
+	if ad, ok := v.(godi.AsyncDisposable); ok {
+		d.TrackAsync(ad)
+	}
 }
 
 // CloseAll releases every tracked item synchronously in LIFO (reverse-creation)

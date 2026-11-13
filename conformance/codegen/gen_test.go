@@ -463,6 +463,20 @@ func conformanceRegistry() *plan.Registry {
 		FactoryExpr: "func(p godi.Provider) fakes.IFakeInstanceService {\n\treturn fakes.NewFakeInstanceService()\n}",
 		Lifetime:    plan.Singleton,
 	})
+	// Eval fix A3: mirrors registration.go's form-B disposables, whose products
+	// the container releases through Disposer.TrackAny.
+	reg.Service(plan.Service{
+		Name:        "IFakeFormBDisposableSingleton",
+		GoType:      "fakes.IFakeFormBDisposableSingleton",
+		FactoryExpr: "func(p godi.Provider) fakes.IFakeFormBDisposableSingleton {\n\treturn fakes.NewFakeFormBCloser()\n}",
+		Lifetime:    plan.Singleton,
+	})
+	reg.Service(plan.Service{
+		Name:        "IFakeFormBDisposableScoped",
+		GoType:      "fakes.IFakeFormBDisposableScoped",
+		FactoryExpr: "func(p godi.Provider) fakes.IFakeFormBDisposableScoped {\n\treturn fakes.NewFakeFormBCloser()\n}",
+		Lifetime:    plan.Scoped,
+	})
 	return reg
 }
 

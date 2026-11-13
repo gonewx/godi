@@ -101,10 +101,13 @@ panic**；纯查询（`IsService`/`IsKeyedService`）保持全域、从不 panic
 
 ## Disposer 模式
 
-`runtime.Disposer` 以 LIFO（逆创建序）跟踪并释放可释放实例，暴露四个方法供生成容器
-消费：
+`runtime.Disposer` 以 LIFO（逆创建序）跟踪并释放可释放实例，暴露以下方法：
 
-- `Track(io.Closer)`：同步可释放（含 both-disposable，调用方先断言 `io.Closer`）。
+- `TrackAny(any)`：生成容器与 runtime provider 统一的追踪入口，按动态类型分派——
+  满足 `io.Closer` 走 `Track`，否则满足 `godi.AsyncDisposable` 走 `TrackAsync`，
+  都不满足（或为 nil）则不追踪。生成器对静态判定可释放的形态 A 实现（AD-11）和
+  所有形态 B 产物（生成期无法得知其类型）发射该调用。
+- `Track(io.Closer)`：同步可释放（含 both-disposable，`TrackAny` 先断言 `io.Closer`）。
 - `TrackAsync(godi.AsyncDisposable)`：仅异步可释放。
 - `CloseAll() error`：同步 LIFO 释放；仅异步项报显式错误（提示改用 `CloseAsync`）；
   first-error-continue。

@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"sync"
 
@@ -37,21 +36,6 @@ type keyedReg struct {
 	slot     int
 }
 
-// trackDisposable records v with disp using the runtime analogue of the codegen
-// emit dispatch (D-3/D-4): a v satisfying io.Closer (including a both-disposable)
-// is tracked via Track — under CloseAllAsync it is re-asserted to
-// AsyncDisposable, so prefer-async still holds; an async-only v (no io.Closer)
-// is tracked via TrackAsync. A v that is neither is not tracked.
-func trackDisposable(disp *Disposer, v any) {
-	if c, ok := v.(io.Closer); ok {
-		disp.Track(c)
-		return
-	}
-	if ad, ok := v.(godi.AsyncDisposable); ok {
-		disp.TrackAsync(ad)
-	}
-}
-
 func materializeKeyedInto(cache map[keyedEntry][]any, ke keyedEntry, factories []func(godi.Provider) any, provider godi.Provider, disp *Disposer) []any {
 	if instances, ok := cache[ke]; ok {
 		return instances
@@ -59,7 +43,7 @@ func materializeKeyedInto(cache map[keyedEntry][]any, ke keyedEntry, factories [
 	instances := make([]any, len(factories))
 	for i, f := range factories {
 		v := f(provider)
-		trackDisposable(disp, v)
+		disp.TrackAny(v)
 		instances[i] = v
 	}
 	cache[ke] = instances
@@ -73,7 +57,7 @@ func materializeInto(cache map[reflect.Type][]any, t reflect.Type, factories []f
 	instances := make([]any, len(factories))
 	for i, f := range factories {
 		v := f(provider)
-		trackDisposable(disp, v)
+		disp.TrackAny(v)
 		instances[i] = v
 	}
 	cache[t] = instances
@@ -145,7 +129,7 @@ func (r *root) GetService(t reflect.Type) any {
 	}
 	if factories, ok := r.transientFactories[t]; ok {
 		v := factories[len(factories)-1](r)
-		trackDisposable(r.disp, v)
+		r.disp.TrackAny(v)
 		return v
 	}
 	return nil
@@ -228,7 +212,7 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 	}
 	if factories, ok := r.keyedTransientFactories[ke]; ok {
 		v := factories[len(factories)-1](r)
-		trackDisposable(r.disp, v)
+		r.disp.TrackAny(v)
 		return v
 	}
 	return nil
@@ -261,7 +245,7 @@ func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(r)
-			trackDisposable(r.disp, v)
+			r.disp.TrackAny(v)
 			instances[i] = v
 		}
 		return instances
@@ -286,7 +270,7 @@ func (r *root) getUnkeyedServices(t reflect.Type) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(r)
-			trackDisposable(r.disp, v)
+			r.disp.TrackAny(v)
 			instances[i] = v
 		}
 		return instances
@@ -316,7 +300,7 @@ func (r *root) getAnyKeyedServices(t reflect.Type) []any {
 			out = append(out, instances[kr.slot])
 		case keyedTransient:
 			v := r.keyedTransientFactories[kr.ke][kr.slot](r)
-			trackDisposable(r.disp, v)
+			r.disp.TrackAny(v)
 			out = append(out, v)
 		}
 	}
@@ -403,7 +387,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	if factories, ok := s.root.transientFactories[t]; ok {
 		v := factories[len(factories)-1](s)
-		trackDisposable(s.disp, v)
+		s.disp.TrackAny(v)
 		return v
 	}
 	return nil
@@ -437,7 +421,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	}
 	if factories, ok := s.root.keyedTransientFactories[ke]; ok {
 		v := factories[len(factories)-1](s)
-		trackDisposable(s.disp, v)
+		s.disp.TrackAny(v)
 		return v
 	}
 	return nil
@@ -470,7 +454,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(s)
-			trackDisposable(s.disp, v)
+			s.disp.TrackAny(v)
 			instances[i] = v
 		}
 		return instances
@@ -495,7 +479,7 @@ func (s *scope) getUnkeyedServices(t reflect.Type) []any {
 		instances := make([]any, len(factories))
 		for i, f := range factories {
 			v := f(s)
-			trackDisposable(s.disp, v)
+			s.disp.TrackAny(v)
 			instances[i] = v
 		}
 		return instances
@@ -523,7 +507,7 @@ func (s *scope) getAnyKeyedServices(t reflect.Type) []any {
 			out = append(out, instances[kr.slot])
 		case keyedTransient:
 			v := s.root.keyedTransientFactories[kr.ke][kr.slot](s)
-			trackDisposable(s.disp, v)
+			s.disp.TrackAny(v)
 			out = append(out, v)
 		}
 	}

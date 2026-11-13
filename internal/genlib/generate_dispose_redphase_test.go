@@ -111,8 +111,8 @@ func TestEmitDispose_TrackCallsEmitted(t *testing.T) {
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, "r.disp.Track("),
-		"NewRoot must emit Track calls for disposable services")
+	testutil.True(t, strings.Contains(code, "r.disp.TrackAny("),
+		"NewRoot must emit TrackAny calls for disposable services")
 }
 
 // --- 2.3-GEN-004 (AC2, P0) ---------------------------------------------------
@@ -148,7 +148,7 @@ func TestEmitDispose_ClosedGuardInClose(t *testing.T) {
 // TestEmitDispose_TransientMethodTracksDisposable: New{T}() for a disposable
 // transient must Track the new instance — each transient is tracked per
 // creation (AD-12: 逐次 track). The emit changes from `return Ctor(...)` to
-// `v := Ctor(...); recv.disp.Track(v); return v`.
+// `v := Ctor(...); recv.disp.TrackAny(v); return v`.
 func TestEmitDispose_TransientMethodTracksDisposable(t *testing.T) {
 	src, err := genlib.Generate(disposableRegistry(), "codegen")
 	testutil.NoError(t, err)
@@ -162,7 +162,7 @@ func TestEmitDispose_TransientMethodTracksDisposable(t *testing.T) {
 	if nextFunc > 0 {
 		methodBlock = methodBlock[:nextFunc+1]
 	}
-	testutil.True(t, strings.Contains(methodBlock, ".disp.Track("),
+	testutil.True(t, strings.Contains(methodBlock, ".disp.TrackAny("),
 		"New{T}() for disposable transient must Track the instance (AD-12)")
 }
 

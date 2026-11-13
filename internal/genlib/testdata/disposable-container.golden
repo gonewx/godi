@@ -2,7 +2,6 @@
 package codegen
 
 import (
-	"io"
 	"reflect"
 
 	"example.com/svc"
@@ -26,15 +25,15 @@ func NewRoot() (*Root, error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
 	r.f_DBConn = svc.NewDBConn()
-	r.disp.Track(r.f_DBConn.(io.Closer))
+	r.disp.TrackAny(r.f_DBConn)
 	r.f_Session = svc.NewSession()
-	r.disp.Track(r.f_Session.(io.Closer))
+	r.disp.TrackAny(r.f_Session)
 	return r, nil
 }
 
 func (r *Root) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
-	r.disp.Track(v)
+	r.disp.TrackAny(v)
 	return v
 }
 
@@ -136,7 +135,7 @@ func (r *Root) CreateScope() godi.Scope {
 	s := &scope{root: r}
 	s.disp = runtime.NewDisposer()
 	s.f_Session = svc.NewSession()
-	s.disp.Track(s.f_Session.(io.Closer))
+	s.disp.TrackAny(s.f_Session)
 	return s
 }
 
@@ -228,7 +227,7 @@ func (s *scope) CreateScope() godi.Scope {
 	ns := &scope{root: s.root}
 	ns.disp = runtime.NewDisposer()
 	ns.f_Session = svc.NewSession()
-	ns.disp.Track(ns.f_Session.(io.Closer))
+	ns.disp.TrackAny(ns.f_Session)
 	return ns
 }
 
@@ -243,7 +242,7 @@ func (s *scope) Close() error {
 
 func (s *scope) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
-	s.disp.Track(v)
+	s.disp.TrackAny(v)
 	return v
 }
 

@@ -3,7 +3,6 @@ package codegen
 
 import (
 	"context"
-	"io"
 	"reflect"
 
 	"example.com/svc"
@@ -27,15 +26,15 @@ func NewRoot() (*Root, error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
 	r.f_DBConn = svc.NewDBConn()
-	r.disp.TrackAsync(r.f_DBConn.(godi.AsyncDisposable))
+	r.disp.TrackAny(r.f_DBConn)
 	r.f_Session = svc.NewSession()
-	r.disp.TrackAsync(r.f_Session.(godi.AsyncDisposable))
+	r.disp.TrackAny(r.f_Session)
 	return r, nil
 }
 
 func (r *Root) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
-	r.disp.TrackAsync(v)
+	r.disp.TrackAny(v)
 	return v
 }
 
@@ -137,7 +136,7 @@ func (r *Root) CreateScope() godi.Scope {
 	s := &scope{root: r}
 	s.disp = runtime.NewDisposer()
 	s.f_Session = svc.NewSession()
-	s.disp.TrackAsync(s.f_Session.(godi.AsyncDisposable))
+	s.disp.TrackAny(s.f_Session)
 	return s
 }
 
@@ -238,7 +237,7 @@ func (s *scope) CreateScope() godi.Scope {
 	ns := &scope{root: s.root}
 	ns.disp = runtime.NewDisposer()
 	ns.f_Session = svc.NewSession()
-	ns.disp.TrackAsync(ns.f_Session.(godi.AsyncDisposable))
+	ns.disp.TrackAny(ns.f_Session)
 	return ns
 }
 
@@ -262,7 +261,7 @@ func (s *scope) CloseAsync(ctx context.Context) error {
 
 func (s *scope) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
-	s.disp.TrackAsync(v)
+	s.disp.TrackAny(v)
 	return v
 }
 

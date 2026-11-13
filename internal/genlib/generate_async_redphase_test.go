@@ -84,32 +84,34 @@ func mixedAsyncRegistry() *plan.Registry {
 
 // --- 6.3-GEN-001 (AC2, P0) ---------------------------------------------------
 
-// TestEmitAsyncDispose_TrackAsyncCallsEmitted: NewRoot must emit TrackAsync
-// calls for async-only services (D-8 Track dispatch).
+// TestEmitAsyncDispose_TrackAsyncCallsEmitted: NewRoot must track async-only
+// services; the emit is TrackAny, which routes them to TrackAsync at run time.
 func TestEmitAsyncDispose_TrackAsyncCallsEmitted(t *testing.T) {
 	src, err := genlib.Generate(asyncDisposableRegistry(), "codegen")
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, ".disp.TrackAsync("),
-		"NewRoot must emit TrackAsync calls for async-only disposable services")
+	testutil.True(t, strings.Contains(code, "r.disp.TrackAny(r.f_DBConn)"),
+		"NewRoot must emit TrackAny calls for async-only disposable services")
 }
 
 // --- 6.3-GEN-002 (AC6, P0) ---------------------------------------------------
 
-// TestEmitAsyncDispose_SyncTrackUnchangedForBoth: a both-disposable service
-// (Disposable AND AsyncDisposable) must STILL go through the existing
-// `disp.Track(x.(io.Closer))` path — D-3 says the sync emit path is
-// UNCHANGED so Story 2.3's goldens stay byte-identical.
+// TestEmitAsyncDispose_SyncTrackUnchangedForBoth: sync-only, async-only and
+// both-disposable services are all emitted as `disp.TrackAny(x)` with no type
+// assertion; TrackAny asserts io.Closer first, so a both-disposable still takes
+// the sync Track path at run time (D-3).
 func TestEmitAsyncDispose_SyncTrackUnchangedForBoth(t *testing.T) {
 	src, err := genlib.Generate(mixedAsyncRegistry(), "codegen")
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, ".disp.Track(") && strings.Contains(code, ".(io.Closer))"),
-		"a both-disposable service must still emit disp.Track(x.(io.Closer)) — the UNCHANGED sync path (D-3)")
-	testutil.True(t, strings.Contains(code, ".disp.TrackAsync("),
-		"the async-only sibling service in the same registry must emit TrackAsync")
+	for _, name := range []string{"SyncOnly", "AsyncOnly", "Both"} {
+		testutil.True(t, strings.Contains(code, "r.disp.TrackAny(r.f_"+name+")"),
+			name+" must be tracked via disp.TrackAny")
+	}
+	testutil.True(t, !strings.Contains(code, ".(io.Closer)") && !strings.Contains(code, ".(godi.AsyncDisposable)"),
+		"tracking must not emit type assertions")
 }
 
 // --- 6.3-GEN-003 (AC2, P0) ---------------------------------------------------
@@ -195,7 +197,7 @@ func TestEmitAsyncDispose_NoContextImportWhenNoAsyncDisposables(t *testing.T) {
 // --- 6.3-GEN-007 (AC2, P0) ---------------------------------------------------
 
 // TestEmitAsyncDispose_TransientMethodTracksAsyncDisposable: New{T}() for an
-// async-only transient must call TrackAsync on the new instance.
+// async-only transient must track the new instance via TrackAny.
 func TestEmitAsyncDispose_TransientMethodTracksAsyncDisposable(t *testing.T) {
 	src, err := genlib.Generate(asyncDisposableRegistry(), "codegen")
 	testutil.NoError(t, err)
@@ -208,8 +210,8 @@ func TestEmitAsyncDispose_TransientMethodTracksAsyncDisposable(t *testing.T) {
 	if nextFunc > 0 {
 		methodBlock = methodBlock[:nextFunc+1]
 	}
-	testutil.True(t, strings.Contains(methodBlock, ".disp.TrackAsync("),
-		"New{T}() for an async-only transient must call disp.TrackAsync")
+	testutil.True(t, strings.Contains(methodBlock, ".disp.TrackAny(v)"),
+		"New{T}() for an async-only transient must call disp.TrackAny")
 }
 
 // --- 6.3-GEN-008 (AC6, P0) ---------------------------------------------------

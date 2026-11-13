@@ -95,7 +95,6 @@ without installing the generator. After changing a DSL declaration, re-run
 
 - **Not safe for concurrent use.** A `Root` or `Scope` must not be shared across goroutines: resolving disposable transients concurrently loses disposal tracking, and `Close` is not synchronized with resolution.
 - **Form B factories bypass graph validation.** Missing-registration, captive-dependency, and cycle checks are guaranteed only for form A (`New{Impl}`) constructors. A form B factory that resolves an unregistered service, or resolves its dependencies through a named function or a keyed lookup, is not checked at `go generate`; it can panic or receive a nil dependency inside `NewRoot()`.
-- **Form B products are not disposed automatically.** Only form A implementations that satisfy `io.Closer` or `godi.AsyncDisposable` are tracked. Close the values a form B factory creates yourself.
 - **Markers need explicit type arguments.** Write `godi.AddSingletonFactory[Logger](&r, f)`, not `godi.AddSingletonFactory(&r, f)`. A marker whose type argument is inferred is skipped with a warning, and the service is missing from the container.
 
 ## Documentation

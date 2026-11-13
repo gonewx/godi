@@ -215,6 +215,16 @@ func register() {
 	godi.AddSingletonFactory[fakes.IFakeInstanceService](&r, func(p godi.Provider) fakes.IFakeInstanceService {
 		return fakes.NewFakeInstanceService()
 	})
+
+	// Eval fix A3: form-B products are released too. The generator cannot see
+	// the factory's product type, so the container hands every form-B product to
+	// Disposer.TrackAny, which releases these io.Closer fakes on root/scope Close.
+	godi.AddSingletonFactory[fakes.IFakeFormBDisposableSingleton](&r, func(p godi.Provider) fakes.IFakeFormBDisposableSingleton {
+		return fakes.NewFakeFormBCloser()
+	})
+	godi.AddScopedFactory[fakes.IFakeFormBDisposableScoped](&r, func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
+		return fakes.NewFakeFormBCloser()
+	})
 }
 
 // AddFakeOpenGenericService is the Story 4.1 per-service open-generic helper

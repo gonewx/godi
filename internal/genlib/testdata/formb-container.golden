@@ -2,16 +2,20 @@
 package codegen
 
 import (
+	"context"
 	"reflect"
 
 	"example.com/svc"
 	"github.com/gonewx/godi"
+	"github.com/gonewx/godi/runtime"
 )
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
 	f_Widget svc.IWidget
+	disp     *runtime.Disposer
 	closed   bool
+	closeErr error
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -19,7 +23,9 @@ var _ godi.Provider = (*Root)(nil)
 // NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
 func NewRoot() (*Root, error) {
 	r := &Root{}
+	r.disp = runtime.NewDisposer()
 	r.f_Widget = (func(p godi.Provider) svc.IWidget { return svc.NewWidget() })(r)
+	r.disp.TrackAny(r.f_Widget)
 	return r, nil
 }
 
@@ -108,8 +114,21 @@ func (r *Root) CreateScope() godi.Scope {
 }
 
 func (r *Root) Close() error {
+	if r.closed {
+		return r.closeErr
+	}
 	r.closed = true
-	return nil
+	r.closeErr = r.disp.CloseAll()
+	return r.closeErr
+}
+
+func (r *Root) CloseAsync(ctx context.Context) error {
+	if r.closed {
+		return r.closeErr
+	}
+	r.closed = true
+	r.closeErr = r.disp.CloseAllAsync(ctx)
+	return r.closeErr
 }
 
 type scope struct {
