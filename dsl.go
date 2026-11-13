@@ -25,8 +25,8 @@ func AddSingleton[I any, Impl any](r *Registry) *Registry { return r }
 // constructor). Like AddSingleton it is a PURE static marker (AD-7): the
 // generator recognizes this call BY NAME and statically reads the factory
 // ARGUMENT EXPRESSION (go/ast source text) to inline into the generated
-// container, called inside the service's accessor with the resolving Root or
-// scope as its argument (D-2); it never executes the factory.
+// container, called inside the singleton's accessor on Root, with the Root as
+// its argument (D-2); it never executes the factory.
 // It returns r so registrations can chain.
 //
 // Naming (D-4): Go forbids generic-function overloading, so form B CANNOT share

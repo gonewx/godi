@@ -3,16 +3,15 @@
 // implementation, plus the cross-provider differential-equivalence harness.
 //
 // Design (AD-14 / AD-15 / AD-16): the suite is written once against the Provider
-// contract and executed against BOTH providers from the same registration
-// source — the reflect-free runtime provider (the semantic oracle) and the
-// codegen provider — asserting identical observable results.
+// contract and executed against BOTH providers, built from equivalent
+// registrations — the reflect-free runtime provider (the semantic oracle) and
+// the codegen provider — asserting identical observable results.
 //
-// Status (Story 1.5): the Walking Skeleton's single-service slice is wired —
-// spec_test.go registers the two real ProviderFactory values (runtime, codegen)
-// built from one logical registration source (singleton IFakeService) and
-// runs the dual-provider spec + cross-provider differential equivalence. The
-// 116 Spec / 52 Fakes corpus migrates incrementally per Epic 2–4, feeding the
-// existing RunSuite / AssertEquivalent unchanged.
+// spec_test.go defines the two ProviderFactory values: the runtime factory
+// registers hand-written runtime.Add* closures, and the codegen factory builds
+// the container generated from the godi.Add* markers in conformance/codegen.
+// The two registration sets are kept equivalent by hand (AD-14). The ported
+// spec cases run against both through RunSuite / AssertEquivalent.
 package conformance
 
 import (
@@ -65,8 +64,8 @@ func RunSuite(t *testing.T, factory ProviderFactory, cases []SpecCase) {
 }
 
 // AssertEquivalent is the cross-provider differential-equivalence assertion at
-// the heart of AD-15: probe runs against providers built by two factories for
-// the same logical registration, and the two results must be equal — the
+// the heart of AD-15: probe runs against providers built by two factories from
+// equivalent registrations, and the two results must be equal — the
 // codegen provider must match the runtime oracle.
 func AssertEquivalent[T comparable](t *testing.T, a, b ProviderFactory, probe func(Provider) T) {
 	t.Helper()
