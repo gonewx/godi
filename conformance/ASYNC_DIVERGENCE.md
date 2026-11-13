@@ -40,7 +40,7 @@ dotnet `BeginDispose` 单一 `_disposed` 让 `Dispose`/`DisposeAsync` **共享**
 
 ## codegen 侧架构记录：异步 fakes 为何 Transient
 
-conformance 共享容器（`codegen.NewRoot()`）的异步 fakes 注册为 **Transient** 而非 Scoped：codegen **eager 物化**每个 scoped 服务（`CreateScope` 内），一个仅异步的 scoped 服务会让共享容器的**每次 sync `scope.Close()` 报错**（AC3「仅异步→报错」），从而破坏 Story 2.3 的 sync dispose 套件（AC6 零回退红线）。Transient 保持 **lazy**（仅显式解析时 `track`），既守 2.3 零回退，又完整验证 scope 级异步释放（从 scope 解析 + `scope.CloseAsync` 释放该 scope 追踪的服务）。runtime spec oracle 用 scoped；受测轴（异步释放 / prefer-async / LIFO / sync-errors / dispose-once）在两 provider observable 一致（AD-15 差分等价 + Path γ）。
+conformance 共享容器（`codegen.NewRoot()`）的异步 fakes 注册为 **Transient** 而非 Scoped。这一选择源于当时 codegen **eager 物化**每个 scoped 服务（`CreateScope` 内）：一个仅异步的 scoped 服务会让共享容器的**每次 sync `scope.Close()` 报错**（AC3「仅异步→报错」），从而破坏 Story 2.3 的 sync dispose 套件（AC6 零回退红线）。**该限制已随惰性访问器消除**：生成容器的 scoped 服务现在与 runtime 一样在 scope 内首次解析时才构造并追踪，`CreateScope` 不再构造任何服务，未解析的仅异步 scoped 服务不会进入 scope 的 disposer。注册本身保持 Transient 未改：Transient 同样仅在显式解析时 `track`，既守 2.3 零回退，又完整验证 scope 级异步释放（从 scope 解析 + `scope.CloseAsync` 释放该 scope 追踪的服务）。runtime spec oracle 用 scoped；受测轴（异步释放 / prefer-async / LIFO / sync-errors / dispose-once）在两 provider observable 一致（AD-15 差分等价 + Path γ）。
 
 ## 引用
 

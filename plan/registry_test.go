@@ -235,3 +235,12 @@ func TestRegistry_ChainableRegistration(t *testing.T) {
 	errs := reg.Validate()
 	testutil.True(t, len(errs) == 0, "graph with satisfied deps must validate clean")
 }
+
+// TestService_CtorErrField_IsReadWritable (2.1-TOPO-004, AC1): Service.CtorErr
+// is the emit input that switches genlib to the comma-err constructor form. This
+// pins the field's existence; the static analyzer derives its value from the
+// constructor signature via go/types (AD-7).
+func TestService_CtorErrField_IsReadWritable(t *testing.T) {
+	s := plan.Service{Name: "X", Lifetime: plan.Singleton, CtorErr: true}
+	testutil.True(t, s.CtorErr, "Service.CtorErr emit-input field must exist and be settable")
+}

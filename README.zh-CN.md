@@ -92,7 +92,7 @@ repo := godi.GetRequired[Repo](scope)
 ## 已知限制
 
 - **不支持并发使用。** `Root` 和 `Scope` 不能跨 goroutine 共享：并发解析可释放的 transient 会丢失释放追踪，`Close` 也没有与解析同步。
-- **形态 B 工厂在构建容器时校验，而不是在 `go generate` 时。** 缺失注册、captive 依赖、循环依赖这三项检查只对形态 A（`New{Impl}`）构造函数是静态的。单例的形态 B 工厂如果解析了未注册的服务或构成循环，`NewRoot()` 会返回 error。单例工厂通过具名函数或键控注册去解析 scoped 服务时，不会有任何诊断。
+- **形态 B 工厂在运行时校验，而不是在 `go generate` 时。** 缺失注册、captive 依赖、循环依赖这三项检查只对形态 A（`New{Impl}`）构造函数是静态的。单例的形态 B 工厂如果解析了未注册的服务或构成循环，`NewRoot()` 会返回 error；作用域的形态 B 工厂出现同样问题时，会在所属作用域内首次解析该服务时 panic。单例工厂通过具名函数或键控注册去解析 scoped 服务时，不会有任何诊断。
 - **标记必须显式写出类型实参。** 要写 `godi.AddSingletonFactory[Logger](&r, f)`，不要写 `godi.AddSingletonFactory(&r, f)`。类型实参被推断的标记会被跳过并只打印一条警告，容器里会缺少这个服务。
 
 ## 文档

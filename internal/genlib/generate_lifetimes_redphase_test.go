@@ -185,7 +185,8 @@ func TestEmitLifetimes_ExistingGoldensUnchanged(t *testing.T) {
 // --- 2.2-EMIT-009 (AC2, P0) --------------------------------------------------
 
 // TestEmitLifetimes_TransientDepsAccessScopeFields: a transient's New{T}()
-// on scope must wire its scoped dependency from the scope's field (s.f_Request),
+// on scope must resolve its scoped dependency through the scope's own accessor
+// (s.get_Request(), which builds it on first use and caches it in s.f_Request),
 // not from root — this is the codegen side of AC2 (transient depends on scoped,
 // same scope reuses scoped).
 func TestEmitLifetimes_TransientDepsAccessScopeFields(t *testing.T) {
@@ -193,7 +194,7 @@ func TestEmitLifetimes_TransientDepsAccessScopeFields(t *testing.T) {
 	testutil.NoError(t, err)
 	code := string(src)
 
-	// scope.NewWidget() must access s.f_Request (scope-level scoped)
-	testutil.True(t, strings.Contains(code, "s.f_Request"),
-		"scope's NewWidget() must access scoped dependency from scope field (s.f_Request)")
+	body := methodBody(t, code, "func (s *scope) NewWidget()")
+	testutil.True(t, strings.Contains(body, "s.get_Request()"),
+		"scope's NewWidget() must resolve its scoped dependency through the scope accessor:\n"+body)
 }

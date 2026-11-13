@@ -63,7 +63,9 @@ what needs releasing.
 **Codegen provider** (`internal/genlib`): consumes a `plan.Registry` and emits a
 `Root` struct with one field per service. Resolution is a `type switch` on
 `reflect.TypeFor[T]()`, so `GetService` dispatches without constructing anything
-reflectively.
+reflectively. Singletons are built once inside `NewRoot()`; scoped services are
+built on first resolution within their scope. Both go through generated
+accessors that detect construction cycles.
 
 Both honor the same `Provider` contract, so the conformance suite runs one set of
 cases against both and asserts identical observable results (AD-15).

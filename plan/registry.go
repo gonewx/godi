@@ -1,9 +1,6 @@
 package plan
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // Lifetime distinguishes the three DI lifetimes (AD-1). This story only
 // exercises Singleton, but Scoped and Transient are defined now so that
@@ -42,22 +39,23 @@ type Service struct {
 	Lifetime Lifetime
 	// Deps lists the service Names this service's constructor depends on, in
 	// left-to-right signature order. genlib emits each as the access expression
-	// r.f_<Dep> when wiring the constructor call (Story 2.1).
+	// of that dependency (its accessor, or New<Dep>() for a transient) in the
+	// constructor call (Story 2.1).
 	Deps []string
 	// CtorErr records whether the constructor has a trailing error return. It is
 	// an EMIT INPUT (AD-7): the static analyzer (cmd/godi-gen, Task 3) derives it
-	// from the constructor's *types.Signature, and emitNewRoot uses it to switch
-	// between `r.f_X = Ctor(...)` and the comma-err `r.f_X, err = Ctor(...)` form.
+	// from the constructor's *types.Signature, and genlib uses it to switch
+	// between `v := Ctor(...)` and the comma-err `v, err := Ctor(...)` form.
 	CtorErr bool
 	// FactoryExpr holds the form-B factory argument expression (source text,
 	// rewritten by the generator for the emitted package: helper type
 	// parameters closed, package qualifiers remapped to the emitted file's
 	// import identifiers) when this service was registered via
 	// Add{Lifetime}Factory. When non-empty, genlib inlines it as
-	// `r.f_X = (FactoryExpr)(r)` (D-2) instead of discovering a New{Impl}
-	// constructor; Deps then carries only ORDERING constraints (the services the
-	// factory body Gets, so SingletonsTopo/ScopedTopo assemble them first) and
-	// is never rendered as call arguments.
+	// `v := (FactoryExpr)(r)` (D-2) instead of discovering a New{Impl}
+	// constructor; Deps then carries only the services the factory body Gets,
+	// for Validate's missing / cycle / captive checks, and is never rendered as
+	// call arguments.
 	FactoryExpr string
 	// Disposable records whether the implementation satisfies io.Closer, derived
 	// statically via types.Implements (AD-11). Story 2.1 only fills this field;
@@ -156,115 +154,6 @@ func (r *Registry) ServicesByGoType(goType string) []Service {
 	return out
 }
 
-// SingletonsTopo returns the registered singletons in dependency order: every
-// service appears AFTER each singleton it depends on, so emitNewRoot can wire
-// them top-to-bottom and a dependency's field (r.f_<Dep>) is always already
-// constructed when used as a constructor argument (Story 2.1, AD-8).
-//
-// The order is a deterministic depth-first post-order over registration order:
-// services are visited in the order they were registered; for each, its deps are
-// recursively emitted first, then the service itself. A visited set dedups
-// shared dependencies (the diamond case) so each singleton appears exactly once.
-// With no dependencies the result equals registration order — a precondition for
-// byte-identical regeneration (AD-14).
-//
-// Precondition: Validate has passed (no missing deps, no cycles). Cycle
-// detection is Epic 5.3; this method assumes an acyclic graph. A cyclic graph
-// would not infinitely loop here (the visited set bounds it) but would emit a
-// dependency after its dependent — that bad graph is Validate's job to reject.
-func (r *Registry) SingletonsTopo() []Service {
-	visited := make(map[string]struct{}, len(r.services))
-	out := make([]Service, 0, len(r.services))
-
-	var visit func(s Service)
-	var visitSingletonDepsOf func(s Service)
-	var visitDep func(dep string)
-	visitDep = func(dep string) {
-		if strings.HasPrefix(dep, "[]") {
-			goType := dep[2:]
-			for _, name := range r.byGoType[goType] {
-				if d, ok := r.byName[name]; ok {
-					if d.Lifetime == Singleton {
-						visit(d)
-					} else {
-						visitSingletonDepsOf(d)
-					}
-				}
-			}
-			return
-		}
-		d, ok := r.byName[dep]
-		if !ok {
-			return
-		}
-		if d.Lifetime == Singleton {
-			visit(d)
-			return
-		}
-		visitSingletonDepsOf(d)
-	}
-	visitSingletonDepsOf = func(s Service) {
-		for _, dep := range s.Deps {
-			visitDep(dep)
-		}
-	}
-	visit = func(s Service) {
-		if _, done := visited[s.Name]; done {
-			return
-		}
-		visited[s.Name] = struct{}{}
-		visitSingletonDepsOf(s)
-		out = append(out, s)
-	}
-
-	for _, s := range r.services {
-		if s.Lifetime != Singleton {
-			continue
-		}
-		visit(s)
-	}
-	return out
-}
-
-// ScopedTopo returns the registered scoped services in dependency order: every
-// scoped service appears AFTER each scoped service it depends on, so CreateScope
-// can wire them top-to-bottom. Singleton dependencies are NOT included (they are
-// wired separately in NewRoot and accessed via s.root.f_X).
-//
-// The algorithm mirrors SingletonsTopo: deterministic depth-first post-order
-// over registration order, restricted to Scoped lifetime services. A visited
-// set dedups shared dependencies.
-//
-// Precondition: Validate has passed (no missing deps, no cycles).
-func (r *Registry) ScopedTopo() []Service {
-	visited := make(map[string]struct{}, len(r.services))
-	out := make([]Service, 0, len(r.services))
-
-	var visit func(s Service)
-	visit = func(s Service) {
-		if _, done := visited[s.Name]; done {
-			return
-		}
-		visited[s.Name] = struct{}{}
-		for _, dep := range s.Deps {
-			d, ok := r.byName[dep]
-			if !ok || d.Lifetime != Scoped {
-				continue
-			}
-			visit(d)
-		}
-		out = append(out, s)
-	}
-
-	for _, s := range r.services {
-		if s.Lifetime != Scoped {
-			continue
-		}
-		visit(s)
-	}
-	return out
-}
-
 // Transients returns all registered unkeyed transient services in registration order.
 // Transients have no dependency-ordering need (each New*() is independent), but
 // a stable enumeration order is required for deterministic code generation (AD-14).
@@ -292,84 +181,6 @@ func (r *Registry) KeyedServicesByGoType(goType, key string) []Service {
 	out := make([]Service, 0, len(names))
 	for _, n := range names {
 		out = append(out, r.byName[n])
-	}
-	return out
-}
-
-// KeyedSingletonsTopo returns keyed singletons in dependency order, mirroring
-// SingletonsTopo for keyed services.
-//
-// Only KEYED services are emitted: a keyed singleton may depend on an UNKEYED
-// singleton (e.g. a closed open-generic keyed service injecting an unkeyed
-// dependency, Story 4.1), and that unkeyed dependency is already wired in the
-// unkeyed singleton block — which runs BEFORE the keyed block in NewRoot — and is
-// accessed via r.f_<Dep>. The recursion still descends through unkeyed deps so
-// keyed-on-keyed ordering holds, but appending an unkeyed dependency here would
-// re-wire it (constructing the singleton twice and breaking the shared-instance
-// invariant), so the append is filtered to keyed services.
-func (r *Registry) KeyedSingletonsTopo() []Service {
-	visited := make(map[string]struct{}, len(r.keyedServices))
-	out := make([]Service, 0, len(r.keyedServices))
-
-	var visit func(s Service)
-	visit = func(s Service) {
-		if _, done := visited[s.Name]; done {
-			return
-		}
-		visited[s.Name] = struct{}{}
-		for _, dep := range s.Deps {
-			d, ok := r.byName[dep]
-			if !ok || d.Lifetime != Singleton {
-				continue
-			}
-			visit(d)
-		}
-		if s.Key != "" {
-			out = append(out, s)
-		}
-	}
-
-	for _, s := range r.keyedServices {
-		if s.Lifetime != Singleton {
-			continue
-		}
-		visit(s)
-	}
-	return out
-}
-
-// KeyedScopedTopo returns keyed scoped services in dependency order. As in
-// KeyedSingletonsTopo, only KEYED services are emitted: an unkeyed scoped
-// dependency is wired in the unkeyed scoped block and accessed via the scope
-// field, so appending it here would re-wire it (parallel to the keyed-singleton
-// fix, Story 4.1).
-func (r *Registry) KeyedScopedTopo() []Service {
-	visited := make(map[string]struct{}, len(r.keyedServices))
-	out := make([]Service, 0, len(r.keyedServices))
-
-	var visit func(s Service)
-	visit = func(s Service) {
-		if _, done := visited[s.Name]; done {
-			return
-		}
-		visited[s.Name] = struct{}{}
-		for _, dep := range s.Deps {
-			d, ok := r.byName[dep]
-			if !ok || d.Lifetime != Scoped {
-				continue
-			}
-			visit(d)
-		}
-		if s.Key != "" {
-			out = append(out, s)
-		}
-	}
-
-	for _, s := range r.keyedServices {
-		if s.Lifetime != Scoped {
-			continue
-		}
-		visit(s)
 	}
 	return out
 }

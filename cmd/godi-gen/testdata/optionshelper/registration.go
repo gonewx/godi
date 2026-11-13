@@ -16,8 +16,8 @@
 //     including a GetServices over a NEVER-REGISTERED element type
 //     (ConfigureOptions — the legitimate empty configure chain);
 //   - the cache registered LAST in body order while the monitor's factory
-//     GetRequired-s it — the ordering case factoryDeps must feed
-//     SingletonsTopo for.
+//     GetRequired-s it — the ordering case the lazy singleton accessors
+//     must build on demand.
 package optionsfix
 
 import "github.com/gonewx/godi"

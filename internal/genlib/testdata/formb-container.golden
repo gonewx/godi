@@ -21,8 +21,8 @@ type Root struct {
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot builds every singleton and root-level scoped service. A panic during
-// construction is returned as an error after tracked disposables are released.
+// NewRoot builds every singleton. A panic during construction is returned as
+// an error after tracked disposables are released.
 func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()

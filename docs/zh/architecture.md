@@ -67,6 +67,8 @@ generator 按包路径（`github.com/gonewx/godi`）+ 函数名双重匹配 DSL 
 - 输入 `plan.Registry`，`Generate()` 产出一个实现 `godi.Provider` 的 `Root` 结构体。
 - 单例/作用域实例存为 `Root`/scope 的类型化字段，瞬态是 `New{T}()` 方法。
 - 解析走 type switch 分发，构造是直接的 `Ctor` 调用；`reflect.Type` 仅作派发键。
+- 单例在 `NewRoot()` 内构造一次；作用域服务在所属作用域内首次解析时才构造。两者
+  都经由生成的访问器完成，访问器会检出构造循环。
 
 ## Provider 接口
 

@@ -173,13 +173,14 @@ func register() {
 	// spec test's reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]() and the emitted
 	// field is concrete (TrackAsync passes it directly, no interface assertion).
 	//
-	// TRANSIENT — not scoped — deliberately: codegen EAGERLY materializes every
-	// scoped service in CreateScope, so a scoped async-only service in this SHARED
-	// container would make every sync scope.Close error (AC3: "only implements
-	// AsyncDisposable"), breaking Story 2.3's sync dispose tests. Transient stays
-	// lazy (tracked only when the async tests explicitly resolve it), preserving
-	// Story 2.3 zero-regression (AC6) while still exercising scope-level async
-	// release: the async tests resolve these FROM a scope, so that scope's disposer
+	// TRANSIENT — not scoped. The choice dates from when codegen eagerly
+	// materialized every scoped service in CreateScope, where a scoped async-only
+	// service in this SHARED container would have made every sync scope.Close
+	// error (AC3: "only implements AsyncDisposable"). Scoped services are now
+	// built on first resolution, so that constraint is gone; the registration is
+	// kept as is. Transient is tracked only when the async tests explicitly
+	// resolve it, preserving Story 2.3 zero-regression (AC6) while still
+	// exercising scope-level async release: the async tests resolve these FROM a scope, so that scope's disposer
 	// tracks them and scope.CloseAsync releases them (AC2). The runtime spec oracle
 	// registers them scoped; the axis under test (async release / prefer-async /
 	// LIFO / sync-errors) is observably identical across both (AD-15).

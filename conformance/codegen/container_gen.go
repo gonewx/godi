@@ -49,8 +49,11 @@ type Root struct {
 	f_IFakeFormBDisposableSingleton                        fakes.IFakeFormBDisposableSingleton
 	st_IFakeFormBDisposableSingleton                       uint8
 	f_FakeScopedService                                    fakes.IFakeScopedService
+	st_FakeScopedService                                   uint8
 	f_FakeDisposableScoped                                 fakes.IFakeDisposableScoped
+	st_FakeDisposableScoped                                uint8
 	f_IFakeFormBDisposableScoped                           fakes.IFakeFormBDisposableScoped
+	st_IFakeFormBDisposableScoped                          uint8
 	f_KeyedServiceOne__service1_                           fakes.IKeyedService
 	st_KeyedServiceOne__service1_                          uint8
 	f_KeyedServiceTwo__service2_                           fakes.IKeyedService
@@ -78,7 +81,9 @@ type Root struct {
 	f_FakeOpenGenericService_fakes_IFakeService__gen_key_  fakes.IFakeOpenGenericService[fakes.IFakeService]
 	st_FakeOpenGenericService_fakes_IFakeService__gen_key_ uint8
 	f_KeyedServiceOne__scoped_                             fakes.IKeyedService
+	st_KeyedServiceOne__scoped_                            uint8
 	f_IKeyedServiceWithProvider__scoped_with_provider_     fakes.IKeyedServiceWithProvider
+	st_IKeyedServiceWithProvider__scoped_with_provider_    uint8
 	disp                                                   *runtime.Disposer
 	closed                                                 bool
 	closeErr                                               error
@@ -86,8 +91,8 @@ type Root struct {
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot builds every singleton and root-level scoped service. A panic during
-// construction is returned as an error after tracked disposables are released.
+// NewRoot builds every singleton. A panic during construction is returned as
+// an error after tracked disposables are released.
 func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
@@ -128,18 +133,6 @@ func NewRoot() (root *Root, err error) {
 	r.get_AnyKeyServiceB__beta_()
 	r.get_IAnyKeyService__alpha_()
 	r.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()
-	r.f_FakeScopedService = fakes.NewFakeScopedService()
-	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
-	r.disp.TrackAny(r.f_FakeDisposableScoped)
-	r.f_IFakeFormBDisposableScoped = (func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
-		return fakes.NewFakeFormBCloser()
-	})(r)
-	r.disp.TrackAny(r.f_IFakeFormBDisposableScoped)
-	r.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
-	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
-		return fakes.NewKeyedServiceWithProvider(p)
-	})(r)
-	r.disp.TrackAny(r.f_IKeyedServiceWithProvider__scoped_with_provider_)
 	return r, nil
 }
 
@@ -762,12 +755,114 @@ func (r *Root) get_FakeOpenGenericService_fakes_IFakeService__gen_key_() fakes.I
 	return v
 }
 
+func (r *Root) get_FakeScopedService() fakes.IFakeScopedService {
+	if r.st_FakeScopedService == 2 {
+		return r.f_FakeScopedService
+	}
+	if r.st_FakeScopedService == 1 {
+		panic(godi.CircularDependencyError("FakeScopedService"))
+	}
+	r.st_FakeScopedService = 1
+	defer func() {
+		if r.st_FakeScopedService != 2 {
+			r.st_FakeScopedService = 0
+		}
+	}()
+	v := fakes.NewFakeScopedService()
+	r.f_FakeScopedService = v
+	r.st_FakeScopedService = 2
+	return v
+}
+
+func (r *Root) get_FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	if r.st_FakeDisposableScoped == 2 {
+		return r.f_FakeDisposableScoped
+	}
+	if r.st_FakeDisposableScoped == 1 {
+		panic(godi.CircularDependencyError("FakeDisposableScoped"))
+	}
+	r.st_FakeDisposableScoped = 1
+	defer func() {
+		if r.st_FakeDisposableScoped != 2 {
+			r.st_FakeDisposableScoped = 0
+		}
+	}()
+	v := fakes.NewFakeDisposableScoped()
+	r.f_FakeDisposableScoped = v
+	r.disp.TrackAny(v)
+	r.st_FakeDisposableScoped = 2
+	return v
+}
+
+func (r *Root) get_IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
+	if r.st_IFakeFormBDisposableScoped == 2 {
+		return r.f_IFakeFormBDisposableScoped
+	}
+	if r.st_IFakeFormBDisposableScoped == 1 {
+		panic(godi.CircularDependencyError("IFakeFormBDisposableScoped"))
+	}
+	r.st_IFakeFormBDisposableScoped = 1
+	defer func() {
+		if r.st_IFakeFormBDisposableScoped != 2 {
+			r.st_IFakeFormBDisposableScoped = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
+		return fakes.NewFakeFormBCloser()
+	})(r)
+	r.f_IFakeFormBDisposableScoped = v
+	r.disp.TrackAny(v)
+	r.st_IFakeFormBDisposableScoped = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceOne__scoped_() fakes.IKeyedService {
+	if r.st_KeyedServiceOne__scoped_ == 2 {
+		return r.f_KeyedServiceOne__scoped_
+	}
+	if r.st_KeyedServiceOne__scoped_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceOne#\"scoped\""))
+	}
+	r.st_KeyedServiceOne__scoped_ = 1
+	defer func() {
+		if r.st_KeyedServiceOne__scoped_ != 2 {
+			r.st_KeyedServiceOne__scoped_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceOne()
+	r.f_KeyedServiceOne__scoped_ = v
+	r.st_KeyedServiceOne__scoped_ = 2
+	return v
+}
+
+func (r *Root) get_IKeyedServiceWithProvider__scoped_with_provider_() fakes.IKeyedServiceWithProvider {
+	if r.st_IKeyedServiceWithProvider__scoped_with_provider_ == 2 {
+		return r.f_IKeyedServiceWithProvider__scoped_with_provider_
+	}
+	if r.st_IKeyedServiceWithProvider__scoped_with_provider_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithProvider#\"scoped-with-provider\""))
+	}
+	r.st_IKeyedServiceWithProvider__scoped_with_provider_ = 1
+	defer func() {
+		if r.st_IKeyedServiceWithProvider__scoped_with_provider_ != 2 {
+			r.st_IKeyedServiceWithProvider__scoped_with_provider_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(r)
+	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = v
+	r.disp.TrackAny(v)
+	r.st_IKeyedServiceWithProvider__scoped_with_provider_ = 2
+	return v
+}
+
 func (r *Root) NewFakeTransientService() fakes.IFakeTransientService {
 	return fakes.NewFakeTransientService()
 }
 
 func (r *Root) NewFakeTransientWithScopedDep() fakes.IFakeTransientWithScopedDep {
-	return fakes.NewFakeTransientWithScopedDep(r.f_FakeScopedService)
+	return fakes.NewFakeTransientWithScopedDep(r.get_FakeScopedService())
 }
 
 func (r *Root) NewFakeDisposableTransient() fakes.IFakeDisposableTransient {
@@ -916,12 +1011,14 @@ func (r *Root) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSinglet
 	return r.get_IFakeFormBDisposableSingleton()
 }
 
-func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
+func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.get_FakeScopedService() }
 
-func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped { return r.f_FakeDisposableScoped }
+func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	return r.get_FakeDisposableScoped()
+}
 
 func (r *Root) IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
-	return r.f_IFakeFormBDisposableScoped
+	return r.get_IFakeFormBDisposableScoped()
 }
 
 func (r *Root) Get[T any]() (T, bool) {
@@ -981,11 +1078,11 @@ func (r *Root) GetService(t reflect.Type) any {
 	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
 		return r.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
-		return r.f_FakeScopedService
+		return r.get_FakeScopedService()
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-		return r.f_FakeDisposableScoped
+		return r.get_FakeDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-		return r.f_IFakeFormBDisposableScoped
+		return r.get_IFakeFormBDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return r.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
@@ -1176,7 +1273,7 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 		case "singleton-factory":
 			return r.get_KeyedServiceOne__singleton_factory_()
 		case "scoped":
-			return r.f_KeyedServiceOne__scoped_
+			return r.get_KeyedServiceOne__scoped_()
 		case "transient":
 			return r.NewKeyedServiceOne__transient_()
 		case "transient-factory":
@@ -1199,7 +1296,7 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 		case "with-provider":
 			return r.get_IKeyedServiceWithProvider__with_provider_()
 		case "scoped-with-provider":
-			return r.f_IKeyedServiceWithProvider__scoped_with_provider_
+			return r.get_IKeyedServiceWithProvider__scoped_with_provider_()
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
@@ -1256,11 +1353,11 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
 			return []any{r.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
-			return []any{r.f_FakeScopedService}
+			return []any{r.get_FakeScopedService()}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-			return []any{r.f_FakeDisposableScoped}
+			return []any{r.get_FakeDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-			return []any{r.f_IFakeFormBDisposableScoped}
+			return []any{r.get_IFakeFormBDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeTransientService]():
 			return []any{r.NewFakeTransientService()}
 		case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
@@ -1297,13 +1394,13 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == godi.AnyKey {
 		switch t {
 		case reflect.TypeFor[fakes.IKeyedService]():
-			return []any{r.get_KeyedServiceOne__service1_(), r.get_KeyedServiceTwo__service2_(), r.get_KeyedServiceOne__both_(), r.get_KeyedServiceTwo__both_(), r.get_KeyedServiceOne__singleton_factory_(), r.NewKeyedServiceOne__transient_(), r.NewIKeyedService__transient_factory_(), r.f_KeyedServiceOne__scoped_}
+			return []any{r.get_KeyedServiceOne__service1_(), r.get_KeyedServiceTwo__service2_(), r.get_KeyedServiceOne__both_(), r.get_KeyedServiceTwo__both_(), r.get_KeyedServiceOne__singleton_factory_(), r.NewKeyedServiceOne__transient_(), r.NewIKeyedService__transient_factory_(), r.get_KeyedServiceOne__scoped_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 			return []any{r.get_IKeyedServiceWithDep__with_dep_(), r.get_IKeyedServiceWithDep__missing_dep_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 			return []any{r.get_IKeyedServiceWithKey__injected_key_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
-			return []any{r.get_IKeyedServiceWithProvider__with_provider_(), r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{r.get_IKeyedServiceWithProvider__with_provider_(), r.get_IKeyedServiceWithProvider__scoped_with_provider_()}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{r.get_AnyKeyServiceA__alpha_(), r.get_AnyKeyServiceB__beta_(), r.get_IAnyKeyService__alpha_()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
@@ -1323,7 +1420,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		case "singleton-factory":
 			return []any{r.get_KeyedServiceOne__singleton_factory_()}
 		case "scoped":
-			return []any{r.f_KeyedServiceOne__scoped_}
+			return []any{r.get_KeyedServiceOne__scoped_()}
 		case "transient":
 			return []any{r.NewKeyedServiceOne__transient_()}
 		case "transient-factory":
@@ -1346,7 +1443,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 		case "with-provider":
 			return []any{r.get_IKeyedServiceWithProvider__with_provider_()}
 		case "scoped-with-provider":
-			return []any{r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{r.get_IKeyedServiceWithProvider__scoped_with_provider_()}
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
@@ -1368,21 +1465,7 @@ func (r *Root) CreateScope() godi.Scope {
 	if r.closed {
 		panic(godi.ProviderClosedError())
 	}
-	s := &scope{root: r}
-	s.disp = runtime.NewDisposer()
-	s.f_FakeScopedService = fakes.NewFakeScopedService()
-	s.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
-	s.disp.TrackAny(s.f_FakeDisposableScoped)
-	s.f_IFakeFormBDisposableScoped = (func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
-		return fakes.NewFakeFormBCloser()
-	})(s)
-	s.disp.TrackAny(s.f_IFakeFormBDisposableScoped)
-	s.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
-	s.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
-		return fakes.NewKeyedServiceWithProvider(p)
-	})(s)
-	s.disp.TrackAny(s.f_IKeyedServiceWithProvider__scoped_with_provider_)
-	return s
+	return &scope{root: r, disp: runtime.NewDisposer()}
 }
 
 func (r *Root) Close() error {
@@ -1404,15 +1487,20 @@ func (r *Root) CloseAsync(ctx context.Context) error {
 }
 
 type scope struct {
-	root                                               *Root
-	f_FakeScopedService                                fakes.IFakeScopedService
-	f_FakeDisposableScoped                             fakes.IFakeDisposableScoped
-	f_IFakeFormBDisposableScoped                       fakes.IFakeFormBDisposableScoped
-	f_KeyedServiceOne__scoped_                         fakes.IKeyedService
-	f_IKeyedServiceWithProvider__scoped_with_provider_ fakes.IKeyedServiceWithProvider
-	disp                                               *runtime.Disposer
-	closed                                             bool
-	closeErr                                           error
+	root                                                *Root
+	f_FakeScopedService                                 fakes.IFakeScopedService
+	st_FakeScopedService                                uint8
+	f_FakeDisposableScoped                              fakes.IFakeDisposableScoped
+	st_FakeDisposableScoped                             uint8
+	f_IFakeFormBDisposableScoped                        fakes.IFakeFormBDisposableScoped
+	st_IFakeFormBDisposableScoped                       uint8
+	f_KeyedServiceOne__scoped_                          fakes.IKeyedService
+	st_KeyedServiceOne__scoped_                         uint8
+	f_IKeyedServiceWithProvider__scoped_with_provider_  fakes.IKeyedServiceWithProvider
+	st_IKeyedServiceWithProvider__scoped_with_provider_ uint8
+	disp                                                *runtime.Disposer
+	closed                                              bool
+	closeErr                                            error
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -1455,11 +1543,11 @@ func (s *scope) GetService(t reflect.Type) any {
 	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
 		return s.root.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
-		return s.f_FakeScopedService
+		return s.get_FakeScopedService()
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-		return s.f_FakeDisposableScoped
+		return s.get_FakeDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-		return s.f_IFakeFormBDisposableScoped
+		return s.get_IFakeFormBDisposableScoped()
 	case reflect.TypeFor[fakes.IFakeTransientService]():
 		return s.NewFakeTransientService()
 	case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
@@ -1594,7 +1682,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 		case "singleton-factory":
 			return s.root.get_KeyedServiceOne__singleton_factory_()
 		case "scoped":
-			return s.f_KeyedServiceOne__scoped_
+			return s.get_KeyedServiceOne__scoped_()
 		case "transient":
 			return s.NewKeyedServiceOne__transient_()
 		case "transient-factory":
@@ -1617,7 +1705,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 		case "with-provider":
 			return s.root.get_IKeyedServiceWithProvider__with_provider_()
 		case "scoped-with-provider":
-			return s.f_IKeyedServiceWithProvider__scoped_with_provider_
+			return s.get_IKeyedServiceWithProvider__scoped_with_provider_()
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
@@ -1674,11 +1762,11 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
 			return []any{s.root.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
-			return []any{s.f_FakeScopedService}
+			return []any{s.get_FakeScopedService()}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
-			return []any{s.f_FakeDisposableScoped}
+			return []any{s.get_FakeDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeFormBDisposableScoped]():
-			return []any{s.f_IFakeFormBDisposableScoped}
+			return []any{s.get_IFakeFormBDisposableScoped()}
 		case reflect.TypeFor[fakes.IFakeTransientService]():
 			return []any{s.NewFakeTransientService()}
 		case reflect.TypeFor[fakes.IFakeTransientWithScopedDep]():
@@ -1715,13 +1803,13 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == godi.AnyKey {
 		switch t {
 		case reflect.TypeFor[fakes.IKeyedService]():
-			return []any{s.root.get_KeyedServiceOne__service1_(), s.root.get_KeyedServiceTwo__service2_(), s.root.get_KeyedServiceOne__both_(), s.root.get_KeyedServiceTwo__both_(), s.root.get_KeyedServiceOne__singleton_factory_(), s.NewKeyedServiceOne__transient_(), s.NewIKeyedService__transient_factory_(), s.f_KeyedServiceOne__scoped_}
+			return []any{s.root.get_KeyedServiceOne__service1_(), s.root.get_KeyedServiceTwo__service2_(), s.root.get_KeyedServiceOne__both_(), s.root.get_KeyedServiceTwo__both_(), s.root.get_KeyedServiceOne__singleton_factory_(), s.NewKeyedServiceOne__transient_(), s.NewIKeyedService__transient_factory_(), s.get_KeyedServiceOne__scoped_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 			return []any{s.root.get_IKeyedServiceWithDep__with_dep_(), s.root.get_IKeyedServiceWithDep__missing_dep_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 			return []any{s.root.get_IKeyedServiceWithKey__injected_key_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
-			return []any{s.root.get_IKeyedServiceWithProvider__with_provider_(), s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{s.root.get_IKeyedServiceWithProvider__with_provider_(), s.get_IKeyedServiceWithProvider__scoped_with_provider_()}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
 			return []any{s.root.get_AnyKeyServiceA__alpha_(), s.root.get_AnyKeyServiceB__beta_(), s.root.get_IAnyKeyService__alpha_()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
@@ -1741,7 +1829,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		case "singleton-factory":
 			return []any{s.root.get_KeyedServiceOne__singleton_factory_()}
 		case "scoped":
-			return []any{s.f_KeyedServiceOne__scoped_}
+			return []any{s.get_KeyedServiceOne__scoped_()}
 		case "transient":
 			return []any{s.NewKeyedServiceOne__transient_()}
 		case "transient-factory":
@@ -1764,7 +1852,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 		case "with-provider":
 			return []any{s.root.get_IKeyedServiceWithProvider__with_provider_()}
 		case "scoped-with-provider":
-			return []any{s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{s.get_IKeyedServiceWithProvider__scoped_with_provider_()}
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
@@ -1786,21 +1874,7 @@ func (s *scope) CreateScope() godi.Scope {
 	if s.closed || s.root.closed {
 		panic(godi.ProviderClosedError())
 	}
-	ns := &scope{root: s.root}
-	ns.disp = runtime.NewDisposer()
-	ns.f_FakeScopedService = fakes.NewFakeScopedService()
-	ns.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
-	ns.disp.TrackAny(ns.f_FakeDisposableScoped)
-	ns.f_IFakeFormBDisposableScoped = (func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
-		return fakes.NewFakeFormBCloser()
-	})(ns)
-	ns.disp.TrackAny(ns.f_IFakeFormBDisposableScoped)
-	ns.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
-	ns.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
-		return fakes.NewKeyedServiceWithProvider(p)
-	})(ns)
-	ns.disp.TrackAny(ns.f_IKeyedServiceWithProvider__scoped_with_provider_)
-	return ns
+	return &scope{root: s.root, disp: runtime.NewDisposer()}
 }
 
 func (s *scope) Close() error {
@@ -1821,12 +1895,114 @@ func (s *scope) CloseAsync(ctx context.Context) error {
 	return s.closeErr
 }
 
+func (s *scope) get_FakeScopedService() fakes.IFakeScopedService {
+	if s.st_FakeScopedService == 2 {
+		return s.f_FakeScopedService
+	}
+	if s.st_FakeScopedService == 1 {
+		panic(godi.CircularDependencyError("FakeScopedService"))
+	}
+	s.st_FakeScopedService = 1
+	defer func() {
+		if s.st_FakeScopedService != 2 {
+			s.st_FakeScopedService = 0
+		}
+	}()
+	v := fakes.NewFakeScopedService()
+	s.f_FakeScopedService = v
+	s.st_FakeScopedService = 2
+	return v
+}
+
+func (s *scope) get_FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	if s.st_FakeDisposableScoped == 2 {
+		return s.f_FakeDisposableScoped
+	}
+	if s.st_FakeDisposableScoped == 1 {
+		panic(godi.CircularDependencyError("FakeDisposableScoped"))
+	}
+	s.st_FakeDisposableScoped = 1
+	defer func() {
+		if s.st_FakeDisposableScoped != 2 {
+			s.st_FakeDisposableScoped = 0
+		}
+	}()
+	v := fakes.NewFakeDisposableScoped()
+	s.f_FakeDisposableScoped = v
+	s.disp.TrackAny(v)
+	s.st_FakeDisposableScoped = 2
+	return v
+}
+
+func (s *scope) get_IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
+	if s.st_IFakeFormBDisposableScoped == 2 {
+		return s.f_IFakeFormBDisposableScoped
+	}
+	if s.st_IFakeFormBDisposableScoped == 1 {
+		panic(godi.CircularDependencyError("IFakeFormBDisposableScoped"))
+	}
+	s.st_IFakeFormBDisposableScoped = 1
+	defer func() {
+		if s.st_IFakeFormBDisposableScoped != 2 {
+			s.st_IFakeFormBDisposableScoped = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IFakeFormBDisposableScoped {
+		return fakes.NewFakeFormBCloser()
+	})(s)
+	s.f_IFakeFormBDisposableScoped = v
+	s.disp.TrackAny(v)
+	s.st_IFakeFormBDisposableScoped = 2
+	return v
+}
+
+func (s *scope) get_KeyedServiceOne__scoped_() fakes.IKeyedService {
+	if s.st_KeyedServiceOne__scoped_ == 2 {
+		return s.f_KeyedServiceOne__scoped_
+	}
+	if s.st_KeyedServiceOne__scoped_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceOne#\"scoped\""))
+	}
+	s.st_KeyedServiceOne__scoped_ = 1
+	defer func() {
+		if s.st_KeyedServiceOne__scoped_ != 2 {
+			s.st_KeyedServiceOne__scoped_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceOne()
+	s.f_KeyedServiceOne__scoped_ = v
+	s.st_KeyedServiceOne__scoped_ = 2
+	return v
+}
+
+func (s *scope) get_IKeyedServiceWithProvider__scoped_with_provider_() fakes.IKeyedServiceWithProvider {
+	if s.st_IKeyedServiceWithProvider__scoped_with_provider_ == 2 {
+		return s.f_IKeyedServiceWithProvider__scoped_with_provider_
+	}
+	if s.st_IKeyedServiceWithProvider__scoped_with_provider_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithProvider#\"scoped-with-provider\""))
+	}
+	s.st_IKeyedServiceWithProvider__scoped_with_provider_ = 1
+	defer func() {
+		if s.st_IKeyedServiceWithProvider__scoped_with_provider_ != 2 {
+			s.st_IKeyedServiceWithProvider__scoped_with_provider_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(s)
+	s.f_IKeyedServiceWithProvider__scoped_with_provider_ = v
+	s.disp.TrackAny(v)
+	s.st_IKeyedServiceWithProvider__scoped_with_provider_ = 2
+	return v
+}
+
 func (s *scope) NewFakeTransientService() fakes.IFakeTransientService {
 	return fakes.NewFakeTransientService()
 }
 
 func (s *scope) NewFakeTransientWithScopedDep() fakes.IFakeTransientWithScopedDep {
-	return fakes.NewFakeTransientWithScopedDep(s.f_FakeScopedService)
+	return fakes.NewFakeTransientWithScopedDep(s.get_FakeScopedService())
 }
 
 func (s *scope) NewFakeDisposableTransient() fakes.IFakeDisposableTransient {
@@ -1977,12 +2153,14 @@ func (s *scope) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSingle
 	return s.root.get_IFakeFormBDisposableSingleton()
 }
 
-func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }
+func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.get_FakeScopedService() }
 
-func (s *scope) FakeDisposableScoped() fakes.IFakeDisposableScoped { return s.f_FakeDisposableScoped }
+func (s *scope) FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	return s.get_FakeDisposableScoped()
+}
 
 func (s *scope) IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
-	return s.f_IFakeFormBDisposableScoped
+	return s.get_IFakeFormBDisposableScoped()
 }
 
 func (s *scope) Get[T any]() (T, bool) {

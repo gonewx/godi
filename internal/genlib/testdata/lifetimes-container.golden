@@ -10,16 +10,17 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_Logger  *svc.Logger
-	st_Logger uint8
-	f_Request svc.IRequest
-	closed    bool
+	f_Logger   *svc.Logger
+	st_Logger  uint8
+	f_Request  svc.IRequest
+	st_Request uint8
+	closed     bool
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot builds every singleton and root-level scoped service. A panic during
-// construction is returned as an error after tracked disposables are released.
+// NewRoot builds every singleton. A panic during construction is returned as
+// an error after tracked disposables are released.
 func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	defer func() {
@@ -28,7 +29,6 @@ func NewRoot() (root *Root, err error) {
 		}
 	}()
 	r.get_Logger()
-	r.f_Request = svc.NewRequest(r.get_Logger())
 	return r, nil
 }
 
@@ -51,13 +51,32 @@ func (r *Root) get_Logger() *svc.Logger {
 	return v
 }
 
+func (r *Root) get_Request() svc.IRequest {
+	if r.st_Request == 2 {
+		return r.f_Request
+	}
+	if r.st_Request == 1 {
+		panic(godi.CircularDependencyError("Request"))
+	}
+	r.st_Request = 1
+	defer func() {
+		if r.st_Request != 2 {
+			r.st_Request = 0
+		}
+	}()
+	v := svc.NewRequest(r.get_Logger())
+	r.f_Request = v
+	r.st_Request = 2
+	return v
+}
+
 func (r *Root) NewWidget() svc.IWidget {
-	return svc.NewWidget(r.f_Request)
+	return svc.NewWidget(r.get_Request())
 }
 
 func (r *Root) Logger() *svc.Logger { return r.get_Logger() }
 
-func (r *Root) Request() svc.IRequest { return r.f_Request }
+func (r *Root) Request() svc.IRequest { return r.get_Request() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -86,7 +105,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	case reflect.TypeFor[*svc.Logger]():
 		return r.get_Logger()
 	case reflect.TypeFor[svc.IRequest]():
-		return r.f_Request
+		return r.get_Request()
 	case reflect.TypeFor[svc.IWidget]():
 		return r.NewWidget()
 	}
@@ -139,7 +158,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[*svc.Logger]():
 		return []any{r.get_Logger()}
 	case reflect.TypeFor[svc.IRequest]():
-		return []any{r.f_Request}
+		return []any{r.get_Request()}
 	case reflect.TypeFor[svc.IWidget]():
 		return []any{r.NewWidget()}
 	}
@@ -150,9 +169,7 @@ func (r *Root) CreateScope() godi.Scope {
 	if r.closed {
 		panic(godi.ProviderClosedError())
 	}
-	s := &scope{root: r}
-	s.f_Request = svc.NewRequest(s.root.get_Logger())
-	return s
+	return &scope{root: r}
 }
 
 func (r *Root) Close() error {
@@ -161,9 +178,10 @@ func (r *Root) Close() error {
 }
 
 type scope struct {
-	root      *Root
-	f_Request svc.IRequest
-	closed    bool
+	root       *Root
+	f_Request  svc.IRequest
+	st_Request uint8
+	closed     bool
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -176,7 +194,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	case reflect.TypeFor[*svc.Logger]():
 		return s.root.get_Logger()
 	case reflect.TypeFor[svc.IRequest]():
-		return s.f_Request
+		return s.get_Request()
 	case reflect.TypeFor[svc.IWidget]():
 		return s.NewWidget()
 	}
@@ -223,7 +241,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[*svc.Logger]():
 		return []any{s.root.get_Logger()}
 	case reflect.TypeFor[svc.IRequest]():
-		return []any{s.f_Request}
+		return []any{s.get_Request()}
 	case reflect.TypeFor[svc.IWidget]():
 		return []any{s.NewWidget()}
 	}
@@ -234,9 +252,7 @@ func (s *scope) CreateScope() godi.Scope {
 	if s.closed || s.root.closed {
 		panic(godi.ProviderClosedError())
 	}
-	ns := &scope{root: s.root}
-	ns.f_Request = svc.NewRequest(ns.root.get_Logger())
-	return ns
+	return &scope{root: s.root}
 }
 
 func (s *scope) Close() error {
@@ -244,13 +260,32 @@ func (s *scope) Close() error {
 	return nil
 }
 
+func (s *scope) get_Request() svc.IRequest {
+	if s.st_Request == 2 {
+		return s.f_Request
+	}
+	if s.st_Request == 1 {
+		panic(godi.CircularDependencyError("Request"))
+	}
+	s.st_Request = 1
+	defer func() {
+		if s.st_Request != 2 {
+			s.st_Request = 0
+		}
+	}()
+	v := svc.NewRequest(s.root.get_Logger())
+	s.f_Request = v
+	s.st_Request = 2
+	return v
+}
+
 func (s *scope) NewWidget() svc.IWidget {
-	return svc.NewWidget(s.f_Request)
+	return svc.NewWidget(s.get_Request())
 }
 
 func (s *scope) Logger() *svc.Logger { return s.root.get_Logger() }
 
-func (s *scope) Request() svc.IRequest { return s.f_Request }
+func (s *scope) Request() svc.IRequest { return s.get_Request() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

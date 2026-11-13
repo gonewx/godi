@@ -17,8 +17,8 @@ type Root struct {
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot builds every singleton and root-level scoped service. A panic during
-// construction is returned as an error after tracked disposables are released.
+// NewRoot builds every singleton. A panic during construction is returned as
+// an error after tracked disposables are released.
 func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	defer func() {
@@ -154,8 +154,7 @@ func (r *Root) CreateScope() godi.Scope {
 	if r.closed {
 		panic(godi.ProviderClosedError())
 	}
-	s := &scope{root: r}
-	return s
+	return &scope{root: r}
 }
 
 func (r *Root) Close() error {
@@ -236,8 +235,7 @@ func (s *scope) CreateScope() godi.Scope {
 	if s.closed || s.root.closed {
 		panic(godi.ProviderClosedError())
 	}
-	ns := &scope{root: s.root}
-	return ns
+	return &scope{root: s.root}
 }
 
 func (s *scope) Close() error {

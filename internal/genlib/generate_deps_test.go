@@ -3,8 +3,8 @@
 //
 // Epic 1's emit wired no-dep singletons as `r.f_X = Ctor()`. This story evolves
 // emitNewRoot to (a) wire dependencies as constructor arguments
-// (`r.f_X = Ctor(r.f_Dep)`), (b) order them by SingletonsTopo so a dependency is
-// built first, and (c) propagate a trailing constructor error up through the new
+// (`r.f_X = Ctor(r.f_Dep)`), (b) build a dependency before its dependent (now by
+// lazy accessors, which build each dependency on first access), and (c) propagate a trailing constructor error up through the new
 // `NewRoot() (*Root, error)` signature (D-1). Form B is inlined as
 // `r.f_X = (factoryExpr)(r)` (D-2).
 //

@@ -11,18 +11,19 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_DBConn  svc.IDBConn
-	st_DBConn uint8
-	f_Session svc.ISession
-	disp      *runtime.Disposer
-	closed    bool
-	closeErr  error
+	f_DBConn   svc.IDBConn
+	st_DBConn  uint8
+	f_Session  svc.ISession
+	st_Session uint8
+	disp       *runtime.Disposer
+	closed     bool
+	closeErr   error
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot builds every singleton and root-level scoped service. A panic during
-// construction is returned as an error after tracked disposables are released.
+// NewRoot builds every singleton. A panic during construction is returned as
+// an error after tracked disposables are released.
 func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
@@ -33,8 +34,6 @@ func NewRoot() (root *Root, err error) {
 		}
 	}()
 	r.get_DBConn()
-	r.f_Session = svc.NewSession()
-	r.disp.TrackAny(r.f_Session)
 	return r, nil
 }
 
@@ -58,6 +57,26 @@ func (r *Root) get_DBConn() svc.IDBConn {
 	return v
 }
 
+func (r *Root) get_Session() svc.ISession {
+	if r.st_Session == 2 {
+		return r.f_Session
+	}
+	if r.st_Session == 1 {
+		panic(godi.CircularDependencyError("Session"))
+	}
+	r.st_Session = 1
+	defer func() {
+		if r.st_Session != 2 {
+			r.st_Session = 0
+		}
+	}()
+	v := svc.NewSession()
+	r.f_Session = v
+	r.disp.TrackAny(v)
+	r.st_Session = 2
+	return v
+}
+
 func (r *Root) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
 	r.disp.TrackAny(v)
@@ -66,7 +85,7 @@ func (r *Root) NewTempFile() svc.ITempFile {
 
 func (r *Root) DBConn() svc.IDBConn { return r.get_DBConn() }
 
-func (r *Root) Session() svc.ISession { return r.f_Session }
+func (r *Root) Session() svc.ISession { return r.get_Session() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -95,7 +114,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	case reflect.TypeFor[svc.IDBConn]():
 		return r.get_DBConn()
 	case reflect.TypeFor[svc.ISession]():
-		return r.f_Session
+		return r.get_Session()
 	case reflect.TypeFor[svc.ITempFile]():
 		return r.NewTempFile()
 	}
@@ -148,7 +167,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[svc.IDBConn]():
 		return []any{r.get_DBConn()}
 	case reflect.TypeFor[svc.ISession]():
-		return []any{r.f_Session}
+		return []any{r.get_Session()}
 	case reflect.TypeFor[svc.ITempFile]():
 		return []any{r.NewTempFile()}
 	}
@@ -159,11 +178,7 @@ func (r *Root) CreateScope() godi.Scope {
 	if r.closed {
 		panic(godi.ProviderClosedError())
 	}
-	s := &scope{root: r}
-	s.disp = runtime.NewDisposer()
-	s.f_Session = svc.NewSession()
-	s.disp.TrackAny(s.f_Session)
-	return s
+	return &scope{root: r, disp: runtime.NewDisposer()}
 }
 
 func (r *Root) Close() error {
@@ -176,11 +191,12 @@ func (r *Root) Close() error {
 }
 
 type scope struct {
-	root      *Root
-	f_Session svc.ISession
-	disp      *runtime.Disposer
-	closed    bool
-	closeErr  error
+	root       *Root
+	f_Session  svc.ISession
+	st_Session uint8
+	disp       *runtime.Disposer
+	closed     bool
+	closeErr   error
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -193,7 +209,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	case reflect.TypeFor[svc.IDBConn]():
 		return s.root.get_DBConn()
 	case reflect.TypeFor[svc.ISession]():
-		return s.f_Session
+		return s.get_Session()
 	case reflect.TypeFor[svc.ITempFile]():
 		return s.NewTempFile()
 	}
@@ -240,7 +256,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[svc.IDBConn]():
 		return []any{s.root.get_DBConn()}
 	case reflect.TypeFor[svc.ISession]():
-		return []any{s.f_Session}
+		return []any{s.get_Session()}
 	case reflect.TypeFor[svc.ITempFile]():
 		return []any{s.NewTempFile()}
 	}
@@ -251,11 +267,7 @@ func (s *scope) CreateScope() godi.Scope {
 	if s.closed || s.root.closed {
 		panic(godi.ProviderClosedError())
 	}
-	ns := &scope{root: s.root}
-	ns.disp = runtime.NewDisposer()
-	ns.f_Session = svc.NewSession()
-	ns.disp.TrackAny(ns.f_Session)
-	return ns
+	return &scope{root: s.root, disp: runtime.NewDisposer()}
 }
 
 func (s *scope) Close() error {
@@ -267,6 +279,26 @@ func (s *scope) Close() error {
 	return s.closeErr
 }
 
+func (s *scope) get_Session() svc.ISession {
+	if s.st_Session == 2 {
+		return s.f_Session
+	}
+	if s.st_Session == 1 {
+		panic(godi.CircularDependencyError("Session"))
+	}
+	s.st_Session = 1
+	defer func() {
+		if s.st_Session != 2 {
+			s.st_Session = 0
+		}
+	}()
+	v := svc.NewSession()
+	s.f_Session = v
+	s.disp.TrackAny(v)
+	s.st_Session = 2
+	return v
+}
+
 func (s *scope) NewTempFile() svc.ITempFile {
 	v := svc.NewTempFile()
 	s.disp.TrackAny(v)
@@ -275,7 +307,7 @@ func (s *scope) NewTempFile() svc.ITempFile {
 
 func (s *scope) DBConn() svc.IDBConn { return s.root.get_DBConn() }
 
-func (s *scope) Session() svc.ISession { return s.f_Session }
+func (s *scope) Session() svc.ISession { return s.get_Session() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

@@ -342,12 +342,11 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 				continue
 			}
 			s.FactoryExpr = factoryText
-			// The factory's godi.Get… calls are read as ORDERING dependencies
-			// (SingletonsTopo / ScopedTopo): an unkeyed form-B singleton assembled
-			// before a singleton its inlined factory Gets would read a nil field
-			// (AD-15). Keyed registrations are skipped — keyed wiring blocks
-			// already assemble after the unkeyed ones, and keyed deps live in an
-			// independent namespace (D-3).
+			// The factory's godi.Get… calls are read as dependencies for
+			// Validate's static checks (cycles, captive dependencies). Emitted
+			// accessors build every service on first access, so they carry no
+			// ordering role. Keyed registrations are skipped — keyed deps live in
+			// an independent namespace (D-3).
 			if !rg.keyed {
 				s.Deps = factoryDeps(pkg, rg.factory, rg.factoryTP, rg.factoryTA, depIndex, elemIndex)
 			}
@@ -1483,11 +1482,11 @@ func exprSourceSpan(pkg *packages.Package, expr ast.Expr) (string, error) {
 // factoryDeps reads a form-B factory expression for godi.Get / GetRequired /
 // GetServices calls and maps each resolvable requested type (helper type
 // parameters closed first) to the registered service Name(s) it denotes. The
-// names feed plan.Service.Deps for ORDERING only — SingletonsTopo/ScopedTopo
-// must assemble a form-B service AFTER the services its inlined factory Gets,
-// or the factory would read a still-nil field (AD-15; deferred-work.md "form-B
-// codegen 完整支持依赖型/跨包工厂" ordering half). The emit paths never render
-// form-B Deps as arguments (the factory text carries its own resolution calls).
+// names feed plan.Service.Deps for Validate's static checks only; construction
+// order needs no help, since every emitted accessor builds what the factory Gets
+// on first access (AD-15; deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂").
+// The emit paths never render form-B Deps as arguments (the factory text
+// carries its own resolution calls).
 //
 // A requested type that resolves to no registered service adds no constraint —
 // GetServices over an unregistered element type legitimately yields an empty

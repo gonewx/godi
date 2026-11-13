@@ -14,7 +14,9 @@ import (
 func methodBody(t *testing.T, code, header string) string {
 	t.Helper()
 	idx := strings.Index(code, header)
-	testutil.True(t, idx >= 0, "missing emitted function: "+header)
+	if idx < 0 {
+		t.Fatalf("missing emitted function: %s", header)
+	}
 	body := code[idx:]
 	if next := strings.Index(body[1:], "\nfunc "); next > 0 {
 		body = body[:next+1]
@@ -24,8 +26,9 @@ func methodBody(t *testing.T, code, header string) string {
 
 // TestGenerate_FormBServicesAreTrackedDynamically: a form-B factory's product
 // type is unknown at generation time (Disposable/AsyncDisposable stay false), so
-// every form-B product — singleton, scoped (Root-as-scope, Root.CreateScope,
-// scope.CreateScope) and transient (Root and scope New{T}) — is handed to
+// every form-B product — singleton, scoped (Root-as-scope and scope accessors,
+// since scoped services are built on first resolution) and transient (Root and
+// scope New{T}) — is handed to
 // disp.TrackAny, which asserts io.Closer / godi.AsyncDisposable at run time.
 // CloseAsync is always emitted for such a container, and "io" is never imported.
 func TestGenerate_FormBServicesAreTrackedDynamically(t *testing.T) {
@@ -58,12 +61,10 @@ func TestGenerate_FormBServicesAreTrackedDynamically(t *testing.T) {
 		"every form-B product must be tracked via disp.TrackAny")
 	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_Single("), "r.disp.TrackAny(v)"),
 		"the singleton accessor must track the form-B singleton")
-	testutil.True(t, strings.Contains(methodBody(t, code, "func NewRoot("), "r.disp.TrackAny(r.f_Scoped)"),
-		"NewRoot must track the Root-as-scope form-B scoped instance")
-	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) CreateScope("), "s.disp.TrackAny(s.f_Scoped)"),
-		"Root.CreateScope must track the form-B scoped instance")
-	testutil.True(t, strings.Contains(methodBody(t, code, "func (s *scope) CreateScope("), "ns.disp.TrackAny(ns.f_Scoped)"),
-		"scope.CreateScope must track the form-B scoped instance")
+	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_Scoped("), "r.disp.TrackAny(v)"),
+		"Root's scoped accessor must track the Root-as-scope form-B scoped instance")
+	testutil.True(t, strings.Contains(methodBody(t, code, "func (s *scope) get_Scoped("), "s.disp.TrackAny(v)"),
+		"the scope's scoped accessor must track the form-B scoped instance")
 	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) NewTrans("), "r.disp.TrackAny(v)"),
 		"Root.NewTrans must track the form-B transient")
 	testutil.True(t, strings.Contains(methodBody(t, code, "func (s *scope) NewTrans("), "s.disp.TrackAny(v)"),
