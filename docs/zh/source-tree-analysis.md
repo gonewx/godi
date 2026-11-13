@@ -46,6 +46,7 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 │   └── godi-gen/                  # generator CLI
 │       ├── doc.go
 │       ├── main.go                # go/packages 加载 → go/types 读 → registry → 产码
+│       ├── version.go             # 生成器版本：-version 参数与文件头第二行
 │       ├── generator_test.go / spike_test.go / opengeneric_test.go / keyed_anykey_test.go
 │       └── testdata/              # 注册样例：deps/formb/lifetimes/keyed*/opengeneric/…
 │           └── */registration.go
@@ -73,11 +74,12 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 │       ├── container_gen.go       # 预生成容器（Path γ 敏感场景）
 │       └── doc.go
 │
-├── Makefile                       # test/conformance/golden/cover/vet/fmt/check 等目标
-├── mise.toml                      # 工具链锁定：go = 1.27.0
+├── Makefile                       # 全部构建/测试/ci/发布命令（没有独立脚本）
+├── mise.toml                      # 工具链与环境：go 1.27.0、gh、GOWORK=off
 ├── go.mod / go.sum                # 模块 github.com/gonewx/godi，go 1.27
 ├── TESTING.md                     # 测试框架结构与运行指南
-└── .github/workflows/test.yml     # CI：mise-action + vet + build + generate gate + race/coverage
+├── CHANGELOG.md                   # 各版本的变更（中文镜像：CHANGELOG.zh-CN.md）
+└── .github/workflows/             # test.yml（push / PR 门禁）、release.yml（tag → GitHub Release），都只调用 make
 ```
 
 ## 关键目录职责

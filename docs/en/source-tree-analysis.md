@@ -5,9 +5,11 @@
 ```text
 godi/                          # Module root (github.com/gonewx/godi)
 ├── go.mod                     # Go 1.27, golang.org/x/tools v0.49.0 (sole external dep)
-├── mise.toml                  # Toolchain pin: go 1.27.0
-├── Makefile                   # test / conformance / golden / cover / vet / fmt / tidy / check targets
+├── mise.toml                  # Toolchain and environment: go 1.27.0, gh, GOWORK=off
+├── Makefile                   # Every build / test / ci / release command (no standalone scripts)
+├── .github/workflows/         # test.yml (push / PR gate), release.yml (tag → GitHub Release); both only call make
 ├── TESTING.md                 # Test framework documentation
+├── CHANGELOG.md               # Changes per release (Chinese mirror: CHANGELOG.zh-CN.md)
 ├── doc.go                     # Root package godoc
 ├── dsl.go                     # DSL markers: Add{Singleton,Scoped,Transient}[Factory] × unkeyed/keyed
 ├── provider.go                # Provider / Scope interfaces + ErrProviderClosed sentinel
@@ -30,6 +32,7 @@ godi/                          # Module root (github.com/gonewx/godi)
 │       └── golden.go          # golden-file comparator with -update-golden flag
 ├── cmd/godi-gen/              # Static-analysis CLI
 │   ├── main.go                # go/packages load → go/types → genlib.Generate
+│   ├── version.go             # Generator version: -version flag and the header's second line
 │   ├── doc.go                 # Package godoc
 │   └── testdata/              # Test-case registration packages (deps, formb, keyed*, lifetimes, opengeneric, ...)
 ├── runtime/                   # Closure-based provider oracle + disposer
