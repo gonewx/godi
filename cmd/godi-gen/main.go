@@ -181,17 +181,18 @@ type registration struct {
 // //go:generate-in-place layout), so a factory body's bare identifiers stay
 // bare; otherwise they gain the registration package's qualifier.
 func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error) {
-	regs := collectRegistrations(pkg)
+	regs, collectErrs := collectRegistrations(pkg)
 
 	// NFR2: a package with zero recognized DSL markers must be rejected — emitting
 	// an empty container (exit 0) would silently hand the user a container missing
-	// every service. The common cause (markers written in an unrecognized form) is
-	// surfaced separately as collectRegistrations stderr warnings.
-	if len(regs) == 0 {
+	// every service. A same-named call that does not resolve to godi is surfaced
+	// separately as a collectRegistrations stderr warning. When collection itself
+	// reported errors, those positioned reasons win (they join genErrs below).
+	if len(regs) == 0 && len(collectErrs) == 0 {
 		return nil, fmt.Errorf("no godi DSL registrations recognized in package %q: "+
 			"expected at least one godi.Add{Singleton,Scoped,Transient}[I, Impl] or "+
-			"godi.Add{Singleton,Scoped,Transient}Factory[I] marker imported from %q "+
-			"with explicit type arguments", pkg.PkgPath, godiPkgPath)
+			"godi.Add{Singleton,Scoped,Transient}Factory[I] marker imported from %q",
+			pkg.PkgPath, godiPkgPath)
 	}
 
 	// Resolve the godi.AsyncDisposable interface ONCE (Story 6.3, D-7): reading
@@ -254,7 +255,10 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 		localImportPath = pkg.PkgPath
 	}
 	imports := newImportSet(localImportPath)
-	var genErrs []string
+	// A call that resolves to a godi marker (or a same-package per-service
+	// helper) but cannot be read is a hard error: skipping it would emit a
+	// container silently missing that service (NFR2).
+	genErrs := collectErrs
 
 	// keyedConstValues tracks (GoType, constant value string) to detect
 	// value-equal but text-distinct keys that would produce duplicate switch
@@ -470,8 +474,14 @@ func buildRegistry(pkg *packages.Package, pkgName string) (*plan.Registry, error
 // per-service open-generic helpers (Mechanism A, AC1), reads their type arguments
 // from Info.Instances, and returns them sorted by source position. Sorting makes
 // the registry order deterministic regardless of map iteration order (deferred 1.1).
-func collectRegistrations(pkg *packages.Package) []registration {
+//
+// The second result lists positioned error texts ("file:line:col: reason") for
+// calls that resolve to a godi marker or to a same-package per-service helper
+// but cannot be read; buildRegistry rejects generation with them. A same-named
+// call that does not resolve to godi is only warned about (warnUnrecognized).
+func collectRegistrations(pkg *packages.Package) ([]registration, []string) {
 	var out []registration
+	var errs []string
 
 	for _, file := range pkg.Syntax {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -480,20 +490,19 @@ func collectRegistrations(pkg *packages.Package) []registration {
 				return true
 			}
 			// A call whose bare callee name is a godi marker is a SUSPECTED marker.
-			// It is accepted only when it is a generic instantiation that resolves to
-			// the godi package. If it looks like a marker but fails any check (type
-			// inference dropped [I], a dot-import, or a vanity/forked import path),
-			// warn instead of silently dropping it (NFR2 no silent drop).
+			// If it does not resolve to the godi package (a same-named local
+			// function, a vanity/forked import path), warn instead of silently
+			// dropping it (NFR2 no silent drop).
 			suspected := isDSLName(calleeName(call))
 
-			// genericCallee handles BOTH a godi selector (godi.AddSingleton[…]) and a
-			// bare-ident per-service helper call (AddRepository[User]) — the latter is
-			// what dslCallee (selector-only) used to miss.
-			ident := genericCallee(call)
+			// markerCallee handles a godi selector (godi.AddSingleton[…] or, with
+			// the type arguments inferred, godi.AddSingletonFactory(…)), a
+			// dot-imported bare marker, and a bare-ident per-service helper call
+			// (AddRepository[User]). Recognition is by what the identifier
+			// RESOLVES to, never by whether the call spells its type arguments.
+			ident := markerCallee(call)
 			if ident == nil {
-				warnUnrecognized(pkg, call, suspected,
-					"not a recognized generic marker call (a type argument [I] may have "+
-						"been inferred away, or godi is dot-imported)")
+				warnUnrecognized(pkg, call, suspected, "callee is not a plain function name")
 				return true
 			}
 			fn, ok := pkg.TypesInfo.Uses[ident].(*types.Func)
@@ -503,22 +512,35 @@ func collectRegistrations(pkg *packages.Package) []registration {
 				return true
 			}
 
-			// Direct godi marker (the primary path). A marker whose type arguments
-			// still mention a type parameter — the TEMPLATE inside a per-service
-			// helper body, godi.AddTransient[IFoo[T], Foo[T]] — is skipped: only the
-			// helper instantiation that forwards to it is a concrete registration (AC1).
+			// Direct godi marker (the primary path). Other godi functions
+			// (godi.Get, godi.Marked, …) are not markers and are ignored. A marker
+			// whose type arguments still mention a type parameter — the TEMPLATE
+			// inside a per-service helper body, godi.AddTransient[IFoo[T], Foo[T]]
+			// — is skipped: only the helper instantiation that forwards to it is a
+			// concrete registration (AC1).
 			if fn.Pkg().Path() == godiPkgPath {
-				out = appendGodiMarker(out, pkg, ident, fn, call)
+				if !isDSLName(fn.Name()) {
+					return true
+				}
+				var err error
+				if out, err = appendGodiMarker(out, pkg, ident, fn, call); err != nil {
+					errs = append(errs, err.Error())
+				}
 				return true
 			}
 
 			// Per-service open-generic helper (Mechanism A, AC1): a generic function
-			// DEFINED IN THE ANALYZED PACKAGE whose body forwards to a single godi
-			// marker. readPerServiceHelper follows the forwarder and substitutes the
-			// helper's type parameters with this call's type arguments. handled=true
-			// suppresses the suspected-name warn; an ordinary non-godi generic call
-			// (reflect.TypeFor, …) returns handled=false and falls through.
-			if regs, handled := readPerServiceHelper(pkg, call, ident, fn); handled {
+			// DEFINED IN THE ANALYZED PACKAGE whose body forwards to godi markers.
+			// readPerServiceHelper follows the forwarder and substitutes the
+			// helper's type parameters with this call's type arguments. A helper
+			// it cannot reduce is an error; an ordinary call (reflect.TypeFor, a
+			// non-generic local function, …) returns handled=false and falls through.
+			regs, handled, err := readPerServiceHelper(pkg, call, ident, fn)
+			if err != nil {
+				errs = append(errs, err.Error())
+				return true
+			}
+			if handled {
 				out = append(out, regs...)
 				return true
 			}
@@ -542,7 +564,12 @@ func collectRegistrations(pkg *packages.Package) []registration {
 		// call; seq keeps them in helper-body order.
 		return out[i].seq < out[j].seq
 	})
-	return out
+	return out, errs
+}
+
+// markerError formats a collection error as "file:line:col: reason".
+func markerError(pkg *packages.Package, call *ast.CallExpr, reason string) error {
+	return fmt.Errorf("%s: %s", pkg.Fset.Position(call.Pos()), reason)
 }
 
 // appendGodiMarker reads a direct godi.Add… marker call and appends the
@@ -551,18 +578,27 @@ func collectRegistrations(pkg *packages.Package) []registration {
 // it is not a concrete registration; only the helper call that forwards to it is
 // (Mechanism A skip rule, AC1). The unified rule: the generator only processes
 // registrations whose type arguments are fully concrete.
-func appendGodiMarker(out []registration, pkg *packages.Package, ident *ast.Ident, fn *types.Func, call *ast.CallExpr) []registration {
+//
+// The type arguments come from Info.Instances whether the call spells them
+// (godi.AddSingletonFactory[ILog](&r, f)) or Go inferred them
+// (godi.AddSingletonFactory(&r, f)). A marker that still cannot be read is an
+// error, never a skip (NFR2).
+func appendGodiMarker(out []registration, pkg *packages.Package, ident *ast.Ident, fn *types.Func, call *ast.CallExpr) ([]registration, error) {
 	inst, ok := pkg.TypesInfo.Instances[ident]
-	if !ok {
-		warnUnrecognized(pkg, call, isDSLName(fn.Name()),
-			"no generic instantiation recorded by the type checker")
-		return out
+	if !ok || inst.TypeArgs == nil {
+		return out, markerError(pkg, call, fmt.Sprintf(
+			"godi.%s call has no type arguments recorded by the type checker; "+
+				"write them explicitly, e.g. godi.%s[I, …](…)", fn.Name(), fn.Name()))
 	}
 	ta := inst.TypeArgs
 	if typeArgsHaveParam(ta) {
-		return out
+		return out, nil
 	}
-	return appendMarkerRegistration(out, pkg, fn.Name(), call.Pos(), ta, call.Args)
+	out, err := appendMarkerRegistration(out, pkg, fn.Name(), call.Pos(), ta, call.Args)
+	if err != nil {
+		return out, markerError(pkg, call, err.Error())
+	}
+	return out, nil
 }
 
 // appendMarkerRegistration builds the registration for a godi marker named
@@ -570,31 +606,37 @@ func appendGodiMarker(out []registration, pkg *packages.Package, ident *ast.Iden
 // reduction target for a direct concrete marker AND a per-service-helper-reduced
 // closed marker (Mechanism A): both arrive here as a fully-concrete (markerName,
 // ta) pair, so the two paths produce identical registrations (AD-14).
-func appendMarkerRegistration(out []registration, pkg *packages.Package, markerName string, pos token.Pos, ta *types.TypeList, args []ast.Expr) []registration {
+//
+// A type-argument count or a missing factory argument that does not match the
+// marker's shape is returned as an error (the caller adds the source position).
+func appendMarkerRegistration(out []registration, pkg *packages.Package, markerName string, pos token.Pos, ta *types.TypeList, args []ast.Expr) ([]registration, error) {
+	wantTA := func(n int) error {
+		return fmt.Errorf("godi.%s needs %d type argument(s), the type checker recorded %d",
+			markerName, n, ta.Len())
+	}
 	switch markerName {
 	case "AddSingleton", "AddScoped", "AddTransient":
 		if ta.Len() != 2 {
-			return out
+			return out, wantTA(2)
 		}
 		return append(out, registration{
 			form: "A", lifetime: lifetimeFromName(markerName), pos: pos,
 			iType: ta.At(0), implType: ta.At(1),
-		})
+		}), nil
 	case "AddSingletonFactory", "AddScopedFactory", "AddTransientFactory":
 		if ta.Len() != 1 {
-			return out
+			return out, wantTA(1)
 		}
-		var factory ast.Expr
-		if len(args) >= 2 {
-			factory = args[1]
+		if len(args) < 2 {
+			return out, fmt.Errorf("godi.%s has no factory argument; pass func(godi.Provider) I", markerName)
 		}
 		return append(out, registration{
 			form: "B", lifetime: lifetimeFromName(markerName), pos: pos,
-			iType: ta.At(0), factory: factory,
-		})
+			iType: ta.At(0), factory: args[1],
+		}), nil
 	case "AddKeyedSingleton", "AddKeyedScoped", "AddKeyedTransient":
 		if ta.Len() != 2 {
-			return out
+			return out, wantTA(2)
 		}
 		var keyArg ast.Expr
 		var keyTxt string
@@ -606,28 +648,22 @@ func appendMarkerRegistration(out []registration, pkg *packages.Package, markerN
 			form: "A", lifetime: lifetimeFromName(markerName), pos: pos,
 			iType: ta.At(0), implType: ta.At(1),
 			keyed: true, keyExpr: keyArg, keyText: keyTxt,
-		})
+		}), nil
 	case "AddKeyedSingletonFactory", "AddKeyedScopedFactory", "AddKeyedTransientFactory":
 		if ta.Len() != 1 {
-			return out
+			return out, wantTA(1)
 		}
-		var keyArg ast.Expr
-		var keyTxt string
-		if len(args) >= 2 {
-			keyArg = args[1]
-			keyTxt = renderExpr(pkg.Fset, keyArg)
+		if len(args) < 3 {
+			return out, fmt.Errorf("godi.%s has no factory argument; pass func(godi.Provider) I", markerName)
 		}
-		var factory ast.Expr
-		if len(args) >= 3 {
-			factory = args[2]
-		}
+		keyArg := args[1]
 		return append(out, registration{
 			form: "B", lifetime: lifetimeFromName(markerName), pos: pos,
-			iType: ta.At(0), factory: factory,
-			keyed: true, keyExpr: keyArg, keyText: keyTxt,
-		})
+			iType: ta.At(0), factory: args[2],
+			keyed: true, keyExpr: keyArg, keyText: renderExpr(pkg.Fset, keyArg),
+		}), nil
 	}
-	return out
+	return out, nil
 }
 
 // genericCallee extracts the function-name identifier of a generic instantiation
@@ -635,6 +671,8 @@ func appendMarkerRegistration(out []registration, pkg *packages.Package, markerN
 // identifier (a same-package per-service helper AddRepository[User]). It returns
 // nil when the call is not a generic instantiation of a function. The bare-ident
 // form is what distinguishes a local helper call from a godi marker selector.
+// Marker recognition uses markerCallee instead (type arguments may be
+// inferred); genericCallee remains for factoryDeps' godi.Get[…] ordering hints.
 func genericCallee(call *ast.CallExpr) *ast.Ident {
 	var x ast.Expr
 	switch fun := call.Fun.(type) {
@@ -646,6 +684,29 @@ func genericCallee(call *ast.CallExpr) *ast.Ident {
 		return nil
 	}
 	switch e := x.(type) {
+	case *ast.SelectorExpr:
+		return e.Sel
+	case *ast.Ident:
+		return e
+	}
+	return nil
+}
+
+// markerCallee extracts the function-name identifier a call invokes, with or
+// without explicit type arguments: godi.AddSingleton[I, Impl](…),
+// godi.AddSingletonFactory(…) (type argument inferred), a dot-imported
+// AddSingleton[…](…), or a same-package helper AddRepository[User](…). Unlike
+// genericCallee it does not require an instantiation in the source; the caller
+// decides by what the identifier resolves to (Info.Uses / Info.Instances).
+func markerCallee(call *ast.CallExpr) *ast.Ident {
+	fun := call.Fun
+	switch f := fun.(type) {
+	case *ast.IndexExpr:
+		fun = f.X
+	case *ast.IndexListExpr:
+		fun = f.X
+	}
+	switch e := fun.(type) {
 	case *ast.SelectorExpr:
 		return e.Sel
 	case *ast.Ident:
@@ -669,58 +730,59 @@ func genericCallee(call *ast.CallExpr) *ast.Ident {
 // rewrites the factory text (T → closed type) when inlining.
 //
 // handled=true means the call is (or clearly intends to be) a helper, so the
-// caller does not additionally warn; handled=false means it is an ordinary
-// non-godi generic call (reflect.TypeFor, …) the caller treats by its
-// suspected-name rule.
+// caller does not additionally warn; handled=false means it is an ordinary call
+// (reflect.TypeFor, a non-generic local function, …) the caller treats by its
+// suspected-name rule. A call that IS a same-package generic helper forwarding
+// to godi markers but whose shape is unsupported returns a positioned err.
 //
 // Scope: helpers in the analyzed package, forwarding to UNKEYED markers (form A
-// and form B), single type parameter. Cross-package helpers, keyed forwarders,
-// and multi/permuted type parameters remain deferred — warned, never silently
-// dropped (NFR2) — and recorded in deferred-work.md. Any unsupported marker
-// skips the WHOLE helper call: materializing a subset of the helper's
-// registrations would hand the user a container silently missing services.
-func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.Ident, fn *types.Func) (regs []registration, handled bool) {
+// and form B), single type parameter. Mixed bodies, keyed forwarders, and
+// multi/permuted type parameters reject generation — never silently dropped
+// (NFR2). Cross-package helpers are not followed (handled=false). An
+// unsupported marker rejects the WHOLE helper call: materializing a subset of
+// the helper's registrations would hand the user a container silently missing
+// services.
+func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.Ident, fn *types.Func) (regs []registration, handled bool, err error) {
+	// Only a generic package-level function can be a per-service helper. A
+	// non-generic local function (func register(r *godi.Registry) { … }) has
+	// its concrete markers read directly by the AST walk.
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() != nil || sig.TypeParams().Len() == 0 {
+		return nil, false, nil
+	}
 	decl := findFuncDecl(pkg, fn)
 	if decl == nil || decl.Body == nil {
-		return nil, false // not defined in the analyzed package (e.g. reflect.TypeFor)
+		return nil, false, nil // not defined in the analyzed package (e.g. reflect.TypeFor)
 	}
 	markers, pure := helperBodyMarkers(pkg, decl)
 	if len(markers) == 0 {
-		return nil, false // body forwards to no godi marker — ordinary func
+		return nil, false, nil // body forwards to no godi marker — ordinary func
+	}
+	// From here the call is INTENDED as a per-service helper; any shortfall
+	// rejects generation (NFR2).
+	reject := func(reason string) ([]registration, bool, error) {
+		return nil, true, markerError(pkg, call, fmt.Sprintf(
+			"per-service helper %s(...) cannot be reduced to registrations: %s; "+
+				"rewrite the helper into a supported shape or register its services "+
+				"with explicit godi.Add… markers", fn.Name(), reason))
 	}
 	if !pure {
-		warnUnrecognized(pkg, call, true,
-			"per-service helper body mixes godi markers with other statements — "+
-				"mixed bodies are deferred; every statement must be a godi.Add… call "+
-				"(or a final `return r`)")
-		return nil, true
+		return reject("its body mixes godi markers with other statements — every " +
+			"statement must be a godi.Add… call (or a final `return r`)")
 	}
 
-	// From here the call is INTENDED as a per-service helper; any shortfall is a
-	// warned defer (handled=true), never a silent drop (NFR2).
 	outerInst, ok := pkg.TypesInfo.Instances[ident]
 	if !ok || outerInst.TypeArgs == nil || outerInst.TypeArgs.Len() == 0 {
-		warnUnrecognized(pkg, call, true, "per-service helper call has no recorded type arguments")
-		return nil, true
-	}
-	sig, ok := fn.Type().(*types.Signature)
-	if !ok || sig.TypeParams() == nil || sig.TypeParams().Len() == 0 {
-		warnUnrecognized(pkg, call, true, "per-service helper is not generic")
-		return nil, true
+		return reject("the call has no type arguments recorded by the type checker")
 	}
 	tparams := sig.TypeParams()
 	outerArgs := outerInst.TypeArgs
 	if tparams.Len() != outerArgs.Len() {
-		warnUnrecognized(pkg, call, true,
-			"per-service helper type-parameter / type-argument count mismatch")
-		return nil, true
+		return reject("type-parameter / type-argument count mismatch")
 	}
 	if tparams.Len() > 1 {
-		warnUnrecognized(pkg, call, true, fmt.Sprintf(
-			"per-service helper has %d type parameters — multi-type-parameter "+
-				"helpers are deferred (only single type parameter is supported)",
-			tparams.Len()))
-		return nil, true
+		return reject(fmt.Sprintf("it has %d type parameters — only a single "+
+			"type parameter is supported", tparams.Len()))
 	}
 
 	for i, m := range markers {
@@ -730,17 +792,13 @@ func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.
 		switch markerName {
 		case "AddSingleton", "AddScoped", "AddTransient":
 			if !instOK || innerInst.TypeArgs == nil || innerInst.TypeArgs.Len() != 2 {
-				warnUnrecognized(pkg, call, true,
-					"per-service helper's form-A marker must have [I, Impl] type arguments")
-				return nil, true
+				return reject("its form-A marker must have [I, Impl] type arguments")
 			}
 			innerArgs := innerInst.TypeArgs
 			iClosed, err1 := substituteTypeParams(innerArgs.At(0), tparams, outerArgs)
 			implClosed, err2 := substituteTypeParams(innerArgs.At(1), tparams, outerArgs)
 			if err1 != nil || err2 != nil {
-				warnUnrecognized(pkg, call, true, fmt.Sprintf(
-					"per-service helper type substitution failed: %v / %v", err1, err2))
-				return nil, true
+				return reject(fmt.Sprintf("type substitution failed: %v / %v", err1, err2))
 			}
 			// pos is the OUTER helper call (distinct per closure); seq keeps the
 			// helper-body marker order within one closure (collectRegistrations
@@ -752,20 +810,14 @@ func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.
 
 		case "AddSingletonFactory", "AddScopedFactory", "AddTransientFactory":
 			if !instOK || innerInst.TypeArgs == nil || innerInst.TypeArgs.Len() != 1 {
-				warnUnrecognized(pkg, call, true,
-					"per-service helper's form-B marker must have an [I] type argument")
-				return nil, true
+				return reject("its form-B marker must have an [I] type argument")
 			}
 			if len(m.call.Args) < 2 {
-				warnUnrecognized(pkg, call, true,
-					"per-service helper's form-B marker has no factory argument")
-				return nil, true
+				return reject("its form-B marker has no factory argument")
 			}
 			iClosed, err := substituteTypeParams(innerInst.TypeArgs.At(0), tparams, outerArgs)
 			if err != nil {
-				warnUnrecognized(pkg, call, true, fmt.Sprintf(
-					"per-service helper type substitution failed: %v", err))
-				return nil, true
+				return reject(fmt.Sprintf("type substitution failed: %v", err))
 			}
 			regs = append(regs, registration{
 				form: "B", lifetime: lifetimeFromName(markerName), pos: call.Pos(), seq: i,
@@ -774,16 +826,14 @@ func readPerServiceHelper(pkg *packages.Package, call *ast.CallExpr, ident *ast.
 			})
 
 		default:
-			warnUnrecognized(pkg, call, true, fmt.Sprintf(
-				"per-service helper forwards to %s — only unkeyed "+
-					"Add{Singleton,Scoped,Transient}[I, Impl] and "+
-					"Add{Singleton,Scoped,Transient}Factory[I] helpers are supported "+
-					"(keyed forwarders are deferred)", markerName))
-			return nil, true
+			return reject(fmt.Sprintf("it forwards to godi.%s — only unkeyed "+
+				"Add{Singleton,Scoped,Transient}[I, Impl] and "+
+				"Add{Singleton,Scoped,Transient}Factory[I] are supported "+
+				"(keyed forwarders are not)", markerName))
 		}
 	}
 
-	return regs, true
+	return regs, true, nil
 }
 
 // findFuncDecl returns the *ast.FuncDecl in the analyzed package that declares
@@ -824,7 +874,7 @@ type helperMarker struct {
 //   - a final `return r` returning the registry parameter unchanged.
 //
 // pure=false reports a body that contains AT LEAST one marker statement but
-// also statements outside this shape — the caller warns and defers instead of
+// also statements outside this shape — the caller rejects generation instead of
 // materializing a partial registration set (NFR2). A body with NO marker
 // statements returns (nil, whatever): it is an ordinary generic function, not a
 // helper.
@@ -862,13 +912,16 @@ func helperBodyMarkers(pkg *packages.Package, decl *ast.FuncDecl) (markers []hel
 			pure = false
 			continue
 		}
-		innerIdent := genericCallee(inner)
+		// markerCallee: an inner marker may have its type arguments inferred
+		// (godi.AddSingletonFactory(r, func(godi.Provider) IFoo[T] {…})).
+		innerIdent := markerCallee(inner)
 		if innerIdent == nil {
 			pure = false
 			continue
 		}
 		innerFn, ok := pkg.TypesInfo.Uses[innerIdent].(*types.Func)
-		if !ok || innerFn.Pkg() == nil || innerFn.Pkg().Path() != godiPkgPath {
+		if !ok || innerFn.Pkg() == nil || innerFn.Pkg().Path() != godiPkgPath ||
+			!isDSLName(innerFn.Name()) {
 			pure = false
 			continue
 		}
@@ -1002,21 +1055,11 @@ func isAnyKeyExpr(pkg *packages.Package, expr ast.Expr) bool {
 // calleeName returns the bare function name a call invokes, unwrapping a generic
 // instantiation (foo[T] / foo[T1, T2]) and a package selector (pkg.foo) or a bare
 // identifier (a dot-imported foo). It is empty when the callee is not a plain
-// function name. Used to flag a SUSPECTED DSL marker even when genericCallee
-// declines it, so warnUnrecognized can report it instead of dropping it silently.
+// function name. Used to flag a SUSPECTED DSL marker that does not resolve to
+// godi, so warnUnrecognized can report it instead of dropping it silently.
 func calleeName(call *ast.CallExpr) string {
-	fun := call.Fun
-	switch f := fun.(type) {
-	case *ast.IndexExpr:
-		fun = f.X
-	case *ast.IndexListExpr:
-		fun = f.X
-	}
-	switch f := fun.(type) {
-	case *ast.SelectorExpr:
-		return f.Sel.Name
-	case *ast.Ident:
-		return f.Name
+	if id := markerCallee(call); id != nil {
+		return id.Name
 	}
 	return ""
 }
@@ -1048,9 +1091,11 @@ func lifetimeFromName(name string) plan.Lifetime {
 }
 
 // warnUnrecognized emits a build-time warning to stderr when a call that looks
-// like a godi DSL marker was not recognized as one (NFR2's "no silent drop").
-// It is a warning, not an error: a same-named call from another package is a
-// legitimate non-match. Static analysis only — no user code runs (AD-7).
+// like a godi DSL marker does not resolve to the godi package (NFR2's "no
+// silent drop"). It is a warning, not an error: a same-named function from
+// another package is a legitimate non-match. A call that DOES resolve to a godi
+// marker but cannot be read is an error instead (collectRegistrations). Static
+// analysis only — no user code runs (AD-7).
 func warnUnrecognized(pkg *packages.Package, call *ast.CallExpr, suspected bool, reason string) {
 	if !suspected {
 		return
