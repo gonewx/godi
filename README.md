@@ -106,6 +106,24 @@ without installing the generator. After changing a DSL declaration, re-run
 - **Registration order is source position, not call order.** The generator orders all marker calls in the package by file name, then by offset within the file, regardless of call relationships or control flow: markers inside helper functions and inside `if` branches all take effect, and their source position decides "last registration wins" and collection order. To make a registration take precedence, place it later in source — further down the same file, or in a file whose name sorts later.
 - **The generator and the library versions must match.** A regenerated container calls helper symbols in the library, so a generator newer than the `github.com/gonewx/godi` version in `go.mod` emits a container that fails the type-check, and generation is rejected. Running the generator as `go tool godi-gen` (see [Installation](#installation)) keeps the two at the same version; a generator installed separately with `go install` is not tied to `go.mod` and can drift. After upgrading the library, regenerate every container.
 
+## Versioning
+
+Releases are semver tags (`vMAJOR.MINOR.PATCH`). The library and the generator
+are one module and share one version; every release is described in the
+[Changelog](./CHANGELOG.md).
+
+- **The API is not frozen before v1.0.0.** A minor release (`v0.2.0` → `v0.3.0`)
+  may change the public API, the shape of generated containers, or run-time
+  behavior. Each such change is marked **Breaking** in the changelog and comes
+  with upgrade steps.
+- **A patch release (`v0.2.0` → `v0.2.1`) contains fixes only.** It removes no
+  exported API.
+- **Regenerate after every upgrade.** Run `go generate ./...` whenever the
+  `github.com/gonewx/godi` version in `go.mod` changes. A container is supported
+  only with the library version that generated it.
+- **The minimum Go version is the `go` directive in `go.mod`.** Raising it is a
+  minor release.
+
 ## Documentation
 
 Full documentation is bilingual (`docs/en` / `docs/zh`) — start at the index:
