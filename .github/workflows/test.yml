@@ -14,69 +14,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Honor the project's mise.toml so CI uses the exact pinned Go toolchain.
-      # Bump obligation fulfilled: Go 1.27 GA shipped 2026-08-19; mise.toml and
-      # the go.mod `go` directive are both at 1.27 (ARCHITECTURE-SPINE / IR M-1).
+      # mise.toml pins the toolchain and the environment (GOWORK=off). Every
+      # step below is a Makefile target, so CI and a local `make ci` run the
+      # same commands.
       - name: Set up toolchain (mise)
         uses: jdx/mise-action@v2
 
       - name: Go version
         run: go version
 
-      # Quality gate: sources must be gofmt-clean. Module-aware — checks only the
-      # main module's package dirs via `go list` (like `go vet/test ./...`).
-      # Cheap, offline, no forward dependency.
+      # Quality gate: sources must be gofmt-clean.
       - name: Format check (gofmt)
-        run: |
-          dirs="$(go list -f '{{.Dir}}' ./...)"
-          unformatted="$(gofmt -l $dirs)"
-          if [ -n "$unformatted" ]; then
-            echo "::error::These files are not gofmt-clean. Run 'gofmt -w' on them:"
-            echo "$unformatted"
-            exit 1
-          fi
-          echo "All Go sources in the main module are gofmt-clean."
+        run: make fmt-check
 
       - name: Vet
-        run: go vet ./...
+        run: make vet
 
       - name: Build
-        run: go build ./...
+        run: make build
 
-      # Architecture gate (AD-3 / NFR2): `go generate` is a build step + a
+      # Architecture gate (AD-3 / NFR2): `go generate` is a build step and a
       # validation gate — a bad registration graph (missing / captive / cyclic)
       # must be rejected and produce ZERO code, and committed generated code
       # (container_gen.go) must never drift from its source DSL.
-      #
-      # Guarded: this step is a no-op on greenfield and activates automatically
-      # the moment the generator package (cmd/godi-gen) lands — Epic 1 Story 1.4.
-      # Keeping it here pre-wires the hard gate so it is enforced from the first
-      # generated commit, not bolted on later.
       - name: Generate gate (drift + bad-graph rejection)
-        run: |
-          if [ -d cmd/godi-gen ]; then
-            echo "cmd/godi-gen present — running 'go generate ./...'"
-            go generate ./...
-            if ! git diff --quiet --exit-code; then
-              echo "::error::Generated code is out of date. Run 'go generate ./...' and commit the result."
-              git --no-pager diff --stat
-              exit 1
-            fi
-            if [ -n "$(git status --porcelain)" ]; then
-              echo "::error::go generate produced untracked changes (new/removed generated files)."
-              git status --porcelain
-              exit 1
-            fi
-            echo "Generated code is up to date (no drift)."
-          else
-            echo "Skipping generate gate: cmd/godi-gen not yet implemented (Epic 1 Story 1.4)."
-          fi
+        run: make generate-check
 
-      # Architecture (ARCHITECTURE-SPINE / acceptance-contract): CI runs the
-      # conformance dual-provider suite + golden generation tests. `go test ./...`
-      # covers both today; the race detector + coverage are the quality gate.
+      - name: Changelog check (both languages list the same versions)
+        run: make changelog-check
+
+      # Architecture (ARCHITECTURE-SPINE / acceptance-contract): the conformance
+      # dual-provider suite and the golden generation tests, with the race
+      # detector and coverage as the quality gate.
       - name: Test (race + coverage)
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: make test
 
       - name: Upload coverage
         if: always()

@@ -13,6 +13,10 @@ eval "$(mise activate bash)"       # 在当前 shell 激活 mise（或用 mise e
 go version                         # 应显示 go1.27.0
 ```
 
+`mise.toml` 还设置了 `GOWORK=off`（godi 作为独立模块构建，上级目录的 `go.work` 不能接管），
+并锁定了 `gh`（只有 `make release-publish` 用到）。未激活 mise 的 shell 里，用
+`mise exec -- make <目标>` 运行各目标。
+
 激活 mise 后，`go` 自动解析到锁定版本。唯一外部依赖是 `golang.org/x/tools`
 （v0.49.0，供 generator 静态分析），无需 testify 等测试依赖——套件仅用标准库。
 
@@ -33,7 +37,13 @@ go version                         # 应显示 go1.27.0
 | `make vet` | 运行 `go vet` |
 | `make fmt` | 格式化全部 Go 源码 |
 | `make tidy` | 整理模块图 |
-| `make check` | CI 对齐：`vet` + race/coverage 全量测试 |
+| `make build` | 运行 `go build ./...` |
+| `make fmt-check` | 有 Go 源码不是 gofmt-clean 时失败 |
+| `make generate` | 重新运行生成器（`go generate ./...`） |
+| `make generate-check` | 已提交的生成代码过期时失败 |
+| `make changelog-check` | 两份变更日志列出的版本不一致时失败 |
+| `make ci` | CI 运行的全部检查，顺序与 CI 相同（`make check` 是它的别名） |
+| `make version` | 打印当前检出的生成器版本 |
 | `make help` | 列出全部目标 |
 
 等价原始命令：
@@ -61,21 +71,41 @@ go test ./... -update-golden  # 重写 golden 基准（审 diff 后再提交！�
 
 ## CI
 
-`.github/workflows/test.yml` 在 push / PR 上运行：
+CI 运行的每条命令都是 Makefile 目标，工具链和环境变量由 `mise.toml` 提供。仓库里没有独立脚本，
+所以本地 `make ci` 运行的内容与 CI 完全相同。
 
-1. **`jdx/mise-action`** 按 `mise.toml` 供给工具链，CI 与本地用同一锁定 Go 版本。
-2. **格式门禁**：对主模块包目录跑 `gofmt -l`，非空即失败。
-3. **`go vet ./...`**。
-4. **`go build ./...`**。
-5. **Generate gate（AD-3 / NFR2）**：`cmd/godi-gen` 存在时跑 `go generate ./...`，
-   校验生成代码无漂移（`git diff` 干净）且无未跟踪产物——坏图（缺失/捕获/循环）必须
-   被拒并产零字节。greenfield 上此步自动跳过。
-6. **`go test -race -covermode=atomic -coverprofile=coverage.out ./...`**：覆盖
+`.github/workflows/test.yml` 在 push 到 `main` 和每个 PR 上运行：
+
+1. **`jdx/mise-action`** 按 `mise.toml` 供给工具链与环境（Go、`gh`、`GOWORK=off`）。
+2. **`make fmt-check`**：对主模块包目录跑 `gofmt -l`，非空即失败。
+3. **`make vet`**。
+4. **`make build`**。
+5. **`make generate-check`（AD-3 / NFR2）**：跑 `go generate ./...`，生成代码有漂移即失败；
+   坏图（缺失/捕获/循环）必须被拒并产零字节。
+6. **`make changelog-check`**：`CHANGELOG.md` 与 `CHANGELOG.zh-CN.md` 列出的版本必须一致。
+7. **`make test`**：`go test -race -covermode=atomic -coverprofile=coverage.out ./...`，覆盖
    conformance 双 Provider 套件与 golden 测试，race 检测器为质量门禁。
-7. 覆盖率作为构建产物上传。
+8. 覆盖率作为构建产物上传。
 
-godi 是库，没有部署步骤：发布 = 打 semver tag，消费者把 `go generate` 作为构建步骤
-运行。
+`.github/workflows/release.yml` 在推送 `v*` tag 时运行，见[发布](#发布)。
+
+## 发布
+
+godi 是库：一次发布 = 一个 semver tag 加一个 GitHub Release。版本策略写在 README 里；
+下面的每一步都是 Makefile 目标。
+
+1. 在 `CHANGELOG.md` 和 `CHANGELOG.zh-CN.md` 里，把 `## [Unreleased]` 改名为
+   `## [X.Y.Z] - YYYY-MM-DD`，在它上面新增一个空的 `## [Unreleased]`，更新文件末尾的链接引用，
+   然后在 `main` 上提交。
+2. `make release-tag VERSION=vX.Y.Z`：先运行 `release-check`（版本号格式、两份变更日志里都有带日期
+   且非空的小节、已跟踪文件没有未提交的改动，然后是整个 `ci` 目标），再创建带注释的 tag，
+   tag 消息就是该变更日志小节。这一步不推送任何东西。
+   需要签名时设置 `GIT_TAG_FLAGS=-s`。
+3. `make release-push VERSION=vX.Y.Z`：在一次原子推送里推送 `main` 和这个 tag。
+4. 发布工作流在打了 tag 的提交上重新运行 `make release-check`，然后运行 `make release-publish`，
+   用同一个变更日志小节创建 GitHub Release。带预发布后缀的版本（`v0.3.0-rc.1`）会发布为预发布。
+
+`make release-notes VERSION=vX.Y.Z` 可以打印任意已发布版本的说明。
 
 ## 代码贡献准则
 
@@ -98,7 +128,7 @@ godi 是库，没有部署步骤：发布 = 打 semver tag，消费者把 `go ge
 | 症状 | 原因 / 修复 |
 | --- | --- |
 | `go: command not found` 或 Go 版本不对 | 当前 shell 未激活 mise。运行 `mise install` 后 `eval "$(mise activate bash)"`（或用 `mise exec -- go ...`） |
-| `go.work lists go 1.23.1, but ... requires go >= 1.27` | 上级目录的 `go.work` 早于 godi 的 `go` 指令。命令前加 `GOWORK=off` 运行 |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | 上级目录的 `go.work` 接管了模块解析。`mise.toml` 已设置 `GOWORK=off`，出现这个错误说明当前 shell 未激活 mise：用 `mise exec -- make <目标>` 运行 |
 | `cannot find toolchain ... go1.27` / 下载失败 | mise 无法为当前平台拉取锁定的工具链。确认 mise 可拉取该 patch（`mise ls-remote go \| grep 1.27`）后重跑 `mise install`；如需换 patch，调整 `mise.toml` 的锁定项 |
 | `golden: read testdata/...: no such file` | golden 基准缺失。用 `go test ./... -update-golden` 创建，提交前审 diff |
 | golden mismatch | 产码字节变了。若属预期，跑 `make golden` 并提交新基准；否则是真实回归 |

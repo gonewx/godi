@@ -31,7 +31,7 @@ make test-short    # fast pass, no race detector
 make conformance   # dual-provider conformance suite (verbose)
 make golden        # regenerate testdata/*.golden fixtures
 make cover         # HTML coverage report (coverage.html)
-make check         # CI parity: go vet + race/coverage test run
+make ci            # everything CI runs, in CI order (make check is an alias)
 make help          # list all targets
 ```
 
@@ -93,25 +93,30 @@ conformance/            ported .NET DI specification suite (the test framework's
 
 ## CI integration
 
-`.github/workflows/test.yml` runs on push/PR:
+Every command CI runs is a Makefile target, and `mise.toml` supplies the
+toolchain and the environment (`GOWORK=off`), so `make ci` locally runs exactly
+what `.github/workflows/test.yml` runs on push/PR:
 
-1. `jdx/mise-action` provisions the toolchain from `mise.toml` (CI uses the same
-   pinned Go as local).
-2. `go vet ./...`
-3. `go test -race -covermode=atomic -coverprofile=coverage.out ./...` — covers the
-   conformance dual-provider suite and golden tests (per the spine's Deferred CI
-   note), with the race detector as the quality gate.
-4. Coverage is uploaded as a build artifact.
+1. `jdx/mise-action` provisions the toolchain and environment from `mise.toml`.
+2. `make fmt-check`, `make vet`, `make build`
+3. `make generate-check` — committed generated code must match what the
+   generator emits.
+4. `make changelog-check` — both changelog files list the same versions.
+5. `make test` — `go test -race -covermode=atomic -coverprofile=coverage.out ./...`,
+   covering the conformance dual-provider suite and golden tests, with the race
+   detector as the quality gate.
+6. Coverage is uploaded as a build artifact.
 
-godi is a library: there is no deploy step. Release = a semver tag; consumers run
-`go generate` as a build step once `cmd/godi-gen` lands.
+godi is a library: there is no deploy step. A release is a semver tag plus a
+GitHub Release, cut with `make release-tag` / `make release-push`; see
+"Releasing" in the [development guide](./docs/en/development-guide.md#releasing).
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install` then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
-| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` predates godi's `go` directive. Run the command with `GOWORK=off`. |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` took over module resolution. `mise.toml` sets `GOWORK=off`, so this means mise is not active in this shell: run the target as `mise exec -- make <target>`. |
 | `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |

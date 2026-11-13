@@ -1,0 +1,37 @@
+name: release
+
+# Runs when a version tag is pushed (`make release-push VERSION=vX.Y.Z`). It
+# re-runs the full gate on the tagged commit and, only when that passes,
+# creates the GitHub Release from the tag's CHANGELOG.md section.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: release-publish checks that the tag is on origin/main.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up toolchain (mise)
+        uses: jdx/mise-action@v2
+
+      # The tag name reaches make through the environment, never through
+      # workflow-expression interpolation into the command line.
+      - name: Verify release (changelog, clean tree, full CI gate)
+        run: make release-check
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Publish GitHub Release
+        run: make release-publish
+        env:
+          VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}

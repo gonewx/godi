@@ -1,7 +1,16 @@
-# Project-level toolchain pinning, managed by mise.
+# Project-level toolchain and environment, managed by mise. Every command runs
+# through the Makefile (`mise exec -- make <target>`, or plain `make <target>`
+# in a shell with mise activated); CI does the same.
 #
 # Go 1.27 unlocks method-level type parameters on concrete structs (AD-5),
 # enabling the `provider.Get[T]()` generic-method API (Story 6-6).
 # GA released 2026-08-19; pinned to the then-current stable patch (re-pin as patches ship).
 [tools]
 go = "1.27.0"
+# Used only by `make release-publish` to create the GitHub Release.
+gh = "2.100.0"
+
+[env]
+# godi is built as a standalone module. Without this, a go.work in a parent
+# directory takes over module resolution and breaks every go command here.
+GOWORK = "off"

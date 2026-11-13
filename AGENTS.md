@@ -40,6 +40,17 @@ commit.
   lifetimes, and DSL function names stay verbatim (`AddScopedFactory`,
   `singleton / scoped / transient`, 形态 A / 形态 B ↔ form A / form B).
 
+## Commands and tooling (mandatory)
+
+- Every build, test, CI and release command is a `Makefile` target; the
+  toolchain and environment come from `mise.toml`. Do NOT add standalone
+  scripts (`scripts/*.sh`, ad-hoc Python, inline shell in workflows): add or
+  extend a Makefile target and have the workflow call `make <target>`.
+- Tools a target needs are pinned in `mise.toml` `[tools]`; environment a
+  target needs goes in `mise.toml` `[env]` (`GOWORK=off` lives there).
+- Releases are cut only through `make release-tag` / `make release-push`; see
+  "Releasing" in `docs/{en,zh}/development-guide.md`.
+
 ## Verified facts for doc examples (do not regress)
 
 Checked against source on 2026-08-22 — re-verify if the generator changes:

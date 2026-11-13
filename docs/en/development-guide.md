@@ -11,6 +11,11 @@ mise install          # install the pinned Go toolchain (go 1.27.0)
 go version            # → go1.27.0
 ```
 
+`mise.toml` also sets `GOWORK=off` (godi builds as a standalone module, so a
+`go.work` in a parent directory must not take over) and pins `gh`, which only
+`make release-publish` uses. In a shell without mise activated, run targets as
+`mise exec -- make <target>`.
+
 No third-party dependencies are required to build or test: the suite uses the
 standard library only (no testify), keeping the library's dependency surface
 minimal. The only external module dependency is `golang.org/x/tools`, used by the
@@ -33,7 +38,13 @@ generator for static analysis.
 | `make vet` | `go vet ./...` |
 | `make fmt` | Format all Go sources |
 | `make tidy` | Tidy the module graph |
-| `make check` | CI parity: `vet` + full race/coverage test run |
+| `make build` | `go build ./...` |
+| `make fmt-check` | Fail when any Go source is not gofmt-clean |
+| `make generate` | Re-run the generator (`go generate ./...`) |
+| `make generate-check` | Fail when committed generated code is out of date |
+| `make changelog-check` | Fail when the two changelog files list different versions |
+| `make ci` | Everything CI runs, in CI order (`make check` is an alias) |
+| `make version` | Print the generator version of this checkout |
 | `make help` | List all targets |
 
 Equivalent raw commands:
@@ -68,24 +79,52 @@ go test ./... -update-golden # rewrite golden fixtures (review the diff!)
 
 ## Continuous Integration
 
+Every command CI runs is a Makefile target; `mise.toml` supplies the toolchain
+and the environment. There are no standalone scripts, so `make ci` locally runs
+exactly what CI runs.
+
 `.github/workflows/test.yml` runs on push to `main` and on every pull request:
 
-1. `jdx/mise-action` provisions the toolchain from `mise.toml` (CI uses the same
-   pinned Go as local).
-2. **Format check** — `gofmt -l` over the main module's package dirs; unclean
+1. `jdx/mise-action` provisions the toolchain and environment from `mise.toml`
+   (Go, `gh`, `GOWORK=off`).
+2. `make fmt-check` — `gofmt -l` over the main module's package dirs; unclean
    sources fail the build.
-3. `go vet ./...`
-4. `go build ./...`
-5. **Generate gate** — once `cmd/godi-gen` is present, `go generate ./...` runs and
-   the build fails on drift (committed generated code out of date) or on a
-   bad-graph registration (which must produce zero code, AD-3).
-6. **Test** — `go test -race -covermode=atomic -coverprofile=coverage.out ./...`,
+3. `make vet`
+4. `make build`
+5. `make generate-check` — runs `go generate ./...` and fails on drift
+   (committed generated code out of date) or on a bad-graph registration (which
+   must produce zero code, AD-3).
+6. `make changelog-check` — `CHANGELOG.md` and `CHANGELOG.zh-CN.md` must list
+   the same versions.
+7. `make test` — `go test -race -covermode=atomic -coverprofile=coverage.out ./...`,
    covering the dual-provider conformance suite and golden tests, with the race
    detector as the quality gate.
-7. Coverage is uploaded as a build artifact.
+8. Coverage is uploaded as a build artifact.
 
-godi is a library: there is no deploy step. Release = a semver tag; consumers run
-`go generate` as a build step once `cmd/godi-gen` lands.
+`.github/workflows/release.yml` runs when a `v*` tag is pushed; see
+[Releasing](#releasing).
+
+## Releasing
+
+godi is a library: a release is a semver tag plus a GitHub Release. The
+versioning policy is in the README; the steps below are all Makefile targets.
+
+1. In both `CHANGELOG.md` and `CHANGELOG.zh-CN.md`, rename `## [Unreleased]` to
+   `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty `## [Unreleased]` above it,
+   update the link references at the bottom, and commit on `main`.
+2. `make release-tag VERSION=vX.Y.Z` — runs `release-check` (version format,
+   a dated non-empty section in both changelogs, no uncommitted changes to
+   tracked files, then the whole `ci` target) and creates an annotated tag whose
+   message is that changelog section. Nothing is pushed.
+   Set `GIT_TAG_FLAGS=-s` to sign the tag.
+3. `make release-push VERSION=vX.Y.Z` — pushes `main` and the tag in one atomic
+   push.
+4. The release workflow re-runs `make release-check` on the tagged commit and
+   then `make release-publish`, which creates the GitHub Release from the same
+   changelog section. A version with a pre-release suffix (`v0.3.0-rc.1`) is
+   published as a pre-release.
+
+`make release-notes VERSION=vX.Y.Z` prints the notes for any released version.
 
 ## Contribution Guidelines
 
@@ -107,7 +146,7 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 | Symptom | Cause / fix |
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install`, then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
-| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` predates godi's `go` directive. Run the command with `GOWORK=off`. |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` took over module resolution. `mise.toml` sets `GOWORK=off`, so this means mise is not active in this shell: run the target as `mise exec -- make <target>`. |
 | `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |
