@@ -91,7 +91,7 @@ repo := godi.GetRequired[Repo](scope)
 
 ## 已知限制
 
-- **并发。** `NewRoot()` 返回之后，从 `Root` 解析 singleton 和 transient、以及调用 `CreateScope`，可以在多个 goroutine 中并发进行。scoped 实例不行：每个 `Scope` 同一时刻只能由一个 goroutine 使用，也不要在跨 goroutine 共享的 `Root` 上直接解析 scoped 服务。所有解析结束之后再调用 `Close`。
+- **并发。** `NewRoot()` 返回之后，从 `Root` 解析 singleton、解析不（直接或间接）依赖 scoped 服务的 transient、以及调用 `CreateScope`，可以在多个 goroutine 中并发进行。scoped 实例不行：每个 `Scope` 同一时刻只能由一个 goroutine 使用，也不要让跨 goroutine 共享的 `Root` 去解析任何涉及 scoped 的东西——scoped 服务本身、依赖它的 transient，或者对含有 scoped 注册的类型调用 `GetServices`。所有解析结束之后再调用 `Close`。
 - **形态 B 工厂在运行时校验，而不是在 `go generate` 时。** 缺失注册、captive 依赖、循环依赖这三项检查只对形态 A（`New{Impl}`）构造函数是静态的。单例的形态 B 工厂如果解析了未注册的服务或构成循环，`NewRoot()` 会返回 error；作用域的形态 B 工厂出现同样问题时，会在所属作用域内首次解析该服务时 panic。单例工厂通过具名函数或键控注册去解析 scoped 服务时，不会有任何诊断。
 
 ## 文档

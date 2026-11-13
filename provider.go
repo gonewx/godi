@@ -29,11 +29,14 @@ import (
 // runtime provider (Story 1.3) and the codegen provider (Story 1.4) honor them.
 //
 // Concurrency: once a provider is built (Build or NewRoot has returned),
-// resolving singletons and transients from the root provider and calling
+// resolving singletons from the root provider, resolving transients that do not
+// depend — directly or indirectly — on a scoped service, and calling
 // CreateScope are safe from multiple goroutines; disposal tracking and the
 // closed state are synchronized. Scoped instances are not: use each Scope from
-// one goroutine at a time, and do not resolve scoped services directly from a
-// root provider that is shared across goroutines. Call Close only after
+// one goroutine at a time, and do not let a root provider that is shared across
+// goroutines resolve anything scoped — a scoped service itself, a transient
+// that depends on one, or GetKeyedServices(t, nil) / GetKeyedServices(t,
+// AnyKey) over a type that has scoped registrations. Call Close only after
 // resolution has finished.
 type Provider interface {
 	// GetService returns the service registered for t, or nil if none is

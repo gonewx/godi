@@ -93,7 +93,7 @@ without installing the generator. After changing a DSL declaration, re-run
 
 ## Known Limitations
 
-- **Concurrency.** After `NewRoot()` returns, resolving singletons and transients from a `Root` and calling `CreateScope` are safe from multiple goroutines. Scoped instances are not: use each `Scope` from one goroutine at a time, and do not resolve scoped services directly from a `Root` that is shared across goroutines. Call `Close` only after resolution has finished.
+- **Concurrency.** After `NewRoot()` returns, resolving singletons from a `Root`, resolving transients that do not depend — directly or indirectly — on a scoped service, and calling `CreateScope` are safe from multiple goroutines. Scoped instances are not: use each `Scope` from one goroutine at a time, and do not let a `Root` that is shared across goroutines resolve anything scoped — a scoped service itself, a transient that depends on one, or `GetServices` over a type that has scoped registrations. Call `Close` only after resolution has finished.
 - **Form B factories are validated at run time, not at `go generate`.** Missing-registration, captive-dependency, and cycle checks are static only for form A (`New{Impl}`) constructors. A singleton form B factory that resolves an unregistered service or closes a cycle makes `NewRoot()` return an error; a scoped form B factory with the same problem panics when that service is first resolved within its scope. A singleton factory that resolves a scoped service through a named function or a keyed registration is not diagnosed.
 
 ## Documentation
