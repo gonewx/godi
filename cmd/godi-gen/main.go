@@ -27,6 +27,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -99,12 +100,27 @@ func generate(srcDir, pkgName, outPath string) ([]byte, error) {
 // loadPackage statically loads the single registration package at dir with full
 // type information. Type checking MUST succeed: Info.Instances is populated by
 // the type checker, so any load/type error would leave the markers unreadable.
+//
+// Files in dir that godi-gen itself generated earlier (first line equals
+// generatedHeader) are stubbed to bare package clauses via generatedFileOverlay:
+// in the in-place layout a stale container_gen.go would otherwise fail to
+// type-check (or parse) after a constructor signature changes and block the
+// very regeneration that fixes it.
 func loadPackage(dir string) (*packages.Package, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("load %q: %w", dir, err)
+	}
+	overlay, err := generatedFileOverlay(absDir)
+	if err != nil {
+		return nil, fmt.Errorf("load %q: %w", dir, err)
+	}
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
 			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
 			packages.NeedDeps,
-		Dir: dir,
+		Dir:     dir,
+		Overlay: overlay,
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
