@@ -12,7 +12,7 @@ import (
 type Root struct {
 	f_Logger  *logger.Logger
 	st_Logger uint8
-	closed    bool
+	guard     godi.CloseGuard
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -71,7 +71,7 @@ func (r *Root) GetRequired[T any]() T {
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	switch t {
@@ -100,7 +100,7 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -113,7 +113,7 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key != nil {
@@ -127,26 +127,25 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: r}
 }
 
 func (r *Root) Close() error {
-	r.closed = true
-	return nil
+	return r.guard.Close(func() error { return nil })
 }
 
 type scope struct {
-	root   *Root
-	closed bool
+	root  *Root
+	guard godi.CloseGuard
 }
 
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return s.root.GetService(t)
@@ -159,29 +158,28 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return s.root.GetKeyedService(t, key)
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return s.root.GetKeyedServices(t, key)
 }
 
 func (s *scope) CreateScope() godi.Scope {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: s.root}
 }
 
 func (s *scope) Close() error {
-	s.closed = true
-	return nil
+	return s.guard.Close(func() error { return nil })
 }
 
 func (s *scope) Logger() *logger.Logger { return s.root.get_Logger() }

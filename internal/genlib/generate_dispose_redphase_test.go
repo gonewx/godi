@@ -131,16 +131,16 @@ func TestEmitDispose_CloseAllInRootClose(t *testing.T) {
 
 // --- 2.3-GEN-005 (AC2, P0) ---------------------------------------------------
 
-// TestEmitDispose_ClosedGuardInClose: Root.Close() must include a `closed`
-// guard for idempotent close (D-6: if r.closed { return nil }). The codegen
-// container uses a bool field, not sync.Once (NFR8 single-goroutine).
+// TestEmitDispose_ClosedGuardInClose: Root.Close() must go through the shared
+// godi.CloseGuard for idempotent close (D-6): the guard runs the release once
+// and returns the cached error to every later, concurrent or re-entrant call.
 func TestEmitDispose_ClosedGuardInClose(t *testing.T) {
 	src, err := genlib.Generate(disposableRegistry(), "codegen")
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, "closed"),
-		"Root.Close must have a 'closed' guard for idempotency")
+	testutil.True(t, strings.Contains(code, "return r.guard.Close(func() error { return r.disp.CloseAll() })"),
+		"Root.Close must release through the CloseGuard for idempotency")
 }
 
 // --- 2.3-GEN-006 (AC2, P0) ---------------------------------------------------

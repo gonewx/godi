@@ -225,17 +225,15 @@ func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service, dispos
 		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
 		fmt.Fprintf(buf, "\tst_%s uint8\n", sanitizeFieldName(s.Name))
 	}
-	// `closed` is declared UNCONDITIONALLY so resolve-after-dispose is identical
-	// across both providers (AD-16): even a container with nothing to release must
-	// reject post-Close resolution, matching the runtime oracle. `disp`/`closeErr`
-	// exist only when there is something to release.
+	// `guard` (the shared godi.CloseGuard) is declared UNCONDITIONALLY so
+	// resolve-after-dispose is identical across both providers (AD-16): even a
+	// container with nothing to release must reject post-Close resolution,
+	// matching the runtime oracle. `disp` exists only when there is something to
+	// release.
 	if disposables {
-		fmt.Fprintf(buf, "\tdisp     *runtime.Disposer\n")
-		fmt.Fprintf(buf, "\tclosed   bool\n")
-		fmt.Fprintf(buf, "\tcloseErr error\n")
-	} else {
-		fmt.Fprintf(buf, "\tclosed bool\n")
+		fmt.Fprintf(buf, "\tdisp *runtime.Disposer\n")
 	}
+	fmt.Fprintf(buf, "\tguard godi.CloseGuard\n")
 	fmt.Fprintf(buf, "}\n\n")
 }
 
@@ -727,60 +725,56 @@ func emitNewScope(buf *bytes.Buffer, root string, disposables bool) {
 
 // emitClosedGuard writes the resolve-after-dispose guard at the top of a
 // resolution or scope-creation method. It is emitted UNCONDITIONALLY: every
-// generated container carries a `closed` flag and Close marks it, so a closed
-// container rejects resolution EXACTLY like the runtime oracle does — whose guard
-// is also unconditional (AD-16: resolve-after-dispose identical across providers,
-// regardless of whether the container tracks any disposable). A container with
+// generated container carries a `guard godi.CloseGuard` and Close closes it, so
+// a closed container rejects resolution EXACTLY like the runtime oracle does —
+// whose guard is also unconditional (AD-16: resolve-after-dispose identical
+// across providers, regardless of whether the container tracks any disposable).
+// A container with
 // nothing to release still has a logical closed state to guard. For root recv "r"
-// the guard is `if r.closed`; for a scope a closed ROOT also invalidates the live
-// scope, so the guard is `if s.closed || s.root.closed` (SPCT-12..15). Both
-// providers panic with godi.ProviderClosedError().
+// the guard is `if r.guard.Closed()`; for a scope a closed ROOT also invalidates
+// the live scope, so the guard is `if s.guard.Closed() || s.root.guard.Closed()`
+// (SPCT-12..15). Both providers panic with godi.ProviderClosedError().
 func emitClosedGuard(buf *bytes.Buffer, recv string) {
 	if recv == "s" {
-		fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
+		fmt.Fprintf(buf, "\tif s.guard.Closed() || s.root.guard.Closed() {\n")
 	} else {
-		fmt.Fprintf(buf, "\tif %s.closed {\n", recv)
+		fmt.Fprintf(buf, "\tif %s.guard.Closed() {\n", recv)
 	}
 	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
 	fmt.Fprintf(buf, "\t}\n")
 }
 
-// emitClose writes Root.Close. It is idempotent (AD-16): the second call returns
-// the SAME result as the first, matching the runtime oracle's sync.Once+closeErr
-// caching. When the container tracks disposables, the first call marks closed and
-// caches the CloseAll error in closeErr; subsequent calls return that cached err
-// (NOT nil — a swallowed error would diverge from runtime, F4). When there is
-// nothing to release, Close still marks closed so resolve-after-dispose trips the
-// guard, and returns nil (no disposer to fail).
+// emitClose writes Root.Close through the shared godi.CloseGuard, matching the
+// runtime oracle (AD-16): the first call marks the guard closed, runs the
+// release and caches its error; any later, concurrent or re-entrant call returns
+// the cached error (NOT a swallowed nil, F4) without releasing again or
+// blocking. When there is nothing to release, Close still closes the guard so
+// resolve-after-dispose trips, and its release returns nil.
 func emitClose(buf *bytes.Buffer, disposables, hasAsync bool) {
 	fmt.Fprintf(buf, "func (r *Root) Close() error {\n")
-	if disposables {
-		fmt.Fprintf(buf, "\tif r.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn r.closeErr\n")
-		fmt.Fprintf(buf, "\t}\n")
-		fmt.Fprintf(buf, "\tr.closed = true\n")
-		fmt.Fprintf(buf, "\tr.closeErr = r.disp.CloseAll()\n")
-		fmt.Fprintf(buf, "\treturn r.closeErr\n")
-	} else {
-		fmt.Fprintf(buf, "\tr.closed = true\n")
-		fmt.Fprintf(buf, "\treturn nil\n")
-	}
+	emitGuardClose(buf, "r", disposables, "CloseAll()")
 	fmt.Fprintf(buf, "}\n\n")
 
 	// CloseAsync (structural opt-in godi.AsyncDisposable, D-2) is emitted only
-	// when async-disposable services exist (D-8). It SHARES Root's `closed` guard
-	// with Close (first-caller-wins, D-6): whichever runs first releases and
-	// caches its error; the other returns the cached err.
+	// when async-disposable services exist (D-8). It SHARES Root's guard with
+	// Close (first-caller-wins, D-6): whichever runs first releases and caches
+	// its error; the other returns the cached err.
 	if hasAsync {
 		fmt.Fprintf(buf, "func (r *Root) CloseAsync(ctx context.Context) error {\n")
-		fmt.Fprintf(buf, "\tif r.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn r.closeErr\n")
-		fmt.Fprintf(buf, "\t}\n")
-		fmt.Fprintf(buf, "\tr.closed = true\n")
-		fmt.Fprintf(buf, "\tr.closeErr = r.disp.CloseAllAsync(ctx)\n")
-		fmt.Fprintf(buf, "\treturn r.closeErr\n")
+		emitGuardClose(buf, "r", disposables, "CloseAllAsync(ctx)")
 		fmt.Fprintf(buf, "}\n\n")
 	}
+}
+
+// emitGuardClose writes the body of a Close or CloseAsync method on recv: the
+// guard runs recv.disp.<closeCall> once, or a nil release when the container
+// has no disposer.
+func emitGuardClose(buf *bytes.Buffer, recv string, disposables bool, closeCall string) {
+	if disposables {
+		fmt.Fprintf(buf, "\treturn %s.guard.Close(func() error { return %s.disp.%s })\n", recv, recv, closeCall)
+		return
+	}
+	fmt.Fprintf(buf, "\treturn %s.guard.Close(func() error { return nil })\n", recv)
 }
 
 func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service, reg *plan.Registry, hasLifetimes bool, disposables, hasAsync bool, keyedScoped, keyedTransients []plan.Service) {
@@ -809,14 +803,12 @@ func emitScope(buf *bytes.Buffer, singletons, scoped, transients []plan.Service,
 
 func emitScopeLegacy(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "type scope struct {\n")
-	fmt.Fprintf(buf, "\troot   *Root\n")
-	fmt.Fprintf(buf, "\tclosed bool\n")
+	fmt.Fprintf(buf, "\troot  *Root\n")
+	fmt.Fprintf(buf, "\tguard godi.CloseGuard\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "var _ godi.Scope = (*scope)(nil)\n\n")
 	fmt.Fprintf(buf, "func (s *scope) GetService(t reflect.Type) any {\n")
-	fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
-	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
-	fmt.Fprintf(buf, "\t}\n")
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\treturn s.root.GetService(t)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) IsService(t reflect.Type) bool { return s.root.IsService(t) }\n\n")
@@ -824,26 +816,19 @@ func emitScopeLegacy(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "\treturn s.root.IsKeyedService(t, key)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedService(t reflect.Type, key any) any {\n")
-	fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
-	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
-	fmt.Fprintf(buf, "\t}\n")
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\treturn s.root.GetKeyedService(t, key)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {\n")
-	fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
-	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
-	fmt.Fprintf(buf, "\t}\n")
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\treturn s.root.GetKeyedServices(t, key)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) CreateScope() godi.Scope {\n")
-	fmt.Fprintf(buf, "\tif s.closed || s.root.closed {\n")
-	fmt.Fprintf(buf, "\t\tpanic(godi.ProviderClosedError())\n")
-	fmt.Fprintf(buf, "\t}\n")
+	emitClosedGuard(buf, "s")
 	fmt.Fprintf(buf, "\treturn &scope{root: s.root}\n")
 	fmt.Fprintf(buf, "}\n\n")
 	fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
-	fmt.Fprintf(buf, "\ts.closed = true\n")
-	fmt.Fprintf(buf, "\treturn nil\n")
+	emitGuardClose(buf, "s", false, "")
 	fmt.Fprintf(buf, "}\n\n")
 }
 
@@ -856,17 +841,14 @@ func emitScopeStruct(buf *bytes.Buffer, scoped []plan.Service, disposables bool,
 		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
 		fmt.Fprintf(buf, "\tst_%s uint8\n", sanitizeFieldName(s.Name))
 	}
-	// `closed` is declared UNCONDITIONALLY (see emitRootStruct): a closed scope
+	// `guard` is declared UNCONDITIONALLY (see emitRootStruct): a closed scope
 	// must reject resolution even with nothing to release, so resolve-after-dispose
-	// matches the runtime oracle (AD-16). `disp`/`closeErr` exist only when there is
+	// matches the runtime oracle (AD-16). `disp` exists only when there is
 	// something to release.
 	if disposables {
-		fmt.Fprintf(buf, "\tdisp     *runtime.Disposer\n")
-		fmt.Fprintf(buf, "\tclosed   bool\n")
-		fmt.Fprintf(buf, "\tcloseErr error\n")
-	} else {
-		fmt.Fprintf(buf, "\tclosed bool\n")
+		fmt.Fprintf(buf, "\tdisp *runtime.Disposer\n")
 	}
+	fmt.Fprintf(buf, "\tguard godi.CloseGuard\n")
 	fmt.Fprintf(buf, "}\n\n")
 }
 
@@ -1011,39 +993,28 @@ func emitScopeCreateScope(buf *bytes.Buffer, disposables bool) {
 }
 
 // emitScopeClose writes scope.Close, idempotent and matching the runtime oracle
-// (AD-16). Like Root.Close, the second call returns the cached closeErr (not nil)
-// when there are disposables; when there is nothing to release Close still marks
-// the scope closed so resolve-after-dispose trips the guard.
+// (AD-16). Like Root.Close it goes through the scope's godi.CloseGuard, so a
+// later call returns the cached error (not nil) when there are disposables; when
+// there is nothing to release Close still closes the guard so
+// resolve-after-dispose trips.
 func emitScopeClose(buf *bytes.Buffer, disposables, hasAsync bool) {
-	if disposables {
-		fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
-		fmt.Fprintf(buf, "\tif s.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn s.closeErr\n")
-		fmt.Fprintf(buf, "\t}\n")
-		fmt.Fprintf(buf, "\ts.closed = true\n")
-		fmt.Fprintf(buf, "\ts.closeErr = s.disp.CloseAll()\n")
-		fmt.Fprintf(buf, "\treturn s.closeErr\n")
-		fmt.Fprintf(buf, "}\n\n")
-	} else {
-		fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
-		fmt.Fprintf(buf, "\ts.closed = true\n")
-		fmt.Fprintf(buf, "\treturn nil\n")
-		fmt.Fprintf(buf, "}\n\n")
-	}
+	fmt.Fprintf(buf, "func (s *scope) Close() error {\n")
+	emitGuardClose(buf, "s", disposables, "CloseAll()")
+	fmt.Fprintf(buf, "}\n\n")
 	// scope.CloseAsync mirrors Root.CloseAsync (D-6 shared guard, D-2 structural
 	// opt-in), emitted only when async-disposable services exist (D-8).
 	if hasAsync {
 		fmt.Fprintf(buf, "func (s *scope) CloseAsync(ctx context.Context) error {\n")
-		fmt.Fprintf(buf, "\tif s.closed {\n")
-		fmt.Fprintf(buf, "\t\treturn s.closeErr\n")
-		fmt.Fprintf(buf, "\t}\n")
-		fmt.Fprintf(buf, "\ts.closed = true\n")
-		fmt.Fprintf(buf, "\ts.closeErr = s.disp.CloseAllAsync(ctx)\n")
-		fmt.Fprintf(buf, "\treturn s.closeErr\n")
+		emitGuardClose(buf, "s", disposables, "CloseAllAsync(ctx)")
 		fmt.Fprintf(buf, "}\n\n")
 	}
 }
 
+// emitTypedAccessors writes the typed accessor <Name>() of each singleton and
+// scoped service on recv. A singleton accessor only reads the value NewRoot
+// already built. A scoped accessor may build its instance, so it first checks
+// the closed guard like GetService does: building into a closed provider would
+// track the instance into a disposer that has already been released.
 func emitTypedAccessors(buf *bytes.Buffer, singletons, scoped []plan.Service, recv, typeName string) {
 	for _, s := range singletons {
 		expr := singletonGet(recv, s)
@@ -1051,7 +1022,10 @@ func emitTypedAccessors(buf *bytes.Buffer, singletons, scoped []plan.Service, re
 	}
 	for _, s := range scoped {
 		expr := serviceExpr(recv, s)
-		fmt.Fprintf(buf, "func (%s %s) %s() %s { return %s }\n\n", recv, typeName, s.Name, s.GoType, expr)
+		fmt.Fprintf(buf, "func (%s %s) %s() %s {\n", recv, typeName, s.Name, s.GoType)
+		emitClosedGuard(buf, recv)
+		fmt.Fprintf(buf, "\treturn %s\n", expr)
+		fmt.Fprintf(buf, "}\n\n")
 	}
 }
 

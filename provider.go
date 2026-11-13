@@ -27,6 +27,14 @@ import (
 // resolve-after-dispose consistency, registration-order enumeration, nil-key
 // routing) are PINNED here as contract but NOT implemented in this story; the
 // runtime provider (Story 1.3) and the codegen provider (Story 1.4) honor them.
+//
+// Concurrency: once a provider is built (Build or NewRoot has returned),
+// resolving singletons and transients from the root provider and calling
+// CreateScope are safe from multiple goroutines; disposal tracking and the
+// closed state are synchronized. Scoped instances are not: use each Scope from
+// one goroutine at a time, and do not resolve scoped services directly from a
+// root provider that is shared across goroutines. Call Close only after
+// resolution has finished.
 type Provider interface {
 	// GetService returns the service registered for t, or nil if none is
 	// registered. A miss is nil, never a panic (AD-16).

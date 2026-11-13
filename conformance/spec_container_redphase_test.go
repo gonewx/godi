@@ -358,11 +358,11 @@ func TestSPCT_CrossProvider_ResolveAfterDispose_NoDisposable(t *testing.T) {
 	code := string(src)
 	testutil.True(t, !strings.Contains(code, "runtime.Disposer"),
 		"sanity: this registry has no disposable, so no Disposer is expected")
-	// the closed FIELD declaration line starts with tab+"closed" (gofmt aligns the
-	// type with variable spacing, so match the line prefix, not exact spacing); the
-	// guard ("\tif r.closed") and the Close assignment ("\tr.closed") do not.
-	testutil.True(t, strings.Contains(code, "\n\tclosed"),
-		"no-disposable generated container must STILL declare the closed field (AD-16)")
+	// the close-state FIELD declaration line starts with tab+"guard" (gofmt
+	// aligns the type with variable spacing, so match the line prefix, not exact
+	// spacing); the resolve guard ("\tif r.guard.Closed()") does not.
+	testutil.True(t, strings.Contains(code, "\n\tguard "),
+		"no-disposable generated container must STILL declare the guard field (AD-16)")
 	testutil.True(t, strings.Contains(code, "panic(godi.ProviderClosedError())"),
 		"no-disposable generated container must STILL emit the resolve-after-dispose guard (AD-16)")
 }

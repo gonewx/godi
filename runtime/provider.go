@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/gonewx/godi"
 )
@@ -99,10 +98,8 @@ type root struct {
 
 	materializing map[lifetimeGroup]bool
 
-	disp     *Disposer
-	closeMu  sync.Mutex
-	closed   bool
-	closeErr error
+	disp  *Disposer
+	guard godi.CloseGuard
 }
 
 var _ godi.Provider = (*root)(nil)
@@ -265,7 +262,7 @@ func (v resolver) anyKeyed(t reflect.Type) []any {
 }
 
 func (r *root) GetService(t reflect.Type) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return r.resolver(true).last(t)
@@ -312,7 +309,7 @@ func (r *root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *root) GetKeyedService(t reflect.Type, key any) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -327,7 +324,7 @@ func (r *root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -340,7 +337,7 @@ func (r *root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *root) CreateScope() godi.Scope {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{
@@ -357,18 +354,12 @@ func (r *root) CreateScope() godi.Scope {
 // a later Close or CloseAsync is a no-op returning the cached error. Marking
 // closed BEFORE releasing makes a factory that calls Close mid-Build
 // (ctor-dispose-in-flight, SPCT-16) trip the resolve guard on the next
-// GetService, and rejects post-Close resolution (AD-16). closeMu replaces the
-// prior sync.Once so Close and CloseAsync can share the guard while keeping the
-// count-exactly-once semantics (D-6).
+// GetService, and rejects post-Close resolution (AD-16). The guard is a
+// godi.CloseGuard shared with CloseAsync: concurrent Close calls release once,
+// and a disposable whose Close calls back into this Close gets nil at once
+// instead of deadlocking (D-6 count-exactly-once).
 func (r *root) Close() error {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	if r.closed {
-		return r.closeErr
-	}
-	r.closed = true
-	r.closeErr = r.disp.CloseAll()
-	return r.closeErr
+	return r.guard.Close(func() error { return r.disp.CloseAll() })
 }
 
 // CloseAsync releases this provider and its disposables in LIFO order,
@@ -378,14 +369,7 @@ func (r *root) Close() error {
 // SAME closed guard as Close (first-caller-wins, D-6 / #38 DisposeAsyncOnce): if
 // Close already ran, this returns the cached error without re-releasing.
 func (r *root) CloseAsync(ctx context.Context) error {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	if r.closed {
-		return r.closeErr
-	}
-	r.closed = true
-	r.closeErr = r.disp.CloseAllAsync(ctx)
-	return r.closeErr
+	return r.guard.Close(func() error { return r.disp.CloseAllAsync(ctx) })
 }
 
 type scope struct {
@@ -393,9 +377,7 @@ type scope struct {
 	scoped      map[reflect.Type][]any
 	keyedScoped map[keyedEntry][]any
 	disp        *Disposer
-	closeMu     sync.Mutex
-	closed      bool
-	closeErr    error
+	guard       godi.CloseGuard
 }
 
 var _ godi.Scope = (*scope)(nil)
@@ -403,7 +385,7 @@ var _ godi.Scope = (*scope)(nil)
 // closedGuard reports whether this scope can no longer resolve: either the scope
 // itself was closed, or its root was closed (a closed root invalidates every live
 // child scope — SPCT-14). A closed scope leaves the root usable (SPCT-15).
-func (s *scope) closedGuard() bool { return s.closed || s.root.closed }
+func (s *scope) closedGuard() bool { return s.guard.Closed() || s.root.guard.Closed() }
 
 func (s *scope) GetService(t reflect.Type) any {
 	if s.closedGuard() {
@@ -461,14 +443,7 @@ func (s *scope) CreateScope() godi.Scope {
 // root.Close it is idempotent and shares ONE closed guard with CloseAsync
 // (first-caller-wins, D-6).
 func (s *scope) Close() error {
-	s.closeMu.Lock()
-	defer s.closeMu.Unlock()
-	if s.closed {
-		return s.closeErr
-	}
-	s.closed = true
-	s.closeErr = s.disp.CloseAll()
-	return s.closeErr
+	return s.guard.Close(func() error { return s.disp.CloseAll() })
 }
 
 // CloseAsync releases this scope's disposables in LIFO order, preferring async
@@ -477,14 +452,7 @@ func (s *scope) Close() error {
 // tracked by root.disp, so scope.CloseAsync never releases them (AD-12 async
 // parity, AC5).
 func (s *scope) CloseAsync(ctx context.Context) error {
-	s.closeMu.Lock()
-	defer s.closeMu.Unlock()
-	if s.closed {
-		return s.closeErr
-	}
-	s.closed = true
-	s.closeErr = s.disp.CloseAllAsync(ctx)
-	return s.closeErr
+	return s.guard.Close(func() error { return s.disp.CloseAllAsync(ctx) })
 }
 
 // Lifetime identifies the caching strategy for a service registration.
@@ -675,13 +643,13 @@ func (b *Builder) Build() (provider godi.Provider, err error) {
 	// registration and may not be a singleton. A factory that closes the
 	// provider mid-Build still trips the closed guard before the next group.
 	for t := range sf {
-		if r.closed {
+		if r.guard.Closed() {
 			panic(godi.ProviderClosedError())
 		}
 		_ = r.resolver(true).group(Singleton, t)
 	}
 	for ke := range ksf {
-		if r.closed {
+		if r.guard.Closed() {
 			panic(godi.ProviderClosedError())
 		}
 		_ = r.resolver(true).keyedGroup(Singleton, ke)

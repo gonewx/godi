@@ -89,8 +89,7 @@ type Root struct {
 	f_IKeyedServiceWithProvider__scoped_with_provider_     fakes.IKeyedServiceWithProvider
 	st_IKeyedServiceWithProvider__scoped_with_provider_    uint8
 	disp                                                   *runtime.Disposer
-	closed                                                 bool
-	closeErr                                               error
+	guard                                                  godi.CloseGuard
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -1067,13 +1066,24 @@ func (r *Root) MixedSingletonFirst() fakes.IMixedA { return r.get_MixedSingleton
 
 func (r *Root) MixedSingletonLast() fakes.IMixedB { return r.get_MixedSingletonLast() }
 
-func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.get_FakeScopedService() }
+func (r *Root) FakeScopedService() fakes.IFakeScopedService {
+	if r.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
+	return r.get_FakeScopedService()
+}
 
 func (r *Root) FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	if r.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
 	return r.get_FakeDisposableScoped()
 }
 
 func (r *Root) IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
+	if r.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
 	return r.get_IFakeFormBDisposableScoped()
 }
 
@@ -1097,7 +1107,7 @@ func (r *Root) GetRequired[T any]() T {
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	switch t {
@@ -1316,7 +1326,7 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -1379,7 +1389,7 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -1530,28 +1540,18 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: r, disp: runtime.NewDisposer()}
 }
 
 func (r *Root) Close() error {
-	if r.closed {
-		return r.closeErr
-	}
-	r.closed = true
-	r.closeErr = r.disp.CloseAll()
-	return r.closeErr
+	return r.guard.Close(func() error { return r.disp.CloseAll() })
 }
 
 func (r *Root) CloseAsync(ctx context.Context) error {
-	if r.closed {
-		return r.closeErr
-	}
-	r.closed = true
-	r.closeErr = r.disp.CloseAllAsync(ctx)
-	return r.closeErr
+	return r.guard.Close(func() error { return r.disp.CloseAllAsync(ctx) })
 }
 
 type scope struct {
@@ -1567,14 +1567,13 @@ type scope struct {
 	f_IKeyedServiceWithProvider__scoped_with_provider_  fakes.IKeyedServiceWithProvider
 	st_IKeyedServiceWithProvider__scoped_with_provider_ uint8
 	disp                                                *runtime.Disposer
-	closed                                              bool
-	closeErr                                            error
+	guard                                               godi.CloseGuard
 }
 
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	switch t {
@@ -1737,7 +1736,7 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -1800,7 +1799,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -1951,28 +1950,18 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: s.root, disp: runtime.NewDisposer()}
 }
 
 func (s *scope) Close() error {
-	if s.closed {
-		return s.closeErr
-	}
-	s.closed = true
-	s.closeErr = s.disp.CloseAll()
-	return s.closeErr
+	return s.guard.Close(func() error { return s.disp.CloseAll() })
 }
 
 func (s *scope) CloseAsync(ctx context.Context) error {
-	if s.closed {
-		return s.closeErr
-	}
-	s.closed = true
-	s.closeErr = s.disp.CloseAllAsync(ctx)
-	return s.closeErr
+	return s.guard.Close(func() error { return s.disp.CloseAllAsync(ctx) })
 }
 
 func (s *scope) get_FakeScopedService() fakes.IFakeScopedService {
@@ -2245,13 +2234,24 @@ func (s *scope) MixedSingletonFirst() fakes.IMixedA { return s.root.get_MixedSin
 
 func (s *scope) MixedSingletonLast() fakes.IMixedB { return s.root.get_MixedSingletonLast() }
 
-func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.get_FakeScopedService() }
+func (s *scope) FakeScopedService() fakes.IFakeScopedService {
+	if s.guard.Closed() || s.root.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
+	return s.get_FakeScopedService()
+}
 
 func (s *scope) FakeDisposableScoped() fakes.IFakeDisposableScoped {
+	if s.guard.Closed() || s.root.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
 	return s.get_FakeDisposableScoped()
 }
 
 func (s *scope) IFakeFormBDisposableScoped() fakes.IFakeFormBDisposableScoped {
+	if s.guard.Closed() || s.root.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
 	return s.get_IFakeFormBDisposableScoped()
 }
 

@@ -16,8 +16,7 @@ type Root struct {
 	f_Session  svc.ISession
 	st_Session uint8
 	disp       *runtime.Disposer
-	closed     bool
-	closeErr   error
+	guard      godi.CloseGuard
 }
 
 var _ godi.Provider = (*Root)(nil)
@@ -85,7 +84,12 @@ func (r *Root) NewTempFile() svc.ITempFile {
 
 func (r *Root) DBConn() svc.IDBConn { return r.get_DBConn() }
 
-func (r *Root) Session() svc.ISession { return r.get_Session() }
+func (r *Root) Session() svc.ISession {
+	if r.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
+	return r.get_Session()
+}
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -107,7 +111,7 @@ func (r *Root) GetRequired[T any]() T {
 
 // GetService dispatches by reflect.Type (Tier B, AD-13) — no reflective construction.
 func (r *Root) GetService(t reflect.Type) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	switch t {
@@ -144,7 +148,7 @@ func (r *Root) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (r *Root) GetKeyedService(t reflect.Type, key any) any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -157,7 +161,7 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key != nil {
@@ -175,19 +179,14 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (r *Root) CreateScope() godi.Scope {
-	if r.closed {
+	if r.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: r, disp: runtime.NewDisposer()}
 }
 
 func (r *Root) Close() error {
-	if r.closed {
-		return r.closeErr
-	}
-	r.closed = true
-	r.closeErr = r.disp.CloseAll()
-	return r.closeErr
+	return r.guard.Close(func() error { return r.disp.CloseAll() })
 }
 
 type scope struct {
@@ -195,14 +194,13 @@ type scope struct {
 	f_Session  svc.ISession
 	st_Session uint8
 	disp       *runtime.Disposer
-	closed     bool
-	closeErr   error
+	guard      godi.CloseGuard
 }
 
 var _ godi.Scope = (*scope)(nil)
 
 func (s *scope) GetService(t reflect.Type) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	switch t {
@@ -233,7 +231,7 @@ func (s *scope) IsKeyedService(t reflect.Type, key any) bool {
 }
 
 func (s *scope) GetKeyedService(t reflect.Type, key any) any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key == nil {
@@ -246,7 +244,7 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 }
 
 func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	if key != nil {
@@ -264,19 +262,14 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 }
 
 func (s *scope) CreateScope() godi.Scope {
-	if s.closed || s.root.closed {
+	if s.guard.Closed() || s.root.guard.Closed() {
 		panic(godi.ProviderClosedError())
 	}
 	return &scope{root: s.root, disp: runtime.NewDisposer()}
 }
 
 func (s *scope) Close() error {
-	if s.closed {
-		return s.closeErr
-	}
-	s.closed = true
-	s.closeErr = s.disp.CloseAll()
-	return s.closeErr
+	return s.guard.Close(func() error { return s.disp.CloseAll() })
 }
 
 func (s *scope) get_Session() svc.ISession {
@@ -307,7 +300,12 @@ func (s *scope) NewTempFile() svc.ITempFile {
 
 func (s *scope) DBConn() svc.IDBConn { return s.root.get_DBConn() }
 
-func (s *scope) Session() svc.ISession { return s.get_Session() }
+func (s *scope) Session() svc.ISession {
+	if s.guard.Closed() || s.root.guard.Closed() {
+		panic(godi.ProviderClosedError())
+	}
+	return s.get_Session()
+}
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

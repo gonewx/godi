@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/gonewx/godi"
 )
@@ -19,7 +20,14 @@ import (
 // both-disposable that was tracked through the sync Track path (prefer-async,
 // D-3/D-4). The field-type change is internal to runtime — generated code only
 // calls TrackAny/CloseAll/CloseAllAsync and never touches items.
+//
+// A Disposer is safe for concurrent use: mu guards items, so goroutines that
+// share a provider can track transients at the same time. mu protects items
+// only — CloseAll and CloseAllAsync take the items out under the lock and
+// release them after unlocking, so a release that tracks another disposable or
+// re-enters its provider's Close cannot deadlock.
 type Disposer struct {
+	mu    sync.Mutex
 	items []any
 }
 
@@ -31,14 +39,18 @@ func NewDisposer() *Disposer {
 // (io.Closer + godi.AsyncDisposable) also enter here because TrackAny asserts
 // io.Closer first (D-3).
 func (d *Disposer) Track(c io.Closer) {
+	d.mu.Lock()
 	d.items = append(d.items, c)
+	d.mu.Unlock()
 }
 
 // TrackAsync records an async-only disposable (implements godi.AsyncDisposable
 // but NOT io.Closer). Sync CloseAll cannot release it and reports an explicit
 // error (AC3); CloseAllAsync releases it via CloseAsync.
 func (d *Disposer) TrackAsync(ad godi.AsyncDisposable) {
+	d.mu.Lock()
 	d.items = append(d.items, ad)
+	d.mu.Unlock()
 }
 
 // TrackAny records v by its dynamic type: an io.Closer (including a
@@ -67,11 +79,14 @@ func (d *Disposer) TrackAny(v any) {
 // implements IAsyncDisposable. Use DisposeAsync to dispose the container."),
 // while every releasable item on either side of it still releases. The first
 // error is retained (first-error-continue, unchanged from Story 2.3). Items are
-// cleared so a second call is a no-op.
+// cleared so a second call is a no-op. They are taken out under the lock and
+// released after it is dropped; an item tracked during release is kept for a
+// later call.
 func (d *Disposer) CloseAll() error {
+	items := d.take()
 	var first error
-	for i := len(d.items) - 1; i >= 0; i-- {
-		v := d.items[i]
+	for i := len(items) - 1; i >= 0; i-- {
+		v := items[i]
 		if c, ok := v.(io.Closer); ok {
 			if err := c.Close(); err != nil && first == nil {
 				first = err
@@ -82,7 +97,6 @@ func (d *Disposer) CloseAll() error {
 			first = fmt.Errorf("godi: %T only implements AsyncDisposable; use CloseAsync to dispose it (AD-16/AR12)", v)
 		}
 	}
-	d.items = nil
 	return first
 }
 
@@ -94,11 +108,12 @@ func (d *Disposer) CloseAll() error {
 // through to each CloseAsync unmodified — the Go "context-aware graceful
 // release" reading of async (D-1). The first error is retained while the rest
 // still release (first-error-continue). Items are cleared so a second call is a
-// no-op.
+// no-op; as in CloseAll they are released outside the lock.
 func (d *Disposer) CloseAllAsync(ctx context.Context) error {
+	items := d.take()
 	var first error
-	for i := len(d.items) - 1; i >= 0; i-- {
-		v := d.items[i]
+	for i := len(items) - 1; i >= 0; i-- {
+		v := items[i]
 		if ad, ok := v.(godi.AsyncDisposable); ok {
 			if err := ad.CloseAsync(ctx); err != nil && first == nil {
 				first = err
@@ -111,10 +126,20 @@ func (d *Disposer) CloseAllAsync(ctx context.Context) error {
 			}
 		}
 	}
-	d.items = nil
 	return first
 }
 
+// take removes and returns every tracked item under the lock.
+func (d *Disposer) take() []any {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	items := d.items
+	d.items = nil
+	return items
+}
+
 func (d *Disposer) Len() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	return len(d.items)
 }
