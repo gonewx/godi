@@ -13,7 +13,7 @@ Declare the dependency graph with static markers; a code generator emits plain G
 | Capability | Description |
 | --- | --- |
 | **Compile-time assembly** | `godi-gen` statically reads DSL calls via `go/packages` + `go/types`, never executing them; the emitted container is ordinary Go code |
-| **Illegal graphs never build** | cycles, captive dependencies, and missing registrations fail at `go generate` — a bad graph cannot produce a binary |
+| **Illegal graphs never build** | for form A constructors, cycles, captive dependencies, and missing registrations fail at `go generate` — see [Known Limitations](#known-limitations) for form B |
 | **Three lifetimes** | singleton / scoped / transient, scopes dispose LIFO |
 | **Keyed services & open generics** | `AddKeyed*` family; open generics via explicit closed registrations |
 | **One external dependency** | `golang.org/x/tools`, and only the generator uses it |
@@ -90,6 +90,13 @@ repo := godi.GetRequired[Repo](scope)
 without installing the generator. After changing a DSL declaration, re-run
 `go generate ./...` and make sure `git status --porcelain` stays empty
 (guards against assembly drift).
+
+## Known Limitations
+
+- **Not safe for concurrent use.** A `Root` or `Scope` must not be shared across goroutines: resolving disposable transients concurrently loses disposal tracking, and `Close` is not synchronized with resolution.
+- **Form B factories bypass graph validation.** Missing-registration, captive-dependency, and cycle checks are guaranteed only for form A (`New{Impl}`) constructors. A form B factory that resolves an unregistered service, or resolves its dependencies through a named function or a keyed lookup, is not checked at `go generate`; it can panic or receive a nil dependency inside `NewRoot()`.
+- **Form B products are not disposed automatically.** Only form A implementations that satisfy `io.Closer` or `godi.AsyncDisposable` are tracked. Close the values a form B factory creates yourself.
+- **Markers need explicit type arguments.** Write `godi.AddSingletonFactory[Logger](&r, f)`, not `godi.AddSingletonFactory(&r, f)`. A marker whose type argument is inferred is skipped with a warning, and the service is missing from the container.
 
 ## Documentation
 
