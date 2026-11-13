@@ -12,78 +12,122 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_FakeService                                         fakes.IFakeService
-	f_FakeConsumer                                        fakes.IFakeConsumer
-	f_FakeDisposableSingleton                             fakes.IFakeDisposableSingleton
-	f_PocoClass                                           fakes.IPocoClass
-	f_ClassImplementingIterable                           fakes.IClassImplementingIterable
-	f_ClassInheritingAbstract                             fakes.IClassInheritingAbstract
-	f_GenSlotA                                            fakes.IGenSlotA
-	f_GenSlotB                                            fakes.IGenSlotB
-	f_AnyKeyServiceA                                      fakes.IAnyKeyService
-	f_StructFakeService                                   fakes.IStructFakeService
-	f_StructConsumer                                      fakes.IStructConsumer
-	f_StructFakeOne                                       fakes.IStructFakeMultipleService
-	f_StructFakeTwo                                       fakes.IStructFakeMultipleService
-	f_SelfComparable                                      fakes.ISelfComparable
-	f_FakeReplaceFinalTwo                                 fakes.IFakeReplaceFinalService
-	f_FakeReplaceFinalOne                                 fakes.IFakeReplaceFinalService
-	f_IFakeInstanceService                                fakes.IFakeInstanceService
-	f_IFakeFormBDisposableSingleton                       fakes.IFakeFormBDisposableSingleton
-	f_FakeScopedService                                   fakes.IFakeScopedService
-	f_FakeDisposableScoped                                fakes.IFakeDisposableScoped
-	f_IFakeFormBDisposableScoped                          fakes.IFakeFormBDisposableScoped
-	f_KeyedServiceOne__service1_                          fakes.IKeyedService
-	f_KeyedServiceTwo__service2_                          fakes.IKeyedService
-	f_KeyedServiceOne__both_                              fakes.IKeyedService
-	f_KeyedServiceTwo__both_                              fakes.IKeyedService
-	f_KeyedServiceOne__singleton_factory_                 fakes.IKeyedService
-	f_IKeyedServiceWithDep__with_dep_                     fakes.IKeyedServiceWithDep
-	f_IKeyedServiceWithKey__injected_key_                 fakes.IKeyedServiceWithKey
-	f_IKeyedServiceWithDep__missing_dep_                  fakes.IKeyedServiceWithDep
-	f_IKeyedServiceWithProvider__with_provider_           fakes.IKeyedServiceWithProvider
-	f_AnyKeyServiceA__alpha_                              fakes.IAnyKeyService
-	f_AnyKeyServiceB__beta_                               fakes.IAnyKeyService
-	f_IAnyKeyService__alpha_                              fakes.IAnyKeyService
-	f_FakeOpenGenericService_fakes_IFakeService__gen_key_ fakes.IFakeOpenGenericService[fakes.IFakeService]
-	f_KeyedServiceOne__scoped_                            fakes.IKeyedService
-	f_IKeyedServiceWithProvider__scoped_with_provider_    fakes.IKeyedServiceWithProvider
-	disp                                                  *runtime.Disposer
-	closed                                                bool
-	closeErr                                              error
+	f_FakeService                                          fakes.IFakeService
+	st_FakeService                                         uint8
+	f_FakeConsumer                                         fakes.IFakeConsumer
+	st_FakeConsumer                                        uint8
+	f_FakeDisposableSingleton                              fakes.IFakeDisposableSingleton
+	st_FakeDisposableSingleton                             uint8
+	f_PocoClass                                            fakes.IPocoClass
+	st_PocoClass                                           uint8
+	f_ClassImplementingIterable                            fakes.IClassImplementingIterable
+	st_ClassImplementingIterable                           uint8
+	f_ClassInheritingAbstract                              fakes.IClassInheritingAbstract
+	st_ClassInheritingAbstract                             uint8
+	f_GenSlotA                                             fakes.IGenSlotA
+	st_GenSlotA                                            uint8
+	f_GenSlotB                                             fakes.IGenSlotB
+	st_GenSlotB                                            uint8
+	f_AnyKeyServiceA                                       fakes.IAnyKeyService
+	st_AnyKeyServiceA                                      uint8
+	f_StructFakeService                                    fakes.IStructFakeService
+	st_StructFakeService                                   uint8
+	f_StructConsumer                                       fakes.IStructConsumer
+	st_StructConsumer                                      uint8
+	f_StructFakeOne                                        fakes.IStructFakeMultipleService
+	st_StructFakeOne                                       uint8
+	f_StructFakeTwo                                        fakes.IStructFakeMultipleService
+	st_StructFakeTwo                                       uint8
+	f_SelfComparable                                       fakes.ISelfComparable
+	st_SelfComparable                                      uint8
+	f_FakeReplaceFinalTwo                                  fakes.IFakeReplaceFinalService
+	st_FakeReplaceFinalTwo                                 uint8
+	f_FakeReplaceFinalOne                                  fakes.IFakeReplaceFinalService
+	st_FakeReplaceFinalOne                                 uint8
+	f_IFakeInstanceService                                 fakes.IFakeInstanceService
+	st_IFakeInstanceService                                uint8
+	f_IFakeFormBDisposableSingleton                        fakes.IFakeFormBDisposableSingleton
+	st_IFakeFormBDisposableSingleton                       uint8
+	f_FakeScopedService                                    fakes.IFakeScopedService
+	f_FakeDisposableScoped                                 fakes.IFakeDisposableScoped
+	f_IFakeFormBDisposableScoped                           fakes.IFakeFormBDisposableScoped
+	f_KeyedServiceOne__service1_                           fakes.IKeyedService
+	st_KeyedServiceOne__service1_                          uint8
+	f_KeyedServiceTwo__service2_                           fakes.IKeyedService
+	st_KeyedServiceTwo__service2_                          uint8
+	f_KeyedServiceOne__both_                               fakes.IKeyedService
+	st_KeyedServiceOne__both_                              uint8
+	f_KeyedServiceTwo__both_                               fakes.IKeyedService
+	st_KeyedServiceTwo__both_                              uint8
+	f_KeyedServiceOne__singleton_factory_                  fakes.IKeyedService
+	st_KeyedServiceOne__singleton_factory_                 uint8
+	f_IKeyedServiceWithDep__with_dep_                      fakes.IKeyedServiceWithDep
+	st_IKeyedServiceWithDep__with_dep_                     uint8
+	f_IKeyedServiceWithKey__injected_key_                  fakes.IKeyedServiceWithKey
+	st_IKeyedServiceWithKey__injected_key_                 uint8
+	f_IKeyedServiceWithDep__missing_dep_                   fakes.IKeyedServiceWithDep
+	st_IKeyedServiceWithDep__missing_dep_                  uint8
+	f_IKeyedServiceWithProvider__with_provider_            fakes.IKeyedServiceWithProvider
+	st_IKeyedServiceWithProvider__with_provider_           uint8
+	f_AnyKeyServiceA__alpha_                               fakes.IAnyKeyService
+	st_AnyKeyServiceA__alpha_                              uint8
+	f_AnyKeyServiceB__beta_                                fakes.IAnyKeyService
+	st_AnyKeyServiceB__beta_                               uint8
+	f_IAnyKeyService__alpha_                               fakes.IAnyKeyService
+	st_IAnyKeyService__alpha_                              uint8
+	f_FakeOpenGenericService_fakes_IFakeService__gen_key_  fakes.IFakeOpenGenericService[fakes.IFakeService]
+	st_FakeOpenGenericService_fakes_IFakeService__gen_key_ uint8
+	f_KeyedServiceOne__scoped_                             fakes.IKeyedService
+	f_IKeyedServiceWithProvider__scoped_with_provider_     fakes.IKeyedServiceWithProvider
+	disp                                                   *runtime.Disposer
+	closed                                                 bool
+	closeErr                                               error
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
-	r.f_FakeService = fakes.NewFakeService()
-	r.f_FakeConsumer = fakes.NewFakeConsumer(r.f_FakeService)
-	r.f_FakeDisposableSingleton = fakes.NewFakeDisposableSingleton()
-	r.disp.TrackAny(r.f_FakeDisposableSingleton)
-	r.f_PocoClass = fakes.NewPocoClass()
-	r.f_ClassImplementingIterable = fakes.NewClassImplementingIterable()
-	r.f_ClassInheritingAbstract = fakes.NewClassInheritingAbstract()
-	r.f_GenSlotA = fakes.NewGenSlotA()
-	r.f_GenSlotB = fakes.NewGenSlotB()
-	r.f_AnyKeyServiceA = fakes.NewAnyKeyServiceA()
-	r.f_StructFakeService = fakes.NewStructFakeService()
-	r.f_StructConsumer = fakes.NewStructConsumer(r.f_StructFakeService)
-	r.f_StructFakeOne = fakes.NewStructFakeOne()
-	r.f_StructFakeTwo = fakes.NewStructFakeTwo()
-	r.f_SelfComparable = fakes.NewSelfComparable()
-	r.f_FakeReplaceFinalTwo = fakes.NewFakeReplaceFinalTwo()
-	r.f_FakeReplaceFinalOne = fakes.NewFakeReplaceFinalOne()
-	r.f_IFakeInstanceService = (func(p godi.Provider) fakes.IFakeInstanceService {
-		return fakes.NewFakeInstanceService()
-	})(r)
-	r.disp.TrackAny(r.f_IFakeInstanceService)
-	r.f_IFakeFormBDisposableSingleton = (func(p godi.Provider) fakes.IFakeFormBDisposableSingleton {
-		return fakes.NewFakeFormBCloser()
-	})(r)
-	r.disp.TrackAny(r.f_IFakeFormBDisposableSingleton)
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = r.disp.CloseAll()
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_FakeService()
+	r.get_FakeConsumer()
+	r.get_FakeDisposableSingleton()
+	r.get_PocoClass()
+	r.get_ClassImplementingIterable()
+	r.get_ClassInheritingAbstract()
+	r.get_GenSlotA()
+	r.get_GenSlotB()
+	r.get_AnyKeyServiceA()
+	r.get_StructFakeService()
+	r.get_StructConsumer()
+	r.get_StructFakeOne()
+	r.get_StructFakeTwo()
+	r.get_SelfComparable()
+	r.get_FakeReplaceFinalTwo()
+	r.get_FakeReplaceFinalOne()
+	r.get_IFakeInstanceService()
+	r.get_IFakeFormBDisposableSingleton()
+	r.get_KeyedServiceOne__service1_()
+	r.get_KeyedServiceTwo__service2_()
+	r.get_KeyedServiceOne__both_()
+	r.get_KeyedServiceTwo__both_()
+	r.get_KeyedServiceOne__singleton_factory_()
+	r.get_IKeyedServiceWithDep__with_dep_()
+	r.get_IKeyedServiceWithKey__injected_key_()
+	r.get_IKeyedServiceWithDep__missing_dep_()
+	r.get_IKeyedServiceWithProvider__with_provider_()
+	r.get_AnyKeyServiceA__alpha_()
+	r.get_AnyKeyServiceB__beta_()
+	r.get_IAnyKeyService__alpha_()
+	r.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()
 	r.f_FakeScopedService = fakes.NewFakeScopedService()
 	r.f_FakeDisposableScoped = fakes.NewFakeDisposableScoped()
 	r.disp.TrackAny(r.f_FakeDisposableScoped)
@@ -91,48 +135,631 @@ func NewRoot() (*Root, error) {
 		return fakes.NewFakeFormBCloser()
 	})(r)
 	r.disp.TrackAny(r.f_IFakeFormBDisposableScoped)
-	r.f_KeyedServiceOne__service1_ = fakes.NewKeyedServiceOne()
-	r.f_KeyedServiceTwo__service2_ = fakes.NewKeyedServiceTwo()
-	r.f_KeyedServiceOne__both_ = fakes.NewKeyedServiceOne()
-	r.f_KeyedServiceTwo__both_ = fakes.NewKeyedServiceTwo()
-	r.f_KeyedServiceOne__singleton_factory_ = fakes.NewKeyedServiceOne()
-	r.f_IKeyedServiceWithDep__with_dep_ = (func(p godi.Provider) fakes.IKeyedServiceWithDep {
-		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
-		if dep == nil {
-			return fakes.NewKeyedServiceWithDep(nil)
-		}
-		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
-	})(r)
-	r.disp.TrackAny(r.f_IKeyedServiceWithDep__with_dep_)
-	r.f_IKeyedServiceWithKey__injected_key_ = (func(p godi.Provider) fakes.IKeyedServiceWithKey {
-		return fakes.NewKeyedServiceWithKey("injected-key")
-	})(r)
-	r.disp.TrackAny(r.f_IKeyedServiceWithKey__injected_key_)
-	r.f_IKeyedServiceWithDep__missing_dep_ = (func(p godi.Provider) fakes.IKeyedServiceWithDep {
-		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "nonexistent")
-		if dep == nil {
-			return fakes.NewKeyedServiceWithDep(nil)
-		}
-		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
-	})(r)
-	r.disp.TrackAny(r.f_IKeyedServiceWithDep__missing_dep_)
-	r.f_IKeyedServiceWithProvider__with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
-		return fakes.NewKeyedServiceWithProvider(p)
-	})(r)
-	r.disp.TrackAny(r.f_IKeyedServiceWithProvider__with_provider_)
-	r.f_AnyKeyServiceA__alpha_ = fakes.NewAnyKeyServiceA()
-	r.f_AnyKeyServiceB__beta_ = fakes.NewAnyKeyServiceB()
-	r.f_IAnyKeyService__alpha_ = (func(p godi.Provider) fakes.IAnyKeyService {
-		return fakes.NewAnyKeyServiceA()
-	})(r)
-	r.disp.TrackAny(r.f_IAnyKeyService__alpha_)
-	r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_ = fakes.NewFakeOpenGenericService[fakes.IFakeService](r.f_FakeService)
 	r.f_KeyedServiceOne__scoped_ = fakes.NewKeyedServiceOne()
 	r.f_IKeyedServiceWithProvider__scoped_with_provider_ = (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
 		return fakes.NewKeyedServiceWithProvider(p)
 	})(r)
 	r.disp.TrackAny(r.f_IKeyedServiceWithProvider__scoped_with_provider_)
 	return r, nil
+}
+
+func (r *Root) get_FakeService() fakes.IFakeService {
+	if r.st_FakeService == 2 {
+		return r.f_FakeService
+	}
+	if r.st_FakeService == 1 {
+		panic(godi.CircularDependencyError("FakeService"))
+	}
+	r.st_FakeService = 1
+	defer func() {
+		if r.st_FakeService != 2 {
+			r.st_FakeService = 0
+		}
+	}()
+	v := fakes.NewFakeService()
+	r.f_FakeService = v
+	r.st_FakeService = 2
+	return v
+}
+
+func (r *Root) get_FakeConsumer() fakes.IFakeConsumer {
+	if r.st_FakeConsumer == 2 {
+		return r.f_FakeConsumer
+	}
+	if r.st_FakeConsumer == 1 {
+		panic(godi.CircularDependencyError("FakeConsumer"))
+	}
+	r.st_FakeConsumer = 1
+	defer func() {
+		if r.st_FakeConsumer != 2 {
+			r.st_FakeConsumer = 0
+		}
+	}()
+	v := fakes.NewFakeConsumer(r.get_FakeService())
+	r.f_FakeConsumer = v
+	r.st_FakeConsumer = 2
+	return v
+}
+
+func (r *Root) get_FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
+	if r.st_FakeDisposableSingleton == 2 {
+		return r.f_FakeDisposableSingleton
+	}
+	if r.st_FakeDisposableSingleton == 1 {
+		panic(godi.CircularDependencyError("FakeDisposableSingleton"))
+	}
+	r.st_FakeDisposableSingleton = 1
+	defer func() {
+		if r.st_FakeDisposableSingleton != 2 {
+			r.st_FakeDisposableSingleton = 0
+		}
+	}()
+	v := fakes.NewFakeDisposableSingleton()
+	r.f_FakeDisposableSingleton = v
+	r.disp.TrackAny(v)
+	r.st_FakeDisposableSingleton = 2
+	return v
+}
+
+func (r *Root) get_PocoClass() fakes.IPocoClass {
+	if r.st_PocoClass == 2 {
+		return r.f_PocoClass
+	}
+	if r.st_PocoClass == 1 {
+		panic(godi.CircularDependencyError("PocoClass"))
+	}
+	r.st_PocoClass = 1
+	defer func() {
+		if r.st_PocoClass != 2 {
+			r.st_PocoClass = 0
+		}
+	}()
+	v := fakes.NewPocoClass()
+	r.f_PocoClass = v
+	r.st_PocoClass = 2
+	return v
+}
+
+func (r *Root) get_ClassImplementingIterable() fakes.IClassImplementingIterable {
+	if r.st_ClassImplementingIterable == 2 {
+		return r.f_ClassImplementingIterable
+	}
+	if r.st_ClassImplementingIterable == 1 {
+		panic(godi.CircularDependencyError("ClassImplementingIterable"))
+	}
+	r.st_ClassImplementingIterable = 1
+	defer func() {
+		if r.st_ClassImplementingIterable != 2 {
+			r.st_ClassImplementingIterable = 0
+		}
+	}()
+	v := fakes.NewClassImplementingIterable()
+	r.f_ClassImplementingIterable = v
+	r.st_ClassImplementingIterable = 2
+	return v
+}
+
+func (r *Root) get_ClassInheritingAbstract() fakes.IClassInheritingAbstract {
+	if r.st_ClassInheritingAbstract == 2 {
+		return r.f_ClassInheritingAbstract
+	}
+	if r.st_ClassInheritingAbstract == 1 {
+		panic(godi.CircularDependencyError("ClassInheritingAbstract"))
+	}
+	r.st_ClassInheritingAbstract = 1
+	defer func() {
+		if r.st_ClassInheritingAbstract != 2 {
+			r.st_ClassInheritingAbstract = 0
+		}
+	}()
+	v := fakes.NewClassInheritingAbstract()
+	r.f_ClassInheritingAbstract = v
+	r.st_ClassInheritingAbstract = 2
+	return v
+}
+
+func (r *Root) get_GenSlotA() fakes.IGenSlotA {
+	if r.st_GenSlotA == 2 {
+		return r.f_GenSlotA
+	}
+	if r.st_GenSlotA == 1 {
+		panic(godi.CircularDependencyError("GenSlotA"))
+	}
+	r.st_GenSlotA = 1
+	defer func() {
+		if r.st_GenSlotA != 2 {
+			r.st_GenSlotA = 0
+		}
+	}()
+	v := fakes.NewGenSlotA()
+	r.f_GenSlotA = v
+	r.st_GenSlotA = 2
+	return v
+}
+
+func (r *Root) get_GenSlotB() fakes.IGenSlotB {
+	if r.st_GenSlotB == 2 {
+		return r.f_GenSlotB
+	}
+	if r.st_GenSlotB == 1 {
+		panic(godi.CircularDependencyError("GenSlotB"))
+	}
+	r.st_GenSlotB = 1
+	defer func() {
+		if r.st_GenSlotB != 2 {
+			r.st_GenSlotB = 0
+		}
+	}()
+	v := fakes.NewGenSlotB()
+	r.f_GenSlotB = v
+	r.st_GenSlotB = 2
+	return v
+}
+
+func (r *Root) get_AnyKeyServiceA() fakes.IAnyKeyService {
+	if r.st_AnyKeyServiceA == 2 {
+		return r.f_AnyKeyServiceA
+	}
+	if r.st_AnyKeyServiceA == 1 {
+		panic(godi.CircularDependencyError("AnyKeyServiceA"))
+	}
+	r.st_AnyKeyServiceA = 1
+	defer func() {
+		if r.st_AnyKeyServiceA != 2 {
+			r.st_AnyKeyServiceA = 0
+		}
+	}()
+	v := fakes.NewAnyKeyServiceA()
+	r.f_AnyKeyServiceA = v
+	r.st_AnyKeyServiceA = 2
+	return v
+}
+
+func (r *Root) get_StructFakeService() fakes.IStructFakeService {
+	if r.st_StructFakeService == 2 {
+		return r.f_StructFakeService
+	}
+	if r.st_StructFakeService == 1 {
+		panic(godi.CircularDependencyError("StructFakeService"))
+	}
+	r.st_StructFakeService = 1
+	defer func() {
+		if r.st_StructFakeService != 2 {
+			r.st_StructFakeService = 0
+		}
+	}()
+	v := fakes.NewStructFakeService()
+	r.f_StructFakeService = v
+	r.st_StructFakeService = 2
+	return v
+}
+
+func (r *Root) get_StructConsumer() fakes.IStructConsumer {
+	if r.st_StructConsumer == 2 {
+		return r.f_StructConsumer
+	}
+	if r.st_StructConsumer == 1 {
+		panic(godi.CircularDependencyError("StructConsumer"))
+	}
+	r.st_StructConsumer = 1
+	defer func() {
+		if r.st_StructConsumer != 2 {
+			r.st_StructConsumer = 0
+		}
+	}()
+	v := fakes.NewStructConsumer(r.get_StructFakeService())
+	r.f_StructConsumer = v
+	r.st_StructConsumer = 2
+	return v
+}
+
+func (r *Root) get_StructFakeOne() fakes.IStructFakeMultipleService {
+	if r.st_StructFakeOne == 2 {
+		return r.f_StructFakeOne
+	}
+	if r.st_StructFakeOne == 1 {
+		panic(godi.CircularDependencyError("StructFakeOne"))
+	}
+	r.st_StructFakeOne = 1
+	defer func() {
+		if r.st_StructFakeOne != 2 {
+			r.st_StructFakeOne = 0
+		}
+	}()
+	v := fakes.NewStructFakeOne()
+	r.f_StructFakeOne = v
+	r.st_StructFakeOne = 2
+	return v
+}
+
+func (r *Root) get_StructFakeTwo() fakes.IStructFakeMultipleService {
+	if r.st_StructFakeTwo == 2 {
+		return r.f_StructFakeTwo
+	}
+	if r.st_StructFakeTwo == 1 {
+		panic(godi.CircularDependencyError("StructFakeTwo"))
+	}
+	r.st_StructFakeTwo = 1
+	defer func() {
+		if r.st_StructFakeTwo != 2 {
+			r.st_StructFakeTwo = 0
+		}
+	}()
+	v := fakes.NewStructFakeTwo()
+	r.f_StructFakeTwo = v
+	r.st_StructFakeTwo = 2
+	return v
+}
+
+func (r *Root) get_SelfComparable() fakes.ISelfComparable {
+	if r.st_SelfComparable == 2 {
+		return r.f_SelfComparable
+	}
+	if r.st_SelfComparable == 1 {
+		panic(godi.CircularDependencyError("SelfComparable"))
+	}
+	r.st_SelfComparable = 1
+	defer func() {
+		if r.st_SelfComparable != 2 {
+			r.st_SelfComparable = 0
+		}
+	}()
+	v := fakes.NewSelfComparable()
+	r.f_SelfComparable = v
+	r.st_SelfComparable = 2
+	return v
+}
+
+func (r *Root) get_FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService {
+	if r.st_FakeReplaceFinalTwo == 2 {
+		return r.f_FakeReplaceFinalTwo
+	}
+	if r.st_FakeReplaceFinalTwo == 1 {
+		panic(godi.CircularDependencyError("FakeReplaceFinalTwo"))
+	}
+	r.st_FakeReplaceFinalTwo = 1
+	defer func() {
+		if r.st_FakeReplaceFinalTwo != 2 {
+			r.st_FakeReplaceFinalTwo = 0
+		}
+	}()
+	v := fakes.NewFakeReplaceFinalTwo()
+	r.f_FakeReplaceFinalTwo = v
+	r.st_FakeReplaceFinalTwo = 2
+	return v
+}
+
+func (r *Root) get_FakeReplaceFinalOne() fakes.IFakeReplaceFinalService {
+	if r.st_FakeReplaceFinalOne == 2 {
+		return r.f_FakeReplaceFinalOne
+	}
+	if r.st_FakeReplaceFinalOne == 1 {
+		panic(godi.CircularDependencyError("FakeReplaceFinalOne"))
+	}
+	r.st_FakeReplaceFinalOne = 1
+	defer func() {
+		if r.st_FakeReplaceFinalOne != 2 {
+			r.st_FakeReplaceFinalOne = 0
+		}
+	}()
+	v := fakes.NewFakeReplaceFinalOne()
+	r.f_FakeReplaceFinalOne = v
+	r.st_FakeReplaceFinalOne = 2
+	return v
+}
+
+func (r *Root) get_IFakeInstanceService() fakes.IFakeInstanceService {
+	if r.st_IFakeInstanceService == 2 {
+		return r.f_IFakeInstanceService
+	}
+	if r.st_IFakeInstanceService == 1 {
+		panic(godi.CircularDependencyError("IFakeInstanceService"))
+	}
+	r.st_IFakeInstanceService = 1
+	defer func() {
+		if r.st_IFakeInstanceService != 2 {
+			r.st_IFakeInstanceService = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IFakeInstanceService {
+		return fakes.NewFakeInstanceService()
+	})(r)
+	r.f_IFakeInstanceService = v
+	r.disp.TrackAny(v)
+	r.st_IFakeInstanceService = 2
+	return v
+}
+
+func (r *Root) get_IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSingleton {
+	if r.st_IFakeFormBDisposableSingleton == 2 {
+		return r.f_IFakeFormBDisposableSingleton
+	}
+	if r.st_IFakeFormBDisposableSingleton == 1 {
+		panic(godi.CircularDependencyError("IFakeFormBDisposableSingleton"))
+	}
+	r.st_IFakeFormBDisposableSingleton = 1
+	defer func() {
+		if r.st_IFakeFormBDisposableSingleton != 2 {
+			r.st_IFakeFormBDisposableSingleton = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IFakeFormBDisposableSingleton {
+		return fakes.NewFakeFormBCloser()
+	})(r)
+	r.f_IFakeFormBDisposableSingleton = v
+	r.disp.TrackAny(v)
+	r.st_IFakeFormBDisposableSingleton = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceOne__service1_() fakes.IKeyedService {
+	if r.st_KeyedServiceOne__service1_ == 2 {
+		return r.f_KeyedServiceOne__service1_
+	}
+	if r.st_KeyedServiceOne__service1_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceOne#\"service1\""))
+	}
+	r.st_KeyedServiceOne__service1_ = 1
+	defer func() {
+		if r.st_KeyedServiceOne__service1_ != 2 {
+			r.st_KeyedServiceOne__service1_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceOne()
+	r.f_KeyedServiceOne__service1_ = v
+	r.st_KeyedServiceOne__service1_ = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceTwo__service2_() fakes.IKeyedService {
+	if r.st_KeyedServiceTwo__service2_ == 2 {
+		return r.f_KeyedServiceTwo__service2_
+	}
+	if r.st_KeyedServiceTwo__service2_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceTwo#\"service2\""))
+	}
+	r.st_KeyedServiceTwo__service2_ = 1
+	defer func() {
+		if r.st_KeyedServiceTwo__service2_ != 2 {
+			r.st_KeyedServiceTwo__service2_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceTwo()
+	r.f_KeyedServiceTwo__service2_ = v
+	r.st_KeyedServiceTwo__service2_ = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceOne__both_() fakes.IKeyedService {
+	if r.st_KeyedServiceOne__both_ == 2 {
+		return r.f_KeyedServiceOne__both_
+	}
+	if r.st_KeyedServiceOne__both_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceOne#\"both\""))
+	}
+	r.st_KeyedServiceOne__both_ = 1
+	defer func() {
+		if r.st_KeyedServiceOne__both_ != 2 {
+			r.st_KeyedServiceOne__both_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceOne()
+	r.f_KeyedServiceOne__both_ = v
+	r.st_KeyedServiceOne__both_ = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceTwo__both_() fakes.IKeyedService {
+	if r.st_KeyedServiceTwo__both_ == 2 {
+		return r.f_KeyedServiceTwo__both_
+	}
+	if r.st_KeyedServiceTwo__both_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceTwo#\"both\""))
+	}
+	r.st_KeyedServiceTwo__both_ = 1
+	defer func() {
+		if r.st_KeyedServiceTwo__both_ != 2 {
+			r.st_KeyedServiceTwo__both_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceTwo()
+	r.f_KeyedServiceTwo__both_ = v
+	r.st_KeyedServiceTwo__both_ = 2
+	return v
+}
+
+func (r *Root) get_KeyedServiceOne__singleton_factory_() fakes.IKeyedService {
+	if r.st_KeyedServiceOne__singleton_factory_ == 2 {
+		return r.f_KeyedServiceOne__singleton_factory_
+	}
+	if r.st_KeyedServiceOne__singleton_factory_ == 1 {
+		panic(godi.CircularDependencyError("KeyedServiceOne#\"singleton-factory\""))
+	}
+	r.st_KeyedServiceOne__singleton_factory_ = 1
+	defer func() {
+		if r.st_KeyedServiceOne__singleton_factory_ != 2 {
+			r.st_KeyedServiceOne__singleton_factory_ = 0
+		}
+	}()
+	v := fakes.NewKeyedServiceOne()
+	r.f_KeyedServiceOne__singleton_factory_ = v
+	r.st_KeyedServiceOne__singleton_factory_ = 2
+	return v
+}
+
+func (r *Root) get_IKeyedServiceWithDep__with_dep_() fakes.IKeyedServiceWithDep {
+	if r.st_IKeyedServiceWithDep__with_dep_ == 2 {
+		return r.f_IKeyedServiceWithDep__with_dep_
+	}
+	if r.st_IKeyedServiceWithDep__with_dep_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithDep#\"with-dep\""))
+	}
+	r.st_IKeyedServiceWithDep__with_dep_ = 1
+	defer func() {
+		if r.st_IKeyedServiceWithDep__with_dep_ != 2 {
+			r.st_IKeyedServiceWithDep__with_dep_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "service1")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})(r)
+	r.f_IKeyedServiceWithDep__with_dep_ = v
+	r.disp.TrackAny(v)
+	r.st_IKeyedServiceWithDep__with_dep_ = 2
+	return v
+}
+
+func (r *Root) get_IKeyedServiceWithKey__injected_key_() fakes.IKeyedServiceWithKey {
+	if r.st_IKeyedServiceWithKey__injected_key_ == 2 {
+		return r.f_IKeyedServiceWithKey__injected_key_
+	}
+	if r.st_IKeyedServiceWithKey__injected_key_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithKey#\"injected-key\""))
+	}
+	r.st_IKeyedServiceWithKey__injected_key_ = 1
+	defer func() {
+		if r.st_IKeyedServiceWithKey__injected_key_ != 2 {
+			r.st_IKeyedServiceWithKey__injected_key_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithKey {
+		return fakes.NewKeyedServiceWithKey("injected-key")
+	})(r)
+	r.f_IKeyedServiceWithKey__injected_key_ = v
+	r.disp.TrackAny(v)
+	r.st_IKeyedServiceWithKey__injected_key_ = 2
+	return v
+}
+
+func (r *Root) get_IKeyedServiceWithDep__missing_dep_() fakes.IKeyedServiceWithDep {
+	if r.st_IKeyedServiceWithDep__missing_dep_ == 2 {
+		return r.f_IKeyedServiceWithDep__missing_dep_
+	}
+	if r.st_IKeyedServiceWithDep__missing_dep_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithDep#\"missing-dep\""))
+	}
+	r.st_IKeyedServiceWithDep__missing_dep_ = 1
+	defer func() {
+		if r.st_IKeyedServiceWithDep__missing_dep_ != 2 {
+			r.st_IKeyedServiceWithDep__missing_dep_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithDep {
+		dep := p.GetKeyedService(reflect.TypeFor[fakes.IKeyedService](), "nonexistent")
+		if dep == nil {
+			return fakes.NewKeyedServiceWithDep(nil)
+		}
+		return fakes.NewKeyedServiceWithDep(dep.(fakes.IKeyedService))
+	})(r)
+	r.f_IKeyedServiceWithDep__missing_dep_ = v
+	r.disp.TrackAny(v)
+	r.st_IKeyedServiceWithDep__missing_dep_ = 2
+	return v
+}
+
+func (r *Root) get_IKeyedServiceWithProvider__with_provider_() fakes.IKeyedServiceWithProvider {
+	if r.st_IKeyedServiceWithProvider__with_provider_ == 2 {
+		return r.f_IKeyedServiceWithProvider__with_provider_
+	}
+	if r.st_IKeyedServiceWithProvider__with_provider_ == 1 {
+		panic(godi.CircularDependencyError("IKeyedServiceWithProvider#\"with-provider\""))
+	}
+	r.st_IKeyedServiceWithProvider__with_provider_ = 1
+	defer func() {
+		if r.st_IKeyedServiceWithProvider__with_provider_ != 2 {
+			r.st_IKeyedServiceWithProvider__with_provider_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IKeyedServiceWithProvider {
+		return fakes.NewKeyedServiceWithProvider(p)
+	})(r)
+	r.f_IKeyedServiceWithProvider__with_provider_ = v
+	r.disp.TrackAny(v)
+	r.st_IKeyedServiceWithProvider__with_provider_ = 2
+	return v
+}
+
+func (r *Root) get_AnyKeyServiceA__alpha_() fakes.IAnyKeyService {
+	if r.st_AnyKeyServiceA__alpha_ == 2 {
+		return r.f_AnyKeyServiceA__alpha_
+	}
+	if r.st_AnyKeyServiceA__alpha_ == 1 {
+		panic(godi.CircularDependencyError("AnyKeyServiceA#\"alpha\""))
+	}
+	r.st_AnyKeyServiceA__alpha_ = 1
+	defer func() {
+		if r.st_AnyKeyServiceA__alpha_ != 2 {
+			r.st_AnyKeyServiceA__alpha_ = 0
+		}
+	}()
+	v := fakes.NewAnyKeyServiceA()
+	r.f_AnyKeyServiceA__alpha_ = v
+	r.st_AnyKeyServiceA__alpha_ = 2
+	return v
+}
+
+func (r *Root) get_AnyKeyServiceB__beta_() fakes.IAnyKeyService {
+	if r.st_AnyKeyServiceB__beta_ == 2 {
+		return r.f_AnyKeyServiceB__beta_
+	}
+	if r.st_AnyKeyServiceB__beta_ == 1 {
+		panic(godi.CircularDependencyError("AnyKeyServiceB#\"beta\""))
+	}
+	r.st_AnyKeyServiceB__beta_ = 1
+	defer func() {
+		if r.st_AnyKeyServiceB__beta_ != 2 {
+			r.st_AnyKeyServiceB__beta_ = 0
+		}
+	}()
+	v := fakes.NewAnyKeyServiceB()
+	r.f_AnyKeyServiceB__beta_ = v
+	r.st_AnyKeyServiceB__beta_ = 2
+	return v
+}
+
+func (r *Root) get_IAnyKeyService__alpha_() fakes.IAnyKeyService {
+	if r.st_IAnyKeyService__alpha_ == 2 {
+		return r.f_IAnyKeyService__alpha_
+	}
+	if r.st_IAnyKeyService__alpha_ == 1 {
+		panic(godi.CircularDependencyError("IAnyKeyService#\"alpha\""))
+	}
+	r.st_IAnyKeyService__alpha_ = 1
+	defer func() {
+		if r.st_IAnyKeyService__alpha_ != 2 {
+			r.st_IAnyKeyService__alpha_ = 0
+		}
+	}()
+	v := (func(p godi.Provider) fakes.IAnyKeyService {
+		return fakes.NewAnyKeyServiceA()
+	})(r)
+	r.f_IAnyKeyService__alpha_ = v
+	r.disp.TrackAny(v)
+	r.st_IAnyKeyService__alpha_ = 2
+	return v
+}
+
+func (r *Root) get_FakeOpenGenericService_fakes_IFakeService__gen_key_() fakes.IFakeOpenGenericService[fakes.IFakeService] {
+	if r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ == 2 {
+		return r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_
+	}
+	if r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ == 1 {
+		panic(godi.CircularDependencyError("FakeOpenGenericService_fakes_IFakeService#\"gen-key\""))
+	}
+	r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ = 1
+	defer func() {
+		if r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ != 2 {
+			r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ = 0
+		}
+	}()
+	v := fakes.NewFakeOpenGenericService[fakes.IFakeService](r.get_FakeService())
+	r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_ = v
+	r.st_FakeOpenGenericService_fakes_IFakeService__gen_key_ = 2
+	return v
 }
 
 func (r *Root) NewFakeTransientService() fakes.IFakeTransientService {
@@ -158,43 +785,43 @@ func (r *Root) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 }
 
 func (r *Root) NewFakeOuterService() fakes.IFakeOuterService {
-	return fakes.NewFakeOuterService(r.f_FakeService, []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
+	return fakes.NewFakeOuterService(r.get_FakeService(), []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IFakeService() fakes.IFakeOpenGenericService[fakes.IFakeService] {
-	return fakes.NewFakeOpenGenericService[fakes.IFakeService](r.f_FakeService)
+	return fakes.NewFakeOpenGenericService[fakes.IFakeService](r.get_FakeService())
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IFakeConsumer() fakes.IFakeOpenGenericService[fakes.IFakeConsumer] {
-	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](r.f_FakeConsumer)
+	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](r.get_FakeConsumer())
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
-	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](r.f_PocoClass)
+	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](r.get_PocoClass())
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
-	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](r.f_ClassImplementingIterable)
+	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](r.get_ClassImplementingIterable())
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
-	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](r.f_ClassInheritingAbstract)
+	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](r.get_ClassInheritingAbstract())
 }
 
 func (r *Root) NewConstrainedFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
-	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](r.f_PocoClass)
+	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](r.get_PocoClass())
 }
 
 func (r *Root) NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
-	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](r.f_ClassImplementingIterable)
+	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](r.get_ClassImplementingIterable())
 }
 
 func (r *Root) NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
-	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](r.f_ClassInheritingAbstract)
+	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](r.get_ClassInheritingAbstract())
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IGenSlotA() fakes.IFakeOpenGenericService[fakes.IGenSlotA] {
-	return fakes.NewFakeOpenGenericService[fakes.IGenSlotA](r.f_GenSlotA)
+	return fakes.NewFakeOpenGenericService[fakes.IGenSlotA](r.get_GenSlotA())
 }
 
 func (r *Root) NewClosedFakeOpenGenericService_fakes_IGenSlotA() fakes.IFakeOpenGenericService[fakes.IGenSlotA] {
@@ -206,7 +833,7 @@ func (r *Root) NewClosedFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpen
 }
 
 func (r *Root) NewFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpenGenericService[fakes.IGenSlotB] {
-	return fakes.NewFakeOpenGenericService[fakes.IGenSlotB](r.f_GenSlotB)
+	return fakes.NewFakeOpenGenericService[fakes.IGenSlotB](r.get_GenSlotB())
 }
 
 func (r *Root) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpenGenericService[fakes.IGenSlotB] {
@@ -214,7 +841,7 @@ func (r *Root) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOp
 }
 
 func (r *Root) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fakes.IFakeOpenGenericService[fakes.ISelfComparable] {
-	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](r.f_SelfComparable)
+	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](r.get_SelfComparable())
 }
 
 func (r *Root) NewFakeAsyncOnlyDisposable() *fakes.FakeAsyncOnlyDisposable {
@@ -241,48 +868,52 @@ func (r *Root) NewIKeyedService__transient_factory_() fakes.IKeyedService {
 	return v
 }
 
-func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
+func (r *Root) FakeService() fakes.IFakeService { return r.get_FakeService() }
 
-func (r *Root) FakeConsumer() fakes.IFakeConsumer { return r.f_FakeConsumer }
+func (r *Root) FakeConsumer() fakes.IFakeConsumer { return r.get_FakeConsumer() }
 
 func (r *Root) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
-	return r.f_FakeDisposableSingleton
+	return r.get_FakeDisposableSingleton()
 }
 
-func (r *Root) PocoClass() fakes.IPocoClass { return r.f_PocoClass }
+func (r *Root) PocoClass() fakes.IPocoClass { return r.get_PocoClass() }
 
 func (r *Root) ClassImplementingIterable() fakes.IClassImplementingIterable {
-	return r.f_ClassImplementingIterable
+	return r.get_ClassImplementingIterable()
 }
 
 func (r *Root) ClassInheritingAbstract() fakes.IClassInheritingAbstract {
-	return r.f_ClassInheritingAbstract
+	return r.get_ClassInheritingAbstract()
 }
 
-func (r *Root) GenSlotA() fakes.IGenSlotA { return r.f_GenSlotA }
+func (r *Root) GenSlotA() fakes.IGenSlotA { return r.get_GenSlotA() }
 
-func (r *Root) GenSlotB() fakes.IGenSlotB { return r.f_GenSlotB }
+func (r *Root) GenSlotB() fakes.IGenSlotB { return r.get_GenSlotB() }
 
-func (r *Root) AnyKeyServiceA() fakes.IAnyKeyService { return r.f_AnyKeyServiceA }
+func (r *Root) AnyKeyServiceA() fakes.IAnyKeyService { return r.get_AnyKeyServiceA() }
 
-func (r *Root) StructFakeService() fakes.IStructFakeService { return r.f_StructFakeService }
+func (r *Root) StructFakeService() fakes.IStructFakeService { return r.get_StructFakeService() }
 
-func (r *Root) StructConsumer() fakes.IStructConsumer { return r.f_StructConsumer }
+func (r *Root) StructConsumer() fakes.IStructConsumer { return r.get_StructConsumer() }
 
-func (r *Root) StructFakeOne() fakes.IStructFakeMultipleService { return r.f_StructFakeOne }
+func (r *Root) StructFakeOne() fakes.IStructFakeMultipleService { return r.get_StructFakeOne() }
 
-func (r *Root) StructFakeTwo() fakes.IStructFakeMultipleService { return r.f_StructFakeTwo }
+func (r *Root) StructFakeTwo() fakes.IStructFakeMultipleService { return r.get_StructFakeTwo() }
 
-func (r *Root) SelfComparable() fakes.ISelfComparable { return r.f_SelfComparable }
+func (r *Root) SelfComparable() fakes.ISelfComparable { return r.get_SelfComparable() }
 
-func (r *Root) FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService { return r.f_FakeReplaceFinalTwo }
+func (r *Root) FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService {
+	return r.get_FakeReplaceFinalTwo()
+}
 
-func (r *Root) FakeReplaceFinalOne() fakes.IFakeReplaceFinalService { return r.f_FakeReplaceFinalOne }
+func (r *Root) FakeReplaceFinalOne() fakes.IFakeReplaceFinalService {
+	return r.get_FakeReplaceFinalOne()
+}
 
-func (r *Root) IFakeInstanceService() fakes.IFakeInstanceService { return r.f_IFakeInstanceService }
+func (r *Root) IFakeInstanceService() fakes.IFakeInstanceService { return r.get_IFakeInstanceService() }
 
 func (r *Root) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSingleton {
-	return r.f_IFakeFormBDisposableSingleton
+	return r.get_IFakeFormBDisposableSingleton()
 }
 
 func (r *Root) FakeScopedService() fakes.IFakeScopedService { return r.f_FakeScopedService }
@@ -318,37 +949,37 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return r.f_FakeService
+		return r.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeConsumer]():
-		return r.f_FakeConsumer
+		return r.get_FakeConsumer()
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-		return r.f_FakeDisposableSingleton
+		return r.get_FakeDisposableSingleton()
 	case reflect.TypeFor[fakes.IPocoClass]():
-		return r.f_PocoClass
+		return r.get_PocoClass()
 	case reflect.TypeFor[fakes.IClassImplementingIterable]():
-		return r.f_ClassImplementingIterable
+		return r.get_ClassImplementingIterable()
 	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-		return r.f_ClassInheritingAbstract
+		return r.get_ClassInheritingAbstract()
 	case reflect.TypeFor[fakes.IGenSlotA]():
-		return r.f_GenSlotA
+		return r.get_GenSlotA()
 	case reflect.TypeFor[fakes.IGenSlotB]():
-		return r.f_GenSlotB
+		return r.get_GenSlotB()
 	case reflect.TypeFor[fakes.IAnyKeyService]():
-		return r.f_AnyKeyServiceA
+		return r.get_AnyKeyServiceA()
 	case reflect.TypeFor[fakes.IStructFakeService]():
-		return r.f_StructFakeService
+		return r.get_StructFakeService()
 	case reflect.TypeFor[fakes.IStructConsumer]():
-		return r.f_StructConsumer
+		return r.get_StructConsumer()
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-		return r.f_StructFakeTwo
+		return r.get_StructFakeTwo()
 	case reflect.TypeFor[fakes.ISelfComparable]():
-		return r.f_SelfComparable
+		return r.get_SelfComparable()
 	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-		return r.f_FakeReplaceFinalOne
+		return r.get_FakeReplaceFinalOne()
 	case reflect.TypeFor[fakes.IFakeInstanceService]():
-		return r.f_IFakeInstanceService
+		return r.get_IFakeInstanceService()
 	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-		return r.f_IFakeFormBDisposableSingleton
+		return r.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return r.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -537,13 +1168,13 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 	case reflect.TypeFor[fakes.IKeyedService]():
 		switch key {
 		case "service1":
-			return r.f_KeyedServiceOne__service1_
+			return r.get_KeyedServiceOne__service1_()
 		case "service2":
-			return r.f_KeyedServiceTwo__service2_
+			return r.get_KeyedServiceTwo__service2_()
 		case "both":
-			return r.f_KeyedServiceTwo__both_
+			return r.get_KeyedServiceTwo__both_()
 		case "singleton-factory":
-			return r.f_KeyedServiceOne__singleton_factory_
+			return r.get_KeyedServiceOne__singleton_factory_()
 		case "scoped":
 			return r.f_KeyedServiceOne__scoped_
 		case "transient":
@@ -554,33 +1185,33 @@ func (r *Root) GetKeyedService(t reflect.Type, key any) any {
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
 		case "with-dep":
-			return r.f_IKeyedServiceWithDep__with_dep_
+			return r.get_IKeyedServiceWithDep__with_dep_()
 		case "missing-dep":
-			return r.f_IKeyedServiceWithDep__missing_dep_
+			return r.get_IKeyedServiceWithDep__missing_dep_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 		switch key {
 		case "injected-key":
-			return r.f_IKeyedServiceWithKey__injected_key_
+			return r.get_IKeyedServiceWithKey__injected_key_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
 		switch key {
 		case "with-provider":
-			return r.f_IKeyedServiceWithProvider__with_provider_
+			return r.get_IKeyedServiceWithProvider__with_provider_()
 		case "scoped-with-provider":
 			return r.f_IKeyedServiceWithProvider__scoped_with_provider_
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
 		case "alpha":
-			return r.f_IAnyKeyService__alpha_
+			return r.get_IAnyKeyService__alpha_()
 		case "beta":
-			return r.f_AnyKeyServiceB__beta_
+			return r.get_AnyKeyServiceB__beta_()
 		}
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		switch key {
 		case "gen-key":
-			return r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_
+			return r.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()
 		}
 	}
 	return nil
@@ -593,37 +1224,37 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == nil {
 		switch t {
 		case reflect.TypeFor[fakes.IFakeService]():
-			return []any{r.f_FakeService}
+			return []any{r.get_FakeService()}
 		case reflect.TypeFor[fakes.IFakeConsumer]():
-			return []any{r.f_FakeConsumer}
+			return []any{r.get_FakeConsumer()}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-			return []any{r.f_FakeDisposableSingleton}
+			return []any{r.get_FakeDisposableSingleton()}
 		case reflect.TypeFor[fakes.IPocoClass]():
-			return []any{r.f_PocoClass}
+			return []any{r.get_PocoClass()}
 		case reflect.TypeFor[fakes.IClassImplementingIterable]():
-			return []any{r.f_ClassImplementingIterable}
+			return []any{r.get_ClassImplementingIterable()}
 		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-			return []any{r.f_ClassInheritingAbstract}
+			return []any{r.get_ClassInheritingAbstract()}
 		case reflect.TypeFor[fakes.IGenSlotA]():
-			return []any{r.f_GenSlotA}
+			return []any{r.get_GenSlotA()}
 		case reflect.TypeFor[fakes.IGenSlotB]():
-			return []any{r.f_GenSlotB}
+			return []any{r.get_GenSlotB()}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{r.f_AnyKeyServiceA}
+			return []any{r.get_AnyKeyServiceA()}
 		case reflect.TypeFor[fakes.IStructFakeService]():
-			return []any{r.f_StructFakeService}
+			return []any{r.get_StructFakeService()}
 		case reflect.TypeFor[fakes.IStructConsumer]():
-			return []any{r.f_StructConsumer}
+			return []any{r.get_StructConsumer()}
 		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-			return []any{r.f_StructFakeOne, r.f_StructFakeTwo}
+			return []any{r.get_StructFakeOne(), r.get_StructFakeTwo()}
 		case reflect.TypeFor[fakes.ISelfComparable]():
-			return []any{r.f_SelfComparable}
+			return []any{r.get_SelfComparable()}
 		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-			return []any{r.f_FakeReplaceFinalTwo, r.f_FakeReplaceFinalOne}
+			return []any{r.get_FakeReplaceFinalTwo(), r.get_FakeReplaceFinalOne()}
 		case reflect.TypeFor[fakes.IFakeInstanceService]():
-			return []any{r.f_IFakeInstanceService}
+			return []any{r.get_IFakeInstanceService()}
 		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-			return []any{r.f_IFakeFormBDisposableSingleton}
+			return []any{r.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{r.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -666,17 +1297,17 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == godi.AnyKey {
 		switch t {
 		case reflect.TypeFor[fakes.IKeyedService]():
-			return []any{r.f_KeyedServiceOne__service1_, r.f_KeyedServiceTwo__service2_, r.f_KeyedServiceOne__both_, r.f_KeyedServiceTwo__both_, r.f_KeyedServiceOne__singleton_factory_, r.NewKeyedServiceOne__transient_(), r.NewIKeyedService__transient_factory_(), r.f_KeyedServiceOne__scoped_}
+			return []any{r.get_KeyedServiceOne__service1_(), r.get_KeyedServiceTwo__service2_(), r.get_KeyedServiceOne__both_(), r.get_KeyedServiceTwo__both_(), r.get_KeyedServiceOne__singleton_factory_(), r.NewKeyedServiceOne__transient_(), r.NewIKeyedService__transient_factory_(), r.f_KeyedServiceOne__scoped_}
 		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
-			return []any{r.f_IKeyedServiceWithDep__with_dep_, r.f_IKeyedServiceWithDep__missing_dep_}
+			return []any{r.get_IKeyedServiceWithDep__with_dep_(), r.get_IKeyedServiceWithDep__missing_dep_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
-			return []any{r.f_IKeyedServiceWithKey__injected_key_}
+			return []any{r.get_IKeyedServiceWithKey__injected_key_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
-			return []any{r.f_IKeyedServiceWithProvider__with_provider_, r.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{r.get_IKeyedServiceWithProvider__with_provider_(), r.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{r.f_AnyKeyServiceA__alpha_, r.f_AnyKeyServiceB__beta_, r.f_IAnyKeyService__alpha_}
+			return []any{r.get_AnyKeyServiceA__alpha_(), r.get_AnyKeyServiceB__beta_(), r.get_IAnyKeyService__alpha_()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
-			return []any{r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_}
+			return []any{r.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()}
 		}
 		return nil
 	}
@@ -684,13 +1315,13 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IKeyedService]():
 		switch key {
 		case "service1":
-			return []any{r.f_KeyedServiceOne__service1_}
+			return []any{r.get_KeyedServiceOne__service1_()}
 		case "service2":
-			return []any{r.f_KeyedServiceTwo__service2_}
+			return []any{r.get_KeyedServiceTwo__service2_()}
 		case "both":
-			return []any{r.f_KeyedServiceOne__both_, r.f_KeyedServiceTwo__both_}
+			return []any{r.get_KeyedServiceOne__both_(), r.get_KeyedServiceTwo__both_()}
 		case "singleton-factory":
-			return []any{r.f_KeyedServiceOne__singleton_factory_}
+			return []any{r.get_KeyedServiceOne__singleton_factory_()}
 		case "scoped":
 			return []any{r.f_KeyedServiceOne__scoped_}
 		case "transient":
@@ -701,33 +1332,33 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
 		case "with-dep":
-			return []any{r.f_IKeyedServiceWithDep__with_dep_}
+			return []any{r.get_IKeyedServiceWithDep__with_dep_()}
 		case "missing-dep":
-			return []any{r.f_IKeyedServiceWithDep__missing_dep_}
+			return []any{r.get_IKeyedServiceWithDep__missing_dep_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 		switch key {
 		case "injected-key":
-			return []any{r.f_IKeyedServiceWithKey__injected_key_}
+			return []any{r.get_IKeyedServiceWithKey__injected_key_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
 		switch key {
 		case "with-provider":
-			return []any{r.f_IKeyedServiceWithProvider__with_provider_}
+			return []any{r.get_IKeyedServiceWithProvider__with_provider_()}
 		case "scoped-with-provider":
 			return []any{r.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
 		case "alpha":
-			return []any{r.f_AnyKeyServiceA__alpha_, r.f_IAnyKeyService__alpha_}
+			return []any{r.get_AnyKeyServiceA__alpha_(), r.get_IAnyKeyService__alpha_()}
 		case "beta":
-			return []any{r.f_AnyKeyServiceB__beta_}
+			return []any{r.get_AnyKeyServiceB__beta_()}
 		}
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		switch key {
 		case "gen-key":
-			return []any{r.f_FakeOpenGenericService_fakes_IFakeService__gen_key_}
+			return []any{r.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()}
 		}
 	}
 	return nil
@@ -792,37 +1423,37 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return s.root.f_FakeService
+		return s.root.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeConsumer]():
-		return s.root.f_FakeConsumer
+		return s.root.get_FakeConsumer()
 	case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-		return s.root.f_FakeDisposableSingleton
+		return s.root.get_FakeDisposableSingleton()
 	case reflect.TypeFor[fakes.IPocoClass]():
-		return s.root.f_PocoClass
+		return s.root.get_PocoClass()
 	case reflect.TypeFor[fakes.IClassImplementingIterable]():
-		return s.root.f_ClassImplementingIterable
+		return s.root.get_ClassImplementingIterable()
 	case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-		return s.root.f_ClassInheritingAbstract
+		return s.root.get_ClassInheritingAbstract()
 	case reflect.TypeFor[fakes.IGenSlotA]():
-		return s.root.f_GenSlotA
+		return s.root.get_GenSlotA()
 	case reflect.TypeFor[fakes.IGenSlotB]():
-		return s.root.f_GenSlotB
+		return s.root.get_GenSlotB()
 	case reflect.TypeFor[fakes.IAnyKeyService]():
-		return s.root.f_AnyKeyServiceA
+		return s.root.get_AnyKeyServiceA()
 	case reflect.TypeFor[fakes.IStructFakeService]():
-		return s.root.f_StructFakeService
+		return s.root.get_StructFakeService()
 	case reflect.TypeFor[fakes.IStructConsumer]():
-		return s.root.f_StructConsumer
+		return s.root.get_StructConsumer()
 	case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-		return s.root.f_StructFakeTwo
+		return s.root.get_StructFakeTwo()
 	case reflect.TypeFor[fakes.ISelfComparable]():
-		return s.root.f_SelfComparable
+		return s.root.get_SelfComparable()
 	case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-		return s.root.f_FakeReplaceFinalOne
+		return s.root.get_FakeReplaceFinalOne()
 	case reflect.TypeFor[fakes.IFakeInstanceService]():
-		return s.root.f_IFakeInstanceService
+		return s.root.get_IFakeInstanceService()
 	case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-		return s.root.f_IFakeFormBDisposableSingleton
+		return s.root.get_IFakeFormBDisposableSingleton()
 	case reflect.TypeFor[fakes.IFakeScopedService]():
 		return s.f_FakeScopedService
 	case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -955,13 +1586,13 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	case reflect.TypeFor[fakes.IKeyedService]():
 		switch key {
 		case "service1":
-			return s.root.f_KeyedServiceOne__service1_
+			return s.root.get_KeyedServiceOne__service1_()
 		case "service2":
-			return s.root.f_KeyedServiceTwo__service2_
+			return s.root.get_KeyedServiceTwo__service2_()
 		case "both":
-			return s.root.f_KeyedServiceTwo__both_
+			return s.root.get_KeyedServiceTwo__both_()
 		case "singleton-factory":
-			return s.root.f_KeyedServiceOne__singleton_factory_
+			return s.root.get_KeyedServiceOne__singleton_factory_()
 		case "scoped":
 			return s.f_KeyedServiceOne__scoped_
 		case "transient":
@@ -972,33 +1603,33 @@ func (s *scope) GetKeyedService(t reflect.Type, key any) any {
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
 		case "with-dep":
-			return s.root.f_IKeyedServiceWithDep__with_dep_
+			return s.root.get_IKeyedServiceWithDep__with_dep_()
 		case "missing-dep":
-			return s.root.f_IKeyedServiceWithDep__missing_dep_
+			return s.root.get_IKeyedServiceWithDep__missing_dep_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 		switch key {
 		case "injected-key":
-			return s.root.f_IKeyedServiceWithKey__injected_key_
+			return s.root.get_IKeyedServiceWithKey__injected_key_()
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
 		switch key {
 		case "with-provider":
-			return s.root.f_IKeyedServiceWithProvider__with_provider_
+			return s.root.get_IKeyedServiceWithProvider__with_provider_()
 		case "scoped-with-provider":
 			return s.f_IKeyedServiceWithProvider__scoped_with_provider_
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
 		case "alpha":
-			return s.root.f_IAnyKeyService__alpha_
+			return s.root.get_IAnyKeyService__alpha_()
 		case "beta":
-			return s.root.f_AnyKeyServiceB__beta_
+			return s.root.get_AnyKeyServiceB__beta_()
 		}
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		switch key {
 		case "gen-key":
-			return s.root.f_FakeOpenGenericService_fakes_IFakeService__gen_key_
+			return s.root.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()
 		}
 	}
 	return nil
@@ -1011,37 +1642,37 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == nil {
 		switch t {
 		case reflect.TypeFor[fakes.IFakeService]():
-			return []any{s.root.f_FakeService}
+			return []any{s.root.get_FakeService()}
 		case reflect.TypeFor[fakes.IFakeConsumer]():
-			return []any{s.root.f_FakeConsumer}
+			return []any{s.root.get_FakeConsumer()}
 		case reflect.TypeFor[fakes.IFakeDisposableSingleton]():
-			return []any{s.root.f_FakeDisposableSingleton}
+			return []any{s.root.get_FakeDisposableSingleton()}
 		case reflect.TypeFor[fakes.IPocoClass]():
-			return []any{s.root.f_PocoClass}
+			return []any{s.root.get_PocoClass()}
 		case reflect.TypeFor[fakes.IClassImplementingIterable]():
-			return []any{s.root.f_ClassImplementingIterable}
+			return []any{s.root.get_ClassImplementingIterable()}
 		case reflect.TypeFor[fakes.IClassInheritingAbstract]():
-			return []any{s.root.f_ClassInheritingAbstract}
+			return []any{s.root.get_ClassInheritingAbstract()}
 		case reflect.TypeFor[fakes.IGenSlotA]():
-			return []any{s.root.f_GenSlotA}
+			return []any{s.root.get_GenSlotA()}
 		case reflect.TypeFor[fakes.IGenSlotB]():
-			return []any{s.root.f_GenSlotB}
+			return []any{s.root.get_GenSlotB()}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{s.root.f_AnyKeyServiceA}
+			return []any{s.root.get_AnyKeyServiceA()}
 		case reflect.TypeFor[fakes.IStructFakeService]():
-			return []any{s.root.f_StructFakeService}
+			return []any{s.root.get_StructFakeService()}
 		case reflect.TypeFor[fakes.IStructConsumer]():
-			return []any{s.root.f_StructConsumer}
+			return []any{s.root.get_StructConsumer()}
 		case reflect.TypeFor[fakes.IStructFakeMultipleService]():
-			return []any{s.root.f_StructFakeOne, s.root.f_StructFakeTwo}
+			return []any{s.root.get_StructFakeOne(), s.root.get_StructFakeTwo()}
 		case reflect.TypeFor[fakes.ISelfComparable]():
-			return []any{s.root.f_SelfComparable}
+			return []any{s.root.get_SelfComparable()}
 		case reflect.TypeFor[fakes.IFakeReplaceFinalService]():
-			return []any{s.root.f_FakeReplaceFinalTwo, s.root.f_FakeReplaceFinalOne}
+			return []any{s.root.get_FakeReplaceFinalTwo(), s.root.get_FakeReplaceFinalOne()}
 		case reflect.TypeFor[fakes.IFakeInstanceService]():
-			return []any{s.root.f_IFakeInstanceService}
+			return []any{s.root.get_IFakeInstanceService()}
 		case reflect.TypeFor[fakes.IFakeFormBDisposableSingleton]():
-			return []any{s.root.f_IFakeFormBDisposableSingleton}
+			return []any{s.root.get_IFakeFormBDisposableSingleton()}
 		case reflect.TypeFor[fakes.IFakeScopedService]():
 			return []any{s.f_FakeScopedService}
 		case reflect.TypeFor[fakes.IFakeDisposableScoped]():
@@ -1084,17 +1715,17 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	if key == godi.AnyKey {
 		switch t {
 		case reflect.TypeFor[fakes.IKeyedService]():
-			return []any{s.root.f_KeyedServiceOne__service1_, s.root.f_KeyedServiceTwo__service2_, s.root.f_KeyedServiceOne__both_, s.root.f_KeyedServiceTwo__both_, s.root.f_KeyedServiceOne__singleton_factory_, s.NewKeyedServiceOne__transient_(), s.NewIKeyedService__transient_factory_(), s.f_KeyedServiceOne__scoped_}
+			return []any{s.root.get_KeyedServiceOne__service1_(), s.root.get_KeyedServiceTwo__service2_(), s.root.get_KeyedServiceOne__both_(), s.root.get_KeyedServiceTwo__both_(), s.root.get_KeyedServiceOne__singleton_factory_(), s.NewKeyedServiceOne__transient_(), s.NewIKeyedService__transient_factory_(), s.f_KeyedServiceOne__scoped_}
 		case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
-			return []any{s.root.f_IKeyedServiceWithDep__with_dep_, s.root.f_IKeyedServiceWithDep__missing_dep_}
+			return []any{s.root.get_IKeyedServiceWithDep__with_dep_(), s.root.get_IKeyedServiceWithDep__missing_dep_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
-			return []any{s.root.f_IKeyedServiceWithKey__injected_key_}
+			return []any{s.root.get_IKeyedServiceWithKey__injected_key_()}
 		case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
-			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_, s.f_IKeyedServiceWithProvider__scoped_with_provider_}
+			return []any{s.root.get_IKeyedServiceWithProvider__with_provider_(), s.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		case reflect.TypeFor[fakes.IAnyKeyService]():
-			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_AnyKeyServiceB__beta_, s.root.f_IAnyKeyService__alpha_}
+			return []any{s.root.get_AnyKeyServiceA__alpha_(), s.root.get_AnyKeyServiceB__beta_(), s.root.get_IAnyKeyService__alpha_()}
 		case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
-			return []any{s.root.f_FakeOpenGenericService_fakes_IFakeService__gen_key_}
+			return []any{s.root.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()}
 		}
 		return nil
 	}
@@ -1102,13 +1733,13 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IKeyedService]():
 		switch key {
 		case "service1":
-			return []any{s.root.f_KeyedServiceOne__service1_}
+			return []any{s.root.get_KeyedServiceOne__service1_()}
 		case "service2":
-			return []any{s.root.f_KeyedServiceTwo__service2_}
+			return []any{s.root.get_KeyedServiceTwo__service2_()}
 		case "both":
-			return []any{s.root.f_KeyedServiceOne__both_, s.root.f_KeyedServiceTwo__both_}
+			return []any{s.root.get_KeyedServiceOne__both_(), s.root.get_KeyedServiceTwo__both_()}
 		case "singleton-factory":
-			return []any{s.root.f_KeyedServiceOne__singleton_factory_}
+			return []any{s.root.get_KeyedServiceOne__singleton_factory_()}
 		case "scoped":
 			return []any{s.f_KeyedServiceOne__scoped_}
 		case "transient":
@@ -1119,33 +1750,33 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	case reflect.TypeFor[fakes.IKeyedServiceWithDep]():
 		switch key {
 		case "with-dep":
-			return []any{s.root.f_IKeyedServiceWithDep__with_dep_}
+			return []any{s.root.get_IKeyedServiceWithDep__with_dep_()}
 		case "missing-dep":
-			return []any{s.root.f_IKeyedServiceWithDep__missing_dep_}
+			return []any{s.root.get_IKeyedServiceWithDep__missing_dep_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithKey]():
 		switch key {
 		case "injected-key":
-			return []any{s.root.f_IKeyedServiceWithKey__injected_key_}
+			return []any{s.root.get_IKeyedServiceWithKey__injected_key_()}
 		}
 	case reflect.TypeFor[fakes.IKeyedServiceWithProvider]():
 		switch key {
 		case "with-provider":
-			return []any{s.root.f_IKeyedServiceWithProvider__with_provider_}
+			return []any{s.root.get_IKeyedServiceWithProvider__with_provider_()}
 		case "scoped-with-provider":
 			return []any{s.f_IKeyedServiceWithProvider__scoped_with_provider_}
 		}
 	case reflect.TypeFor[fakes.IAnyKeyService]():
 		switch key {
 		case "alpha":
-			return []any{s.root.f_AnyKeyServiceA__alpha_, s.root.f_IAnyKeyService__alpha_}
+			return []any{s.root.get_AnyKeyServiceA__alpha_(), s.root.get_IAnyKeyService__alpha_()}
 		case "beta":
-			return []any{s.root.f_AnyKeyServiceB__beta_}
+			return []any{s.root.get_AnyKeyServiceB__beta_()}
 		}
 	case reflect.TypeFor[fakes.IFakeOpenGenericService[fakes.IFakeService]]():
 		switch key {
 		case "gen-key":
-			return []any{s.root.f_FakeOpenGenericService_fakes_IFakeService__gen_key_}
+			return []any{s.root.get_FakeOpenGenericService_fakes_IFakeService__gen_key_()}
 		}
 	}
 	return nil
@@ -1213,43 +1844,43 @@ func (s *scope) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 }
 
 func (s *scope) NewFakeOuterService() fakes.IFakeOuterService {
-	return fakes.NewFakeOuterService(s.root.f_FakeService, []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
+	return fakes.NewFakeOuterService(s.root.get_FakeService(), []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IFakeService() fakes.IFakeOpenGenericService[fakes.IFakeService] {
-	return fakes.NewFakeOpenGenericService[fakes.IFakeService](s.root.f_FakeService)
+	return fakes.NewFakeOpenGenericService[fakes.IFakeService](s.root.get_FakeService())
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IFakeConsumer() fakes.IFakeOpenGenericService[fakes.IFakeConsumer] {
-	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](s.root.f_FakeConsumer)
+	return fakes.NewFakeOpenGenericService[fakes.IFakeConsumer](s.root.get_FakeConsumer())
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
-	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](s.root.f_PocoClass)
+	return fakes.NewFakeOpenGenericService[fakes.IPocoClass](s.root.get_PocoClass())
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
-	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](s.root.f_ClassImplementingIterable)
+	return fakes.NewFakeOpenGenericService[fakes.IClassImplementingIterable](s.root.get_ClassImplementingIterable())
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
-	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](s.root.f_ClassInheritingAbstract)
+	return fakes.NewFakeOpenGenericService[fakes.IClassInheritingAbstract](s.root.get_ClassInheritingAbstract())
 }
 
 func (s *scope) NewConstrainedFakeOpenGenericService_fakes_IPocoClass() fakes.IFakeOpenGenericService[fakes.IPocoClass] {
-	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](s.root.f_PocoClass)
+	return fakes.NewConstrainedFakeOpenGenericService[fakes.IPocoClass](s.root.get_PocoClass())
 }
 
 func (s *scope) NewClassWithInterfaceConstraint_fakes_IClassImplementingIterable() fakes.IFakeOpenGenericService[fakes.IClassImplementingIterable] {
-	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](s.root.f_ClassImplementingIterable)
+	return fakes.NewClassWithInterfaceConstraint[fakes.IClassImplementingIterable](s.root.get_ClassImplementingIterable())
 }
 
 func (s *scope) NewClassWithAbstractClassConstraint_fakes_IClassInheritingAbstract() fakes.IFakeOpenGenericService[fakes.IClassInheritingAbstract] {
-	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](s.root.f_ClassInheritingAbstract)
+	return fakes.NewClassWithAbstractClassConstraint[fakes.IClassInheritingAbstract](s.root.get_ClassInheritingAbstract())
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IGenSlotA() fakes.IFakeOpenGenericService[fakes.IGenSlotA] {
-	return fakes.NewFakeOpenGenericService[fakes.IGenSlotA](s.root.f_GenSlotA)
+	return fakes.NewFakeOpenGenericService[fakes.IGenSlotA](s.root.get_GenSlotA())
 }
 
 func (s *scope) NewClosedFakeOpenGenericService_fakes_IGenSlotA() fakes.IFakeOpenGenericService[fakes.IGenSlotA] {
@@ -1261,7 +1892,7 @@ func (s *scope) NewClosedFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpe
 }
 
 func (s *scope) NewFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpenGenericService[fakes.IGenSlotB] {
-	return fakes.NewFakeOpenGenericService[fakes.IGenSlotB](s.root.f_GenSlotB)
+	return fakes.NewFakeOpenGenericService[fakes.IGenSlotB](s.root.get_GenSlotB())
 }
 
 func (s *scope) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeOpenGenericService[fakes.IGenSlotB] {
@@ -1269,7 +1900,7 @@ func (s *scope) NewInstanceFakeOpenGenericService_fakes_IGenSlotB() fakes.IFakeO
 }
 
 func (s *scope) NewClassWithSelfReferencingConstraint_fakes_ISelfComparable() fakes.IFakeOpenGenericService[fakes.ISelfComparable] {
-	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](s.root.f_SelfComparable)
+	return fakes.NewClassWithSelfReferencingConstraint[fakes.ISelfComparable](s.root.get_SelfComparable())
 }
 
 func (s *scope) NewFakeAsyncOnlyDisposable() *fakes.FakeAsyncOnlyDisposable {
@@ -1296,54 +1927,54 @@ func (s *scope) NewIKeyedService__transient_factory_() fakes.IKeyedService {
 	return v
 }
 
-func (s *scope) FakeService() fakes.IFakeService { return s.root.f_FakeService }
+func (s *scope) FakeService() fakes.IFakeService { return s.root.get_FakeService() }
 
-func (s *scope) FakeConsumer() fakes.IFakeConsumer { return s.root.f_FakeConsumer }
+func (s *scope) FakeConsumer() fakes.IFakeConsumer { return s.root.get_FakeConsumer() }
 
 func (s *scope) FakeDisposableSingleton() fakes.IFakeDisposableSingleton {
-	return s.root.f_FakeDisposableSingleton
+	return s.root.get_FakeDisposableSingleton()
 }
 
-func (s *scope) PocoClass() fakes.IPocoClass { return s.root.f_PocoClass }
+func (s *scope) PocoClass() fakes.IPocoClass { return s.root.get_PocoClass() }
 
 func (s *scope) ClassImplementingIterable() fakes.IClassImplementingIterable {
-	return s.root.f_ClassImplementingIterable
+	return s.root.get_ClassImplementingIterable()
 }
 
 func (s *scope) ClassInheritingAbstract() fakes.IClassInheritingAbstract {
-	return s.root.f_ClassInheritingAbstract
+	return s.root.get_ClassInheritingAbstract()
 }
 
-func (s *scope) GenSlotA() fakes.IGenSlotA { return s.root.f_GenSlotA }
+func (s *scope) GenSlotA() fakes.IGenSlotA { return s.root.get_GenSlotA() }
 
-func (s *scope) GenSlotB() fakes.IGenSlotB { return s.root.f_GenSlotB }
+func (s *scope) GenSlotB() fakes.IGenSlotB { return s.root.get_GenSlotB() }
 
-func (s *scope) AnyKeyServiceA() fakes.IAnyKeyService { return s.root.f_AnyKeyServiceA }
+func (s *scope) AnyKeyServiceA() fakes.IAnyKeyService { return s.root.get_AnyKeyServiceA() }
 
-func (s *scope) StructFakeService() fakes.IStructFakeService { return s.root.f_StructFakeService }
+func (s *scope) StructFakeService() fakes.IStructFakeService { return s.root.get_StructFakeService() }
 
-func (s *scope) StructConsumer() fakes.IStructConsumer { return s.root.f_StructConsumer }
+func (s *scope) StructConsumer() fakes.IStructConsumer { return s.root.get_StructConsumer() }
 
-func (s *scope) StructFakeOne() fakes.IStructFakeMultipleService { return s.root.f_StructFakeOne }
+func (s *scope) StructFakeOne() fakes.IStructFakeMultipleService { return s.root.get_StructFakeOne() }
 
-func (s *scope) StructFakeTwo() fakes.IStructFakeMultipleService { return s.root.f_StructFakeTwo }
+func (s *scope) StructFakeTwo() fakes.IStructFakeMultipleService { return s.root.get_StructFakeTwo() }
 
-func (s *scope) SelfComparable() fakes.ISelfComparable { return s.root.f_SelfComparable }
+func (s *scope) SelfComparable() fakes.ISelfComparable { return s.root.get_SelfComparable() }
 
 func (s *scope) FakeReplaceFinalTwo() fakes.IFakeReplaceFinalService {
-	return s.root.f_FakeReplaceFinalTwo
+	return s.root.get_FakeReplaceFinalTwo()
 }
 
 func (s *scope) FakeReplaceFinalOne() fakes.IFakeReplaceFinalService {
-	return s.root.f_FakeReplaceFinalOne
+	return s.root.get_FakeReplaceFinalOne()
 }
 
 func (s *scope) IFakeInstanceService() fakes.IFakeInstanceService {
-	return s.root.f_IFakeInstanceService
+	return s.root.get_IFakeInstanceService()
 }
 
 func (s *scope) IFakeFormBDisposableSingleton() fakes.IFakeFormBDisposableSingleton {
-	return s.root.f_IFakeFormBDisposableSingleton
+	return s.root.get_IFakeFormBDisposableSingleton()
 }
 
 func (s *scope) FakeScopedService() fakes.IFakeScopedService { return s.f_FakeScopedService }

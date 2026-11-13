@@ -53,7 +53,7 @@ func TestGenerator_NilKey_RoutesToUnkeyed(t *testing.T) {
 
 	code := string(src)
 	// Wired as an ordinary unkeyed singleton (unkeyed field + accessor).
-	testutil.True(t, strings.Contains(code, "r.f_Service = keyednilfix.NewService()"),
+	testutil.True(t, strings.Contains(emittedFunc(t, code, "func (r *Root) get_Service("), "v := keyednilfix.NewService()"),
 		"a nil-keyed service must be wired as an unkeyed singleton (AC1)")
 	testutil.True(t, strings.Contains(code, "func (r *Root) Service() keyednilfix.IService"),
 		"a nil-keyed service must get the unkeyed typed accessor (AC1)")

@@ -40,16 +40,16 @@ func TestGenerator_PerServiceHelper_RecognizedAndReduced(t *testing.T) {
 //
 // The closed constructor NewBox[T](value T) must be instantiated with the closed
 // type args so the injected `value T` becomes a CONCRETE dependency wired from the
-// registered service — NewBox[IDep](r.f_Dep), not NewBox[IDep]() with a phantom
+// registered service — NewBox[IDep](r.get_Dep()), not NewBox[IDep]() with a phantom
 // type-param parameter.
 func TestGenerator_PerServiceHelper_InjectsClosedDependency(t *testing.T) {
 	src, err := generate("testdata/opengeneric", "opengenericfix", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
-	testutil.True(t, strings.Contains(code, "NewBox[IDep](r.f_Dep)"),
+	testutil.True(t, strings.Contains(code, "NewBox[IDep](r.get_Dep())"),
 		"closed Box[IDep] must inject the registered IDep dependency (AC2: ctor signature instantiated)")
-	testutil.True(t, strings.Contains(code, "NewBox[IOther](r.f_Other)"),
+	testutil.True(t, strings.Contains(code, "NewBox[IOther](r.get_Other())"),
 		"closed Box[IOther] must inject the registered IOther dependency (AC2)")
 }
 

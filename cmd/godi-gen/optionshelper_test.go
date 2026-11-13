@@ -80,23 +80,28 @@ func TestGenerator_HelperFormB_SamePackageKeepsBareIdents(t *testing.T) {
 		"same-package emit must keep the factory's bare constructor identifier bare")
 }
 
-// TestGenerator_FormBFactoryDeps_OrderSingletonAssembly proves the factory's
-// godi.Get… calls feed SingletonsTopo: the cache is the LAST marker in the
-// helper body, yet the monitor's factory GetRequired-s it — assembling the
-// monitor first would hand its constructor a nil cache (AD-15). This is the
-// ordering half of deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂".
-func TestGenerator_FormBFactoryDeps_OrderSingletonAssembly(t *testing.T) {
+// TestGenerator_FormBFactoryDeps_BuildSingletonOnDemand: the cache is the LAST
+// marker in the helper body, yet the monitor's factory GetRequired-s it —
+// handing the monitor's constructor a nil cache would break AD-15. Singletons
+// are built by lazy accessors, so the monitor's factory (given the Root as its
+// Provider) must reach the cache through GetService, whose arm calls the cache's
+// accessor and builds it on demand, whatever order NewRoot triggers them in.
+// This is the ordering half of deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂".
+func TestGenerator_FormBFactoryDeps_BuildSingletonOnDemand(t *testing.T) {
 	src, err := generate("testdata/optionshelper", "codegen", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
+	getService := emittedFunc(t, code, "func (r *Root) GetService(")
 	for _, cfg := range []string{"MyCfg", "OtherCfg"} {
-		cache := strings.Index(code, "r.f_OptionsCache__optionsfix_"+cfg+" = ")
-		monitor := strings.Index(code, "r.f_OptionsMonitor__optionsfix_"+cfg+" = ")
-		testutil.True(t, cache >= 0 && monitor >= 0,
-			cfg+": both the cache and the monitor must be wired in NewRoot")
-		testutil.True(t, cache < monitor,
-			cfg+": the cache must be assembled BEFORE the monitor whose factory GetRequired-s it")
+		monitor := emittedFunc(t, code, "func (r *Root) get_OptionsMonitor__optionsfix_"+cfg+"(")
+		testutil.True(t, strings.Contains(monitor,
+			"godi.GetRequired[optionsfix.OptionsMonitorCache[*optionsfix."+cfg+"]](p)") &&
+			strings.Contains(monitor, "})(r)"),
+			cfg+": the monitor's factory must resolve the cache through the Root it is given")
+		testutil.True(t, strings.Contains(getService,
+			"case reflect.TypeFor[optionsfix.OptionsMonitorCache[*optionsfix."+cfg+"]]():\n\t\treturn r.get_OptionsCache__optionsfix_"+cfg+"()"),
+			cfg+": GetService must build the cache on demand through its accessor")
 	}
 }
 
@@ -118,10 +123,8 @@ func TestGenerator_HelperExpansions_StayIndependent(t *testing.T) {
 			"the open template "+leak+" must never appear in the generated container")
 	}
 
-	myStart := strings.Index(code, "r.f_OptionsMonitor__optionsfix_MyCfg = ")
-	myEnd := strings.Index(code[myStart:], ")(r)")
-	testutil.True(t, myStart >= 0 && myEnd >= 0, "MyCfg monitor factory inline must exist")
-	myFactory := code[myStart : myStart+myEnd]
+	myFactory := emittedFunc(t, code, "func (r *Root) get_OptionsMonitor__optionsfix_MyCfg(")
+	testutil.True(t, strings.Contains(myFactory, ")(r)"), "MyCfg monitor factory inline must exist")
 	testutil.True(t, !strings.Contains(myFactory, "OtherCfg"),
 		"the MyCfg closure's factory must not mention OtherCfg (closures must not cross-type)")
 }
@@ -132,31 +135,35 @@ func TestGenerator_FormBMultiRegistration_GetsDistinctNamesAndCollectionOrder(t 
 
 	code := string(src)
 	for _, want := range []string{
-		"f_IWidget    formbmulti.IWidget",
-		"f_IWidget__2 formbmulti.IWidget",
-		"r.f_IWidget = (func(godi.Provider) formbmulti.IWidget { return formbmulti.Widget",
+		"func (r *Root) get_IWidget() formbmulti.IWidget {",
+		"func (r *Root) get_IWidget__2() formbmulti.IWidget {",
+		"v := (func(godi.Provider) formbmulti.IWidget { return formbmulti.Widget",
 	} {
 		testutil.True(t, strings.Contains(code, want), "generated code missing: "+want)
 	}
-	testutil.True(t, strings.Contains(code, "return []any{r.f_IWidget, r.f_IWidget__2}"),
+	testutil.True(t, strings.Contains(code, "return []any{r.get_IWidget(), r.get_IWidget__2()}"),
 		"GetServices for duplicate Form B registrations must preserve registration order")
 }
 
-func TestGenerator_SingletonOrdersTransientFactoryCollectionDeps(t *testing.T) {
+// TestGenerator_SingletonBuildsTransientFactoryCollectionDepsOnDemand: the
+// IMonitor singleton is registered first and its factory resolves a transient
+// factory that captures GetServices[ISetup]. The ISetup singleton must be built
+// on demand by that collection read rather than captured as a nil field; the
+// fixture's behavior_test.go runs the generated container to prove it.
+func TestGenerator_SingletonBuildsTransientFactoryCollectionDepsOnDemand(t *testing.T) {
 	// Emitted into the fixture's own package: its factories reference unexported
 	// identifiers (setup, monitor, factory), which only type-check in-package.
 	src, err := generate("testdata/transientcollectiondeps", "transientcollectiondeps", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
-	setup := strings.Index(code, "r.f_ISetup = ")
-	monitor := strings.Index(code, "r.f_IMonitor = ")
-	testutil.True(t, setup >= 0 && monitor >= 0,
-		"generated root must wire both ISetup and IMonitor")
-	testutil.True(t, setup < monitor,
-		"singleton collection deps captured by a transient factory must be wired before the singleton that constructs that factory")
+	testutil.True(t, strings.Contains(emittedFunc(t, code, "func (r *Root) GetKeyedServices("),
+		"case reflect.TypeFor[ISetup]():\n\t\treturn []any{r.get_ISetup()}"),
+		"the ISetup collection must be read through the singleton's accessor")
 	testutil.True(t, strings.Contains(code, "godi.GetServices[ISetup](p)"),
 		"transient factory must still capture the collection via GetServices")
+
+	runLazyFixture(t, "transientcollectiondeps")
 }
 
 // TestGenerator_RewrittenOutput_Compiles is the compile-level guard the
@@ -202,7 +209,7 @@ func TestGenerator_ImportAliasCollision(t *testing.T) {
 	testutil.True(t, strings.Contains(code,
 		`opts2 "github.com/gonewx/godi/cmd/godi-gen/testdata/aliascollide/subb"`),
 		"the second same-named package must be renamed in the import block")
-	testutil.True(t, strings.Contains(code, "f_IThingB opts2.IThingB"),
+	testutil.True(t, strings.Contains(code, "func (r *Root) get_IThingB() opts2.IThingB {"),
 		"types from the renamed package must be qualified by the assigned alias")
 	testutil.True(t, strings.Contains(code, "return opts2.NewThingB()"),
 		"the factory body's registration-file qualifier (bopts.) must be remapped to the emitted alias")

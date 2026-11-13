@@ -16,7 +16,7 @@ func TestGenerator_FormBConcretePointerServiceTypes(t *testing.T) {
 
 	code := string(src)
 	for _, want := range []string{
-		"f_Ptr_Config *concretefactory.Config",
+		"func (r *Root) get_Ptr_Config() *concretefactory.Config {",
 		"func (r *Root) NewPtr_Child() *concretefactory.Child",
 		"case reflect.TypeFor[*concretefactory.Config]():",
 		"case reflect.TypeFor[*concretefactory.Child]():",

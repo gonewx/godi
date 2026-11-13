@@ -13,6 +13,7 @@ import (
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
 	f_DBConn  svc.IDBConn
+	st_DBConn uint8
 	f_Session svc.ISession
 	disp      *runtime.Disposer
 	closed    bool
@@ -21,15 +22,41 @@ type Root struct {
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
-	r.f_DBConn = svc.NewDBConn()
-	r.disp.TrackAny(r.f_DBConn)
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = r.disp.CloseAll()
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_DBConn()
 	r.f_Session = svc.NewSession()
 	r.disp.TrackAny(r.f_Session)
 	return r, nil
+}
+
+func (r *Root) get_DBConn() svc.IDBConn {
+	if r.st_DBConn == 2 {
+		return r.f_DBConn
+	}
+	if r.st_DBConn == 1 {
+		panic(godi.CircularDependencyError("DBConn"))
+	}
+	r.st_DBConn = 1
+	defer func() {
+		if r.st_DBConn != 2 {
+			r.st_DBConn = 0
+		}
+	}()
+	v := svc.NewDBConn()
+	r.f_DBConn = v
+	r.disp.TrackAny(v)
+	r.st_DBConn = 2
+	return v
 }
 
 func (r *Root) NewTempFile() svc.ITempFile {
@@ -38,7 +65,7 @@ func (r *Root) NewTempFile() svc.ITempFile {
 	return v
 }
 
-func (r *Root) DBConn() svc.IDBConn { return r.f_DBConn }
+func (r *Root) DBConn() svc.IDBConn { return r.get_DBConn() }
 
 func (r *Root) Session() svc.ISession { return r.f_Session }
 
@@ -67,7 +94,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IDBConn]():
-		return r.f_DBConn
+		return r.get_DBConn()
 	case reflect.TypeFor[svc.ISession]():
 		return r.f_Session
 	case reflect.TypeFor[svc.ITempFile]():
@@ -120,7 +147,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IDBConn]():
-		return []any{r.f_DBConn}
+		return []any{r.get_DBConn()}
 	case reflect.TypeFor[svc.ISession]():
 		return []any{r.f_Session}
 	case reflect.TypeFor[svc.ITempFile]():
@@ -174,7 +201,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IDBConn]():
-		return s.root.f_DBConn
+		return s.root.get_DBConn()
 	case reflect.TypeFor[svc.ISession]():
 		return s.f_Session
 	case reflect.TypeFor[svc.ITempFile]():
@@ -221,7 +248,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IDBConn]():
-		return []any{s.root.f_DBConn}
+		return []any{s.root.get_DBConn()}
 	case reflect.TypeFor[svc.ISession]():
 		return []any{s.f_Session}
 	case reflect.TypeFor[svc.ITempFile]():
@@ -265,7 +292,7 @@ func (s *scope) NewTempFile() svc.ITempFile {
 	return v
 }
 
-func (s *scope) DBConn() svc.IDBConn { return s.root.f_DBConn }
+func (s *scope) DBConn() svc.IDBConn { return s.root.get_DBConn() }
 
 func (s *scope) Session() svc.ISession { return s.f_Session }
 

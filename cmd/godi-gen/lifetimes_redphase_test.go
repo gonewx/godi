@@ -78,6 +78,6 @@ func TestGenerator_ExistingDepsFixtureUnchanged(t *testing.T) {
 	testutil.NoError(t, err)
 
 	code := string(src)
-	testutil.True(t, strings.Contains(code, "r.f_Consumer, err = depsfix.NewConsumer(r.f_FakeService)"),
+	testutil.True(t, strings.Contains(code, "v, err := depsfix.NewConsumer(r.get_FakeService())"),
 		"deps fixture (singleton-only) must still produce correct dependency wiring (regression)")
 }

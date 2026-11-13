@@ -10,20 +10,46 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_Logger *logger.Logger
-	closed   bool
+	f_Logger  *logger.Logger
+	st_Logger uint8
+	closed    bool
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
-	r.f_Logger = logger.NewLogger()
+	defer func() {
+		if rec := recover(); rec != nil {
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_Logger()
 	return r, nil
 }
 
-func (r *Root) Logger() *logger.Logger { return r.f_Logger }
+func (r *Root) get_Logger() *logger.Logger {
+	if r.st_Logger == 2 {
+		return r.f_Logger
+	}
+	if r.st_Logger == 1 {
+		panic(godi.CircularDependencyError("Logger"))
+	}
+	r.st_Logger = 1
+	defer func() {
+		if r.st_Logger != 2 {
+			r.st_Logger = 0
+		}
+	}()
+	v := logger.NewLogger()
+	r.f_Logger = v
+	r.st_Logger = 2
+	return v
+}
+
+func (r *Root) Logger() *logger.Logger { return r.get_Logger() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -50,7 +76,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[*logger.Logger]():
-		return r.f_Logger
+		return r.get_Logger()
 	}
 	return nil
 }
@@ -95,7 +121,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[*logger.Logger]():
-		return []any{r.f_Logger}
+		return []any{r.get_Logger()}
 	}
 	return nil
 }
@@ -158,7 +184,7 @@ func (s *scope) Close() error {
 	return nil
 }
 
-func (s *scope) Logger() *logger.Logger { return s.root.f_Logger }
+func (s *scope) Logger() *logger.Logger { return s.root.get_Logger() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

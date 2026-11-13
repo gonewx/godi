@@ -10,17 +10,43 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_FakeService fakes.IFakeService
-	closed        bool
+	f_FakeService  fakes.IFakeService
+	st_FakeService uint8
+	closed         bool
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
-	r.f_FakeService = fakes.NewFakeService()
+	defer func() {
+		if rec := recover(); rec != nil {
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_FakeService()
 	return r, nil
+}
+
+func (r *Root) get_FakeService() fakes.IFakeService {
+	if r.st_FakeService == 2 {
+		return r.f_FakeService
+	}
+	if r.st_FakeService == 1 {
+		panic(godi.CircularDependencyError("FakeService"))
+	}
+	r.st_FakeService = 1
+	defer func() {
+		if r.st_FakeService != 2 {
+			r.st_FakeService = 0
+		}
+	}()
+	v := fakes.NewFakeService()
+	r.f_FakeService = v
+	r.st_FakeService = 2
+	return v
 }
 
 func (r *Root) NewFakeOneMultipleService() fakes.IFakeMultipleService {
@@ -32,10 +58,10 @@ func (r *Root) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 }
 
 func (r *Root) NewFakeOuterService() fakes.IFakeOuterService {
-	return fakes.NewFakeOuterService(r.f_FakeService, []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
+	return fakes.NewFakeOuterService(r.get_FakeService(), []fakes.IFakeMultipleService{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()})
 }
 
-func (r *Root) FakeService() fakes.IFakeService { return r.f_FakeService }
+func (r *Root) FakeService() fakes.IFakeService { return r.get_FakeService() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -62,7 +88,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return r.f_FakeService
+		return r.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return r.NewFakeTwoMultipleService()
 	case reflect.TypeFor[fakes.IFakeOuterService]():
@@ -115,7 +141,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return []any{r.f_FakeService}
+		return []any{r.get_FakeService()}
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return []any{r.NewFakeOneMultipleService(), r.NewFakeTwoMultipleService()}
 	case reflect.TypeFor[fakes.IFakeOuterService]():
@@ -150,7 +176,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return s.root.f_FakeService
+		return s.root.get_FakeService()
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return s.NewFakeTwoMultipleService()
 	case reflect.TypeFor[fakes.IFakeOuterService]():
@@ -197,7 +223,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[fakes.IFakeService]():
-		return []any{s.root.f_FakeService}
+		return []any{s.root.get_FakeService()}
 	case reflect.TypeFor[fakes.IFakeMultipleService]():
 		return []any{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()}
 	case reflect.TypeFor[fakes.IFakeOuterService]():
@@ -228,10 +254,10 @@ func (s *scope) NewFakeTwoMultipleService() fakes.IFakeMultipleService {
 }
 
 func (s *scope) NewFakeOuterService() fakes.IFakeOuterService {
-	return fakes.NewFakeOuterService(s.root.f_FakeService, []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
+	return fakes.NewFakeOuterService(s.root.get_FakeService(), []fakes.IFakeMultipleService{s.NewFakeOneMultipleService(), s.NewFakeTwoMultipleService()})
 }
 
-func (s *scope) FakeService() fakes.IFakeService { return s.root.f_FakeService }
+func (s *scope) FakeService() fakes.IFakeService { return s.root.get_FakeService() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

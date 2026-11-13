@@ -12,24 +12,51 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_Widget svc.IWidget
-	disp     *runtime.Disposer
-	closed   bool
-	closeErr error
+	f_Widget  svc.IWidget
+	st_Widget uint8
+	disp      *runtime.Disposer
+	closed    bool
+	closeErr  error
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
 	r.disp = runtime.NewDisposer()
-	r.f_Widget = (func(p godi.Provider) svc.IWidget { return svc.NewWidget() })(r)
-	r.disp.TrackAny(r.f_Widget)
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = r.disp.CloseAll()
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_Widget()
 	return r, nil
 }
 
-func (r *Root) Widget() svc.IWidget { return r.f_Widget }
+func (r *Root) get_Widget() svc.IWidget {
+	if r.st_Widget == 2 {
+		return r.f_Widget
+	}
+	if r.st_Widget == 1 {
+		panic(godi.CircularDependencyError("Widget"))
+	}
+	r.st_Widget = 1
+	defer func() {
+		if r.st_Widget != 2 {
+			r.st_Widget = 0
+		}
+	}()
+	v := (func(p godi.Provider) svc.IWidget { return svc.NewWidget() })(r)
+	r.f_Widget = v
+	r.disp.TrackAny(v)
+	r.st_Widget = 2
+	return v
+}
+
+func (r *Root) Widget() svc.IWidget { return r.get_Widget() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -56,7 +83,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IWidget]():
-		return r.f_Widget
+		return r.get_Widget()
 	}
 	return nil
 }
@@ -101,7 +128,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[svc.IWidget]():
-		return []any{r.f_Widget}
+		return []any{r.get_Widget()}
 	}
 	return nil
 }
@@ -177,7 +204,7 @@ func (s *scope) Close() error {
 	return nil
 }
 
-func (s *scope) Widget() svc.IWidget { return s.root.f_Widget }
+func (s *scope) Widget() svc.IWidget { return s.root.get_Widget() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

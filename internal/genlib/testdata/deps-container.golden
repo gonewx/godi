@@ -10,24 +10,70 @@ import (
 
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
-	f_Dep      *svc.Dep
-	f_Consumer *svc.Consumer
-	closed     bool
+	f_Dep       *svc.Dep
+	st_Dep      uint8
+	f_Consumer  *svc.Consumer
+	st_Consumer uint8
+	closed      bool
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
-	r.f_Dep = svc.NewDep()
-	r.f_Consumer = svc.NewConsumer(r.f_Dep)
+	defer func() {
+		if rec := recover(); rec != nil {
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_Dep()
+	r.get_Consumer()
 	return r, nil
 }
 
-func (r *Root) Dep() *svc.Dep { return r.f_Dep }
+func (r *Root) get_Dep() *svc.Dep {
+	if r.st_Dep == 2 {
+		return r.f_Dep
+	}
+	if r.st_Dep == 1 {
+		panic(godi.CircularDependencyError("Dep"))
+	}
+	r.st_Dep = 1
+	defer func() {
+		if r.st_Dep != 2 {
+			r.st_Dep = 0
+		}
+	}()
+	v := svc.NewDep()
+	r.f_Dep = v
+	r.st_Dep = 2
+	return v
+}
 
-func (r *Root) Consumer() *svc.Consumer { return r.f_Consumer }
+func (r *Root) get_Consumer() *svc.Consumer {
+	if r.st_Consumer == 2 {
+		return r.f_Consumer
+	}
+	if r.st_Consumer == 1 {
+		panic(godi.CircularDependencyError("Consumer"))
+	}
+	r.st_Consumer = 1
+	defer func() {
+		if r.st_Consumer != 2 {
+			r.st_Consumer = 0
+		}
+	}()
+	v := svc.NewConsumer(r.get_Dep())
+	r.f_Consumer = v
+	r.st_Consumer = 2
+	return v
+}
+
+func (r *Root) Dep() *svc.Dep { return r.get_Dep() }
+
+func (r *Root) Consumer() *svc.Consumer { return r.get_Consumer() }
 
 func (r *Root) Get[T any]() (T, bool) {
 	v := r.GetService(reflect.TypeFor[T]())
@@ -54,9 +100,9 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Dep]():
-		return r.f_Dep
+		return r.get_Dep()
 	case reflect.TypeFor[*svc.Consumer]():
-		return r.f_Consumer
+		return r.get_Consumer()
 	}
 	return nil
 }
@@ -103,9 +149,9 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Dep]():
-		return []any{r.f_Dep}
+		return []any{r.get_Dep()}
 	case reflect.TypeFor[*svc.Consumer]():
-		return []any{r.f_Consumer}
+		return []any{r.get_Consumer()}
 	}
 	return nil
 }
@@ -168,9 +214,9 @@ func (s *scope) Close() error {
 	return nil
 }
 
-func (s *scope) Dep() *svc.Dep { return s.root.f_Dep }
+func (s *scope) Dep() *svc.Dep { return s.root.get_Dep() }
 
-func (s *scope) Consumer() *svc.Consumer { return s.root.f_Consumer }
+func (s *scope) Consumer() *svc.Consumer { return s.root.get_Consumer() }
 
 func (s *scope) Get[T any]() (T, bool) {
 	v := s.GetService(reflect.TypeFor[T]())

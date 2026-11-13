@@ -40,14 +40,15 @@ func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
 	testutil.NoError(t, err)
 
 	code := string(src)
-	testutil.True(t, strings.Contains(code, "NewConsumer(r.f_"),
+	testutil.True(t, strings.Contains(code, "NewConsumer(r.get_"),
 		"generator must discover NewConsumer and pass its discovered dependency as an argument")
 }
 
 // TestGenerator_FormA_DetectsTrailingErrorCtor covers 2.1-GEN-002 (AC1).
 //
-// When a discovered constructor has a trailing error return, the emitted NewRoot
-// must adopt the (*Root, error) signature so the error can propagate (AD-8/D-1).
+// When a discovered constructor has a trailing error return, the singleton's
+// accessor must use comma-err form and panic with the error, which NewRoot
+// recovers and returns (AD-8/D-1).
 func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
 	src, err := generate("testdata/deps", "codegen", "")
 	testutil.NoError(t, err)
@@ -56,13 +57,16 @@ func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
 	// The (*Root, error) signature alone is a tautology under D-1 (NewRoot is
 	// unconditionally (*Root, error)); assert the actual comma-err WIRING that
 	// proves hasTrailingError read CtorErr from NewConsumer's (*Consumer, error).
-	testutil.True(t, strings.Contains(code, "r.f_Consumer, err = depsfix.NewConsumer(r.f_FakeService)"),
-		"a discovered trailing-error ctor must emit comma-err assignment form")
-	testutil.True(t, strings.Contains(code, "return nil, err"),
+	consumer := emittedFunc(t, code, "func (r *Root) get_Consumer(")
+	testutil.True(t, strings.Contains(consumer,
+		"v, err := depsfix.NewConsumer(r.get_FakeService())\n\tif err != nil {\n\t\tpanic(err)\n\t}"),
+		"a discovered trailing-error ctor must emit comma-err form that panics with the error")
+	testutil.True(t, strings.Contains(emittedFunc(t, code, "func NewRoot("), "root, err = nil, godi.BuildError(rec)"),
 		"a trailing-error ctor must propagate the error up from NewRoot")
 	// Negative guard: the no-error sibling must use single-assignment form, proving
 	// CtorErr is detected per-service, not emitted unconditionally.
-	testutil.True(t, strings.Contains(code, "r.f_FakeService = depsfix.NewFakeService()"),
+	fake := emittedFunc(t, code, "func (r *Root) get_FakeService(")
+	testutil.True(t, strings.Contains(fake, "v := depsfix.NewFakeService()") && !strings.Contains(fake, "err"),
 		"a no-error ctor must emit single-assignment form, not comma-err")
 }
 
@@ -98,7 +102,8 @@ func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
 // TestGenerator_FormB_InlinesFactoryExpression covers 2.1-GEN-005 (AC1).
 //
 // Form B is the fallback: the generator statically reads the factory argument
-// expression and inlines it into NewRoot as `r.f_I = (factoryExpr)(r)` (D-2).
+// expression and inlines it into the singleton's accessor as
+// `v := (factoryExpr)(r)` (D-2).
 //
 // Since the Task-0 godi-gen extension (gois story 2-1), inlining into a
 // DIFFERENT package than the registration package-qualifies the factory body's
@@ -113,7 +118,7 @@ func TestGenerator_FormB_InlinesFactoryExpression(t *testing.T) {
 
 	code := string(src)
 	testutil.True(t, strings.Contains(code,
-		"r.f_IWidget = (func(p godi.Provider) formbfix.IWidget { return formbfix.NewWidget() })(r)"),
+		"v := (func(p godi.Provider) formbfix.IWidget { return formbfix.NewWidget() })(r)"),
 		"a form-B factory inlined into a different package must package-qualify "+
 			"registration-package identifiers (D-2 + Task-0 qualification)")
 	testutil.True(t, strings.Contains(code,

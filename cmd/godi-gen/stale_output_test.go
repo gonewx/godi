@@ -20,7 +20,7 @@ func TestGenerate_IgnoresStaleGeneratedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stale output must not block regeneration: %v", err)
 	}
-	if !bytes.Contains(out, []byte("r.f_Foo = NewFoo(r.f_Log)")) {
+	if !bytes.Contains(out, []byte("v := NewFoo(r.get_Log())")) {
 		t.Fatalf("regenerated container must call NewFoo with its ILog dependency, got:\n%s", out)
 	}
 	if bytes.Contains(out, []byte("NewFoo()")) {

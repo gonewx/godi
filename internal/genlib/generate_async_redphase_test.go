@@ -84,15 +84,16 @@ func mixedAsyncRegistry() *plan.Registry {
 
 // --- 6.3-GEN-001 (AC2, P0) ---------------------------------------------------
 
-// TestEmitAsyncDispose_TrackAsyncCallsEmitted: NewRoot must track async-only
-// services; the emit is TrackAny, which routes them to TrackAsync at run time.
+// TestEmitAsyncDispose_TrackAsyncCallsEmitted: the singleton accessor must track
+// async-only services; the emit is TrackAny, which routes them to TrackAsync at
+// run time.
 func TestEmitAsyncDispose_TrackAsyncCallsEmitted(t *testing.T) {
 	src, err := genlib.Generate(asyncDisposableRegistry(), "codegen")
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, "r.disp.TrackAny(r.f_DBConn)"),
-		"NewRoot must emit TrackAny calls for async-only disposable services")
+	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_DBConn("), "r.disp.TrackAny(v)"),
+		"the DBConn accessor must emit TrackAny for an async-only disposable service")
 }
 
 // --- 6.3-GEN-002 (AC6, P0) ---------------------------------------------------
@@ -107,7 +108,7 @@ func TestEmitAsyncDispose_SyncTrackUnchangedForBoth(t *testing.T) {
 	code := string(src)
 
 	for _, name := range []string{"SyncOnly", "AsyncOnly", "Both"} {
-		testutil.True(t, strings.Contains(code, "r.disp.TrackAny(r.f_"+name+")"),
+		testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_"+name+"("), "r.disp.TrackAny(v)"),
 			name+" must be tracked via disp.TrackAny")
 	}
 	testutil.True(t, !strings.Contains(code, ".(io.Closer)") && !strings.Contains(code, ".(godi.AsyncDisposable)"),

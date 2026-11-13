@@ -15,13 +15,16 @@ import (
 // error (AD-3: bad graph → zero-byte code, NFR2 hard gate).
 //
 // The emitted container is a full godi.Provider implementation (AD-16 six-method
-// face) with singletons stored as typed Root fields and constructed eagerly in
-// NewRoot (AD-1: lifetime = where the instance lives). reflect.Type is used as
-// the dispatch key only (Tier B, AD-13); construction is the direct Ctor call,
+// face) with singletons stored as typed Root fields (AD-1: lifetime = where the
+// instance lives). Each singleton is built by its own lazy accessor get_<N>, and
+// NewRoot triggers every accessor in registration order, so construction order
+// follows first access at run time — form-B factories are opaque to the
+// generator, so no static order could be trusted. reflect.Type is used as the
+// dispatch key only (Tier B, AD-13); construction is the direct Ctor call,
 // never reflect.New / reflect.Value.Call.
 //
 // Story 2.2 evolves the emit for three lifetimes (AD-1):
-//   - Singleton = Root field (NewRoot eager, unchanged from 2.1)
+//   - Singleton = Root field + lazy accessor (all built before NewRoot returns)
 //   - Scoped = Root field (root-level) + scope field (scope-level, D-2)
 //   - Transient = New{T}() method on Root and scope (each call new, D-4)
 func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
@@ -59,7 +62,6 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	singletons := filterByLifetime(services, plan.Singleton)
 	scoped := filterByLifetime(services, plan.Scoped)
 	transients := reg.Transients()
-	singletonWiring := reg.SingletonsTopo()
 	scopedWiring := reg.ScopedTopo()
 	hasLifetimes := len(scoped) > 0 || len(transients) > 0
 	disposables := hasDisposables(services)
@@ -68,7 +70,6 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	keyedSingletons := filterByLifetime(keyedServices, plan.Singleton)
 	keyedScoped := filterByLifetime(keyedServices, plan.Scoped)
 	keyedTransients := reg.KeyedTransients()
-	keyedSingletonWiring := reg.KeyedSingletonsTopo()
 	hasKeyed := len(keyedServices) > 0
 	if hasKeyed {
 		hasLifetimes = true
@@ -85,7 +86,10 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 	emitImports(&buf, reg.Imports, disposables, hasAsync)
 	emitRootStruct(&buf, singletons, scoped, disposables, keyedSingletons, keyedScoped)
 	emitProviderAssertion(&buf)
-	emitNewRoot(&buf, singletonWiring, scopedWiring, reg, disposables, keyedSingletonWiring, reg.KeyedScopedTopo())
+	emitNewRoot(&buf, singletons, keyedSingletons, scopedWiring, reg.KeyedScopedTopo(), reg, disposables)
+	for _, s := range concatServices(singletons, keyedSingletons) {
+		emitLazyAccessor(&buf, "r", "*Root", s, "r", reg)
+	}
 
 	if hasLifetimes {
 		emitTransientMethods(&buf, transients, "r", "*Root", reg, disposables)
@@ -209,14 +213,18 @@ func emitImports(buf *bytes.Buffer, userImports []string, disposables, hasAsync 
 func emitRootStruct(buf *bytes.Buffer, singletons, scoped []plan.Service, disposables bool, keyedSingletons, keyedScoped []plan.Service) {
 	fmt.Fprintf(buf, "// Root is the generated singleton container (AD-1: singleton = Root field).\n")
 	fmt.Fprintf(buf, "type Root struct {\n")
+	// Each singleton carries a construction state next to its field (see
+	// emitLazyAccessor): 0 not built, 1 being built, 2 built.
 	for _, s := range singletons {
-		fmt.Fprintf(buf, "\tf_%s %s\n", s.Name, s.GoType)
+		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
+		fmt.Fprintf(buf, "\tst_%s uint8\n", sanitizeFieldName(s.Name))
 	}
 	for _, s := range scoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", s.Name, s.GoType)
 	}
 	for _, s := range keyedSingletons {
 		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
+		fmt.Fprintf(buf, "\tst_%s uint8\n", sanitizeFieldName(s.Name))
 	}
 	for _, s := range keyedScoped {
 		fmt.Fprintf(buf, "\tf_%s %s\n", sanitizeFieldName(s.Name), s.GoType)
@@ -242,44 +250,129 @@ func emitProviderAssertion(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "var _ godi.Provider = (*Root)(nil)\n\n")
 }
 
-// emitNewRoot writes the eager singleton + root-level scoped wiring, plus keyed
-// singleton and root-level keyed scoped wiring (AD-1, D-2). Root acts as the root
-// scope, so keyed scoped services are materialized on Root just like unkeyed scoped
-// — keeping keyed/unkeyed and codegen/runtime consistent (AC1, AD-15).
-func emitNewRoot(buf *bytes.Buffer, singletonWiring, scopedWiring []plan.Service, reg *plan.Registry, disposables bool, keyedSingletonWiring, keyedScopedWiring []plan.Service) {
-	needsErr := false
-	for _, s := range singletonWiring {
-		if s.CtorErr && s.FactoryExpr == "" {
-			needsErr = true
-			break
-		}
-	}
-	if !needsErr {
-		for _, s := range scopedWiring {
-			if s.CtorErr && s.FactoryExpr == "" {
-				needsErr = true
-				break
-			}
-		}
-	}
-
-	fmt.Fprintf(buf, "// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).\n")
-	fmt.Fprintf(buf, "func NewRoot() (*Root, error) {\n")
+// emitNewRoot writes NewRoot. It triggers every singleton accessor — unkeyed in
+// registration order, then keyed in registration order — and then wires the
+// root-level scoped services (unkeyed, then keyed) eagerly in topological order:
+// Root acts as the root scope, so keyed scoped services are materialized on Root
+// just like unkeyed scoped (AC1, AD-15). Any panic while building (a factory
+// resolving an unregistered service, a cycle through form-B factories, a
+// constructor error) is recovered: tracked disposables are released and the
+// panic is returned as godi.BuildError.
+func emitNewRoot(buf *bytes.Buffer, singletons, keyedSingletons, scopedWiring, keyedScopedWiring []plan.Service, reg *plan.Registry, disposables bool) {
+	fmt.Fprintf(buf, "// NewRoot builds every singleton and root-level scoped service. A panic during\n")
+	fmt.Fprintf(buf, "// construction is returned as an error after tracked disposables are released.\n")
+	fmt.Fprintf(buf, "func NewRoot() (root *Root, err error) {\n")
 	fmt.Fprintf(buf, "\tr := &Root{}\n")
 	if disposables {
 		fmt.Fprintf(buf, "\tr.disp = runtime.NewDisposer()\n")
 	}
-	if needsErr {
-		fmt.Fprintf(buf, "\tvar err error\n")
+	fmt.Fprintf(buf, "\tdefer func() {\n")
+	fmt.Fprintf(buf, "\t\tif rec := recover(); rec != nil {\n")
+	if disposables {
+		fmt.Fprintf(buf, "\t\t\t_ = r.disp.CloseAll()\n")
 	}
+	fmt.Fprintf(buf, "\t\t\troot, err = nil, godi.BuildError(rec)\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\t}()\n")
 
-	emitWiringBlock(buf, singletonWiring, "r", reg)
+	for _, s := range concatServices(singletons, keyedSingletons) {
+		fmt.Fprintf(buf, "\tr.get_%s()\n", sanitizeFieldName(s.Name))
+	}
+	// Root-level scoped wiring is still eager and topological; a constructor
+	// error there is returned through the named err result.
 	emitWiringBlock(buf, scopedWiring, "r", reg)
-	emitKeyedWiringBlock(buf, keyedSingletonWiring, "r", reg)
 	emitKeyedWiringBlock(buf, keyedScopedWiring, "r", reg)
 
 	fmt.Fprintf(buf, "\treturn r, nil\n")
 	fmt.Fprintf(buf, "}\n\n")
+}
+
+// emitLazyAccessor writes the accessor that builds service s on first access and
+// caches it in recv's f_<N> field. The st_<N> state (0 not built, 1 being built,
+// 2 built) turns re-entry during construction — a cycle the generator could not
+// see, typically through form-B factories — into a godi.CircularDependencyError
+// panic, and is reset to 0 if construction panics so the state never claims a
+// half-built instance. recv/recvType name the receiver that owns the field;
+// depCtx is the receiver context dependency expressions are rendered in (see
+// singleDepExpr). A constructor error panics; NewRoot recovers it.
+func emitLazyAccessor(buf *bytes.Buffer, recv, recvType string, s plan.Service, depCtx string, reg *plan.Registry) {
+	n := sanitizeFieldName(s.Name)
+	fmt.Fprintf(buf, "func (%s %s) get_%s() %s {\n", recv, recvType, n, s.GoType)
+	fmt.Fprintf(buf, "\tif %s.st_%s == 2 {\n", recv, n)
+	fmt.Fprintf(buf, "\t\treturn %s.f_%s\n", recv, n)
+	fmt.Fprintf(buf, "\t}\n")
+	fmt.Fprintf(buf, "\tif %s.st_%s == 1 {\n", recv, n)
+	fmt.Fprintf(buf, "\t\tpanic(godi.CircularDependencyError(%q))\n", s.Name)
+	fmt.Fprintf(buf, "\t}\n")
+	fmt.Fprintf(buf, "\t%s.st_%s = 1\n", recv, n)
+	fmt.Fprintf(buf, "\tdefer func() {\n")
+	fmt.Fprintf(buf, "\t\tif %s.st_%s != 2 {\n", recv, n)
+	fmt.Fprintf(buf, "\t\t\t%s.st_%s = 0\n", recv, n)
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\t}()\n")
+	switch {
+	case s.FactoryExpr != "":
+		fmt.Fprintf(buf, "\tv := (%s)(%s)\n", s.FactoryExpr, recv)
+	case s.CtorErr:
+		args := accessorDepArgs(buf, s.Deps, depCtx, reg)
+		fmt.Fprintf(buf, "\tv, err := %s(%s)\n", s.Ctor, args)
+		fmt.Fprintf(buf, "\tif err != nil {\n")
+		fmt.Fprintf(buf, "\t\tpanic(err)\n")
+		fmt.Fprintf(buf, "\t}\n")
+	default:
+		args := accessorDepArgs(buf, s.Deps, depCtx, reg)
+		fmt.Fprintf(buf, "\tv := %s(%s)\n", s.Ctor, args)
+	}
+	fmt.Fprintf(buf, "\t%s.f_%s = v\n", recv, n)
+	emitTrack(buf, recv, "v", s)
+	fmt.Fprintf(buf, "\t%s.st_%s = 2\n", recv, n)
+	fmt.Fprintf(buf, "\treturn v\n")
+	fmt.Fprintf(buf, "}\n\n")
+}
+
+// accessorDepArgs renders a lazy accessor's constructor arguments in receiver
+// context ctx. A transient dependency whose constructor returns an error is
+// first bound to a temporary named after its argument position — d<i>, or
+// d<i>_<j> for element j of a slice argument — and its error panics.
+func accessorDepArgs(buf *bytes.Buffer, deps []string, ctx string, reg *plan.Registry) string {
+	errTemp := func(name, svc string) string {
+		fmt.Fprintf(buf, "\t%s, err := %s.New%s()\n", name, ctx, svc)
+		fmt.Fprintf(buf, "\tif err != nil {\n")
+		fmt.Fprintf(buf, "\t\tpanic(err)\n")
+		fmt.Fprintf(buf, "\t}\n")
+		return name
+	}
+	parts := make([]string, len(deps))
+	for i, d := range deps {
+		if strings.HasPrefix(d, "[]") {
+			services := reg.ServicesByGoType(d[2:])
+			elems := make([]string, len(services))
+			for j, s := range services {
+				if s.Lifetime == plan.Transient && s.CtorErr {
+					elems[j] = errTemp(fmt.Sprintf("d%d_%d", i, j), s.Name)
+					continue
+				}
+				elems[j] = singleDepExpr(s.Name, ctx, reg)
+			}
+			parts[i] = d + "{" + strings.Join(elems, ", ") + "}"
+			continue
+		}
+		if s, ok := reg.Lookup(d); ok && s.Lifetime == plan.Transient && s.CtorErr {
+			parts[i] = errTemp(fmt.Sprintf("d%d", i), d)
+			continue
+		}
+		parts[i] = singleDepExpr(d, ctx, reg)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// singletonGet returns the expression that reads singleton s from receiver
+// context recv: r.get_<N>() on Root, <recv>.root.get_<N>() on a scope.
+func singletonGet(recv string, s plan.Service) string {
+	if recv == "r" {
+		return "r.get_" + sanitizeFieldName(s.Name) + "()"
+	}
+	return recv + ".root.get_" + sanitizeFieldName(s.Name) + "()"
 }
 
 // tracksDisposal reports whether instances of s are handed to the disposer. A
@@ -379,6 +472,9 @@ func singleDepExpr(dep, recv string, reg *plan.Registry) string {
 	if s.Lifetime == plan.Transient && s.CtorErr {
 		return "dep_" + dep
 	}
+	if s.Lifetime == plan.Singleton {
+		return singletonGet(recv, s)
+	}
 	switch recv {
 	case "r":
 		if s.Lifetime == plan.Transient {
@@ -387,8 +483,6 @@ func singleDepExpr(dep, recv string, reg *plan.Registry) string {
 		return "r.f_" + dep
 	case "s":
 		switch s.Lifetime {
-		case plan.Singleton:
-			return "s.root.f_" + dep
 		case plan.Scoped:
 			return "s.f_" + dep
 		case plan.Transient:
@@ -486,7 +580,7 @@ func emitGetServiceLifetimes(buf *bytes.Buffer, singletons, scoped, transients [
 			seen[s.GoType] = struct{}{}
 			last := lastByGoType(singletons, s.GoType)
 			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
-			fmt.Fprintf(buf, "\t\treturn r.f_%s\n", last.Name)
+			fmt.Fprintf(buf, "\t\treturn %s\n", singletonGet("r", last))
 		}
 		for _, s := range scoped {
 			if _, dup := seen[s.GoType]; dup {
@@ -535,7 +629,7 @@ func emitGetServiceSingletonsOnly(buf *bytes.Buffer, singletons []plan.Service, 
 			seen[s.GoType] = struct{}{}
 			last := lastByGoType(singletons, s.GoType)
 			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", s.GoType)
-			fmt.Fprintf(buf, "\t\treturn r.f_%s\n", last.Name)
+			fmt.Fprintf(buf, "\t\treturn %s\n", singletonGet("r", last))
 		}
 		fmt.Fprintf(buf, "\t}\n")
 	}
@@ -678,6 +772,9 @@ func emitCollectionReturn(buf *bytes.Buffer, group []plan.Service, recv string) 
 }
 
 func collectionItemExpr(s plan.Service, recv string) string {
+	if s.Lifetime == plan.Singleton {
+		return singletonGet(recv, s)
+	}
 	switch recv {
 	case "r":
 		if s.Lifetime == plan.Transient {
@@ -686,8 +783,6 @@ func collectionItemExpr(s plan.Service, recv string) string {
 		return recv + ".f_" + s.Name
 	case "s", "ns":
 		switch s.Lifetime {
-		case plan.Singleton:
-			return recv + ".root.f_" + s.Name
 		case plan.Scoped:
 			return recv + ".f_" + s.Name
 		case plan.Transient:
@@ -758,7 +853,7 @@ func depArgsForCreateScope(deps []string, reg *plan.Registry) string {
 		}
 		switch s.Lifetime {
 		case plan.Singleton:
-			parts[i] = "s.root.f_" + d
+			parts[i] = singletonGet("s", s)
 		case plan.Scoped:
 			parts[i] = "s.f_" + d
 		case plan.Transient:
@@ -948,7 +1043,7 @@ func emitScopeGetService(buf *bytes.Buffer, singletons, scoped, transients []pla
 			seen[svc.GoType] = struct{}{}
 			last := lastByGoType(singletons, svc.GoType)
 			fmt.Fprintf(buf, "\tcase reflect.TypeFor[%s]():\n", svc.GoType)
-			fmt.Fprintf(buf, "\t\treturn s.root.f_%s\n", last.Name)
+			fmt.Fprintf(buf, "\t\treturn %s\n", singletonGet("s", last))
 		}
 		for _, svc := range scoped {
 			if _, dup := seen[svc.GoType]; dup {
@@ -1171,7 +1266,7 @@ func depArgsForNestedScope(deps []string, reg *plan.Registry) string {
 		}
 		switch s.Lifetime {
 		case plan.Singleton:
-			parts[i] = "ns.root.f_" + d
+			parts[i] = singletonGet("ns", s)
 		case plan.Scoped:
 			parts[i] = "ns.f_" + d
 		case plan.Transient:
@@ -1223,10 +1318,7 @@ func emitScopeClose(buf *bytes.Buffer, disposables, hasAsync bool) {
 
 func emitTypedAccessors(buf *bytes.Buffer, singletons, scoped []plan.Service, recv, typeName string) {
 	for _, s := range singletons {
-		expr := recv + ".f_" + s.Name
-		if recv == "s" {
-			expr = "s.root.f_" + s.Name
-		}
+		expr := singletonGet(recv, s)
 		fmt.Fprintf(buf, "func (%s %s) %s() %s { return %s }\n\n", recv, typeName, s.Name, s.GoType, expr)
 	}
 	for _, s := range scoped {
@@ -1370,16 +1462,10 @@ func emitKeyedServiceReturn(buf *bytes.Buffer, s plan.Service, recv string) {
 	switch s.Lifetime {
 	case plan.Transient:
 		fmt.Fprintf(buf, "\t\t\treturn %s.New%s()\n", recv, fname)
+	case plan.Singleton:
+		fmt.Fprintf(buf, "\t\t\treturn %s\n", singletonGet(recv, s))
 	default:
-		if recv == "s" {
-			if s.Lifetime == plan.Singleton {
-				fmt.Fprintf(buf, "\t\t\treturn %s.root.f_%s\n", recv, fname)
-			} else {
-				fmt.Fprintf(buf, "\t\t\treturn %s.f_%s\n", recv, fname)
-			}
-		} else {
-			fmt.Fprintf(buf, "\t\t\treturn %s.f_%s\n", recv, fname)
-		}
+		fmt.Fprintf(buf, "\t\t\treturn %s.f_%s\n", recv, fname)
 	}
 }
 
@@ -1504,12 +1590,10 @@ func emitKeyedCollectionReturn(buf *bytes.Buffer, services []plan.Service, recv 
 		switch s.Lifetime {
 		case plan.Transient:
 			fmt.Fprintf(buf, "%s.New%s()", recv, fname)
+		case plan.Singleton:
+			fmt.Fprintf(buf, "%s", singletonGet(recv, s))
 		default:
-			if recv == "s" && s.Lifetime == plan.Singleton {
-				fmt.Fprintf(buf, "%s.root.f_%s", recv, fname)
-			} else {
-				fmt.Fprintf(buf, "%s.f_%s", recv, fname)
-			}
+			fmt.Fprintf(buf, "%s.f_%s", recv, fname)
 		}
 	}
 	fmt.Fprintf(buf, "}\n")

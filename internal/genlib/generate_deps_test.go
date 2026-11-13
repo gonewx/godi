@@ -15,9 +15,11 @@
 // API CONTRACT (unchanged signature, evolved emit shape):
 //
 //	genlib.Generate(reg *plan.Registry, pkgName string) ([]byte, error)
-//	emit shape: NewRoot() (*Root, error); deps as `r.f_X = Ctor(r.f_Dep)`;
-//	error ctor as `r.f_X, err = Ctor(...); if err != nil { return nil, err }`;
-//	form B as `r.f_X = (factoryExpr)(r)`.
+//	emit shape: NewRoot() (*Root, error); since the lazy-singleton change each
+//	singleton is built by its accessor get_X: deps as `v := Ctor(r.get_Dep())`;
+//	error ctor as `v, err := Ctor(...); if err != nil { panic(err) }`, which
+//	NewRoot recovers and returns as godi.BuildError; form B as
+//	`v := (factoryExpr)(r)`.
 package genlib_test
 
 import (
@@ -51,22 +53,25 @@ func depsRegistry() *plan.Registry {
 	return reg
 }
 
-// TestGenerateDeps_EmitsDependencyArgumentsInTopoOrder covers 2.1-EMIT-001 (AC1).
+// TestGenerateDeps_EmitsDependencyArgumentsThroughAccessors covers 2.1-EMIT-001
+// (AC1).
 //
-// NewRoot must construct Consumer with its dependency field as an argument, and
-// Dep must be wired before Consumer (topo order).
-func TestGenerateDeps_EmitsDependencyArgumentsInTopoOrder(t *testing.T) {
+// Consumer's accessor must pass its dependency as a constructor argument read
+// through Dep's accessor, so Dep is built on demand whatever the trigger order;
+// NewRoot triggers both accessors in registration order.
+func TestGenerateDeps_EmitsDependencyArgumentsThroughAccessors(t *testing.T) {
 	src, err := genlib.Generate(depsRegistry(), "codegen")
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, "r.f_Consumer = svc.NewConsumer(r.f_Dep)"),
-		"NewRoot must wire Consumer with its dependency: r.f_Consumer = svc.NewConsumer(r.f_Dep)")
+	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_Consumer("), "v := svc.NewConsumer(r.get_Dep())"),
+		"Consumer's accessor must construct it with its dependency: v := svc.NewConsumer(r.get_Dep())")
 
-	depIdx := strings.Index(code, "r.f_Dep = svc.NewDep()")
-	consIdx := strings.Index(code, "r.f_Consumer = svc.NewConsumer(r.f_Dep)")
+	newRoot := methodBody(t, code, "func NewRoot(")
+	depIdx := strings.Index(newRoot, "r.get_Dep()")
+	consIdx := strings.Index(newRoot, "r.get_Consumer()")
 	testutil.True(t, depIdx >= 0 && depIdx < consIdx,
-		"Dep must be wired before Consumer (SingletonsTopo dependency order)")
+		"NewRoot must trigger singleton accessors in registration order")
 }
 
 // TestGenerateDeps_NewRootReturnsError covers 2.1-EMIT-002 (AC1).
@@ -77,15 +82,16 @@ func TestGenerateDeps_NewRootReturnsError(t *testing.T) {
 	src, err := genlib.Generate(depsRegistry(), "codegen")
 	testutil.NoError(t, err)
 
-	testutil.True(t, strings.Contains(string(src), "func NewRoot() (*Root, error)"),
+	testutil.True(t, strings.Contains(string(src), "func NewRoot() (root *Root, err error)"),
 		"NewRoot must evolve to (*Root, error) for constructor error propagation (D-1)")
 }
 
 // TestGenerateDeps_PropagatesCtorError covers 2.1-EMIT-003 (AC1).
 //
 // A singleton whose constructor returns a trailing error (CtorErr) must be
-// emitted in comma-err form with an early `return nil, err` so the error
-// propagates out of NewRoot (AD-8 error pass-through).
+// emitted in comma-err form inside its accessor, panicking with the error, and
+// NewRoot's recover must return it wrapped by godi.BuildError so the error
+// propagates out of NewRoot (AD-8 error pass-through, reachable via errors.Is).
 func TestGenerateDeps_PropagatesCtorError(t *testing.T) {
 	reg := plan.NewRegistry()
 	reg.Imports = []string{"example.com/svc"}
@@ -101,9 +107,10 @@ func TestGenerateDeps_PropagatesCtorError(t *testing.T) {
 	testutil.NoError(t, err)
 	code := string(src)
 
-	testutil.True(t, strings.Contains(code, "r.f_Fallible, err = svc.NewFallible()"),
-		"error-returning ctor must use comma-err assignment form")
-	testutil.True(t, strings.Contains(code, "return nil, err"),
+	accessor := methodBody(t, code, "func (r *Root) get_Fallible(")
+	testutil.True(t, strings.Contains(accessor, "v, err := svc.NewFallible()\n\tif err != nil {\n\t\tpanic(err)\n\t}"),
+		"error-returning ctor must use comma-err form and panic with the error:\n"+accessor)
+	testutil.True(t, strings.Contains(methodBody(t, code, "func NewRoot("), "root, err = nil, godi.BuildError(rec)"),
 		"a trailing-error ctor must propagate the error up from NewRoot")
 }
 
@@ -133,7 +140,8 @@ func TestGenerateDeps_FormADepsGolden(t *testing.T) {
 }
 
 // TestGenerateDeps_FormBInlineGolden covers the form-B escape hatch (D-2): the
-// factory expression is inlined as `r.f_X = (factoryExpr)(r)`, byte-stable via a
+// factory expression is inlined as `v := (factoryExpr)(r)` in the singleton's
+// accessor, byte-stable via a
 // golden. FactoryExpr here is supplied directly as ALREADY-PACKAGE-QUALIFIED
 // source text (svc.IWidget / svc.NewWidget) to pin genlib's emit shape for a
 // well-formed input.
@@ -157,7 +165,7 @@ func TestGenerateDeps_FormBInlineGolden(t *testing.T) {
 	testutil.NoError(t, err)
 
 	testutil.True(t, strings.Contains(string(src),
-		"r.f_Widget = (func(p godi.Provider) svc.IWidget { return svc.NewWidget() })(r)"),
+		"v := (func(p godi.Provider) svc.IWidget { return svc.NewWidget() })(r)"),
 		"form-B factory expression must be inlined as (factoryExpr)(r)")
 	testutil.Golden(t, "formb-container", src)
 }

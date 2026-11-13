@@ -56,8 +56,8 @@ func TestGenerate_FormBServicesAreTrackedDynamically(t *testing.T) {
 
 	testutil.True(t, strings.Count(code, ".disp.TrackAny(") >= 3,
 		"every form-B product must be tracked via disp.TrackAny")
-	testutil.True(t, strings.Contains(methodBody(t, code, "func NewRoot("), "r.disp.TrackAny(r.f_Single)"),
-		"NewRoot must track the form-B singleton")
+	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) get_Single("), "r.disp.TrackAny(v)"),
+		"the singleton accessor must track the form-B singleton")
 	testutil.True(t, strings.Contains(methodBody(t, code, "func NewRoot("), "r.disp.TrackAny(r.f_Scoped)"),
 		"NewRoot must track the Root-as-scope form-B scoped instance")
 	testutil.True(t, strings.Contains(methodBody(t, code, "func (r *Root) CreateScope("), "s.disp.TrackAny(s.f_Scoped)"),

@@ -11,25 +11,51 @@ import (
 // Root is the generated singleton container (AD-1: singleton = Root field).
 type Root struct {
 	f_Logger  *svc.Logger
+	st_Logger uint8
 	f_Request svc.IRequest
 	closed    bool
 }
 
 var _ godi.Provider = (*Root)(nil)
 
-// NewRoot constructs and wires all singletons eagerly in dependency order (AD-1).
-func NewRoot() (*Root, error) {
+// NewRoot builds every singleton and root-level scoped service. A panic during
+// construction is returned as an error after tracked disposables are released.
+func NewRoot() (root *Root, err error) {
 	r := &Root{}
-	r.f_Logger = svc.NewLogger()
-	r.f_Request = svc.NewRequest(r.f_Logger)
+	defer func() {
+		if rec := recover(); rec != nil {
+			root, err = nil, godi.BuildError(rec)
+		}
+	}()
+	r.get_Logger()
+	r.f_Request = svc.NewRequest(r.get_Logger())
 	return r, nil
+}
+
+func (r *Root) get_Logger() *svc.Logger {
+	if r.st_Logger == 2 {
+		return r.f_Logger
+	}
+	if r.st_Logger == 1 {
+		panic(godi.CircularDependencyError("Logger"))
+	}
+	r.st_Logger = 1
+	defer func() {
+		if r.st_Logger != 2 {
+			r.st_Logger = 0
+		}
+	}()
+	v := svc.NewLogger()
+	r.f_Logger = v
+	r.st_Logger = 2
+	return v
 }
 
 func (r *Root) NewWidget() svc.IWidget {
 	return svc.NewWidget(r.f_Request)
 }
 
-func (r *Root) Logger() *svc.Logger { return r.f_Logger }
+func (r *Root) Logger() *svc.Logger { return r.get_Logger() }
 
 func (r *Root) Request() svc.IRequest { return r.f_Request }
 
@@ -58,7 +84,7 @@ func (r *Root) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
-		return r.f_Logger
+		return r.get_Logger()
 	case reflect.TypeFor[svc.IRequest]():
 		return r.f_Request
 	case reflect.TypeFor[svc.IWidget]():
@@ -111,7 +137,7 @@ func (r *Root) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
-		return []any{r.f_Logger}
+		return []any{r.get_Logger()}
 	case reflect.TypeFor[svc.IRequest]():
 		return []any{r.f_Request}
 	case reflect.TypeFor[svc.IWidget]():
@@ -125,7 +151,7 @@ func (r *Root) CreateScope() godi.Scope {
 		panic(godi.ProviderClosedError())
 	}
 	s := &scope{root: r}
-	s.f_Request = svc.NewRequest(s.root.f_Logger)
+	s.f_Request = svc.NewRequest(s.root.get_Logger())
 	return s
 }
 
@@ -148,7 +174,7 @@ func (s *scope) GetService(t reflect.Type) any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
-		return s.root.f_Logger
+		return s.root.get_Logger()
 	case reflect.TypeFor[svc.IRequest]():
 		return s.f_Request
 	case reflect.TypeFor[svc.IWidget]():
@@ -195,7 +221,7 @@ func (s *scope) GetKeyedServices(t reflect.Type, key any) []any {
 	}
 	switch t {
 	case reflect.TypeFor[*svc.Logger]():
-		return []any{s.root.f_Logger}
+		return []any{s.root.get_Logger()}
 	case reflect.TypeFor[svc.IRequest]():
 		return []any{s.f_Request}
 	case reflect.TypeFor[svc.IWidget]():
@@ -209,7 +235,7 @@ func (s *scope) CreateScope() godi.Scope {
 		panic(godi.ProviderClosedError())
 	}
 	ns := &scope{root: s.root}
-	ns.f_Request = svc.NewRequest(ns.root.f_Logger)
+	ns.f_Request = svc.NewRequest(ns.root.get_Logger())
 	return ns
 }
 
@@ -222,7 +248,7 @@ func (s *scope) NewWidget() svc.IWidget {
 	return svc.NewWidget(s.f_Request)
 }
 
-func (s *scope) Logger() *svc.Logger { return s.root.f_Logger }
+func (s *scope) Logger() *svc.Logger { return s.root.get_Logger() }
 
 func (s *scope) Request() svc.IRequest { return s.f_Request }
 
