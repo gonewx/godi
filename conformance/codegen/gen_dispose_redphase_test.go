@@ -161,7 +161,7 @@ func TestCodegen_PathGamma_SingletonNotDisposedOnScopeClose(t *testing.T) {
 
 // TestCodegen_Close_Idempotent_WithDisposables: Close on the B2 container
 // with disposable services must be idempotent — no double release, no panic
-// on repeated calls (D-6: closed bool guard).
+// on repeated calls (D-6: the shared godi.CloseGuard).
 func TestCodegen_Close_Idempotent_WithDisposables(t *testing.T) {
 	root, err := codegen.NewRoot()
 	testutil.NoError(t, err)

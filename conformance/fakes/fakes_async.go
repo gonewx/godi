@@ -34,9 +34,9 @@ func (r *AsyncDisposeRecorder) Labels() []string {
 // deliberately does NOT implement io.Closer — the "async-only" row of the D-4
 // matrix, mapping dotnet's AsyncDisposable fake. Sync release must error on it
 // (AC3); CloseAsync releases it. It is registered by its POINTER type
-// (*FakeAsyncOnlyDisposable) so the codegen field is concrete and the emitted
-// TrackAsync passes the field directly (a type assertion on a non-interface
-// operand would not compile — genlib.trackArg handles this).
+// (*FakeAsyncOnlyDisposable) so the codegen field is concrete; the emitted
+// container tracks it through Disposer.TrackAny, which dispatches on the dynamic
+// type.
 type FakeAsyncOnlyDisposable struct {
 	disposed bool
 	recorder *AsyncDisposeRecorder

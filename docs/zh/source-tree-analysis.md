@@ -27,7 +27,7 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 │   ├── doc.go
 │   ├── registry.go                # Registry / Service / Lifetime 模型
 │   ├── validate.go                # Validate()：重复名/保留名/缺失/捕获/循环，聚合 []error
-│   ├── registry_test.go / topo_test.go
+│   ├── registry_test.go
 │   └── validate_*_test.go         # captive / cycle / missing_transitive 各校验测试
 │
 ├── internal/
@@ -50,7 +50,7 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 │       └── testdata/              # 注册样例：deps/formb/lifetimes/keyed*/opengeneric/…
 │           └── */registration.go
 │
-├── runtime/                       # 运行时反射 Provider（预言机）
+├── runtime/                       # 运行时 Provider（预言机）
 │   ├── doc.go
 │   ├── provider.go                # Builder → Build → root/scope，reflect.Type 工厂 map
 │   ├── collection.go              # 多实现集合解析
@@ -89,7 +89,7 @@ godi/                              # 模块根 = 根包 godi（import 路径无 
 | `internal/genlib` | 唯一产码路径 `Generate()` |
 | `internal/testutil` | 纯标准库断言/工厂/golden 辅助 |
 | `cmd/godi-gen` | generator CLI，静态分析 → 产码 |
-| `runtime` | 运行时反射 Provider（预言机）+ Disposer |
+| `runtime` | 运行时 Provider（预言机）+ Disposer |
 | `activator` | 唯一反射构造点 `CreateInstance[T]` |
 | `conformance` | 双 Provider 一致性套件、harness、差分等价、fakes |
 

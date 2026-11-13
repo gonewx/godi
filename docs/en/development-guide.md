@@ -55,9 +55,10 @@ go test ./... -update-golden # rewrite golden fixtures (review the diff!)
 - **Golden files.** Generator emission tests compare emitted bytes against
   `internal/genlib/testdata/*.golden`; `-update-golden` rewrites them — always
   review the diff before committing.
-- **One registration source, two providers.** Never hand-fork the runtime and
-  codegen registrations (AD-14). Both factories build from the same source; the
-  codegen output is the generator's deterministic transform of it.
+- **Equivalent registrations, two providers.** The runtime factory registers
+  hand-written `runtime.Add*` closures; the codegen factory uses the container
+  generated from the `godi.Add*` markers in `conformance/codegen`. Keep the two
+  registration sets equivalent by hand (AD-14).
 - **Resolve by `reflect.Type`.** Use `reflect.TypeFor[T]()` for type keys — it
   matches the provider's Tier B `reflect.Type` dispatch (AD-13).
 - **Assert behavior, not implementation.** Spec cases touch only the `Provider`
@@ -92,8 +93,8 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 - **Keep the dependency surface minimal.** Do not add third-party test
   dependencies; extend `internal/testutil` instead.
 - **Respect the architecture invariants.** Emit code only through `genlib.Generate`
-  (AD-2); keep reflective construction confined to the activator (AD-13); derive
-  both providers from one registration source (AD-14).
+  (AD-2); keep reflective construction confined to the activator (AD-13); keep
+  the two providers' conformance registrations equivalent (AD-14).
 - **Regenerate goldens deliberately.** When emission changes intentionally, run
   `make golden` and commit the reviewed diff; an unexplained golden mismatch is a
   real regression.
@@ -105,7 +106,7 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 | Symptom | Cause / fix |
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install`, then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
-| `go.work lists go 1.23.1, but ... requires go >= 1.26` | The parent `go.work` predates godi's `go` directive. Raise the `go` line in the parent `go.work` (siblings stay valid). |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` predates godi's `go` directive. Run the command with `GOWORK=off`. |
 | `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |

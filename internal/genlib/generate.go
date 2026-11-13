@@ -14,7 +14,7 @@ import (
 // first; a non-empty Validate result aborts emission and returns nil output +
 // error (AD-3: bad graph → zero-byte code, NFR2 hard gate).
 //
-// The emitted container is a full godi.Provider implementation (AD-16 six-method
+// The emitted container is a full godi.Provider implementation (AD-16 seven-method
 // face) with singletons stored as typed Root fields (AD-1: lifetime = where the
 // instance lives). Each singleton is built by its own lazy accessor get_<N>, and
 // NewRoot triggers every accessor in registration order, so construction order
@@ -78,8 +78,9 @@ func Generate(reg *plan.Registry, pkgName string) ([]byte, error) {
 		disposables = true
 	}
 	// hasAsync gates the emitted `context` import and the CloseAsync methods
-	// (D-8) — independent of `disposables` so a purely-sync disposable container
-	// emits neither, keeping Story 2.3 goldens byte-identical.
+	// (D-8) — independent of `disposables` so a purely-sync form-A disposable
+	// container emits neither. A form-B service always sets it (its product may
+	// be async-disposable).
 	hasAsync := hasAsyncDisposables(services) || hasAsyncDisposables(keyedServices)
 
 	emitHeader(&buf, pkgName)
@@ -159,7 +160,7 @@ func emitHeader(buf *bytes.Buffer, pkgName string) {
 }
 
 // emitImports writes the import block. "reflect" and the host godi package are
-// always required (six-method contract uses reflect.Type and godi.Provider /
+// always required (seven-method contract uses reflect.Type and godi.Provider /
 // godi.Scope); userImports carries service-package paths — a plain path, or
 // "alias path" (space-separated) when the generator renamed a package whose
 // declared name clashes with another import (two service packages both named
@@ -729,11 +730,10 @@ func emitNewScope(buf *bytes.Buffer, root string, disposables bool) {
 // a closed container rejects resolution EXACTLY like the runtime oracle does —
 // whose guard is also unconditional (AD-16: resolve-after-dispose identical
 // across providers, regardless of whether the container tracks any disposable).
-// A container with
-// nothing to release still has a logical closed state to guard. For root recv "r"
-// the guard is `if r.guard.Closed()`; for a scope a closed ROOT also invalidates
-// the live scope, so the guard is `if s.guard.Closed() || s.root.guard.Closed()`
-// (SPCT-12..15). Both providers panic with godi.ProviderClosedError().
+// A container with nothing to release still has a logical closed state to
+// guard. For root recv "r" the guard is `if r.guard.Closed()`; for a scope a
+// closed ROOT also invalidates the live scope, so the guard is
+// `if s.guard.Closed() || s.root.guard.Closed()` (SPCT-12..15). Both providers panic with godi.ProviderClosedError().
 func emitClosedGuard(buf *bytes.Buffer, recv string) {
 	if recv == "s" {
 		fmt.Fprintf(buf, "\tif s.guard.Closed() || s.root.guard.Closed() {\n")
@@ -756,7 +756,7 @@ func emitClose(buf *bytes.Buffer, disposables, hasAsync bool) {
 	fmt.Fprintf(buf, "}\n\n")
 
 	// CloseAsync (structural opt-in godi.AsyncDisposable, D-2) is emitted only
-	// when async-disposable services exist (D-8). It SHARES Root's guard with
+	// when async-disposable or form-B services exist (D-8). It SHARES Root's guard with
 	// Close (first-caller-wins, D-6): whichever runs first releases and caches
 	// its error; the other returns the cached err.
 	if hasAsync {
@@ -1002,7 +1002,7 @@ func emitScopeClose(buf *bytes.Buffer, disposables, hasAsync bool) {
 	emitGuardClose(buf, "s", disposables, "CloseAll()")
 	fmt.Fprintf(buf, "}\n\n")
 	// scope.CloseAsync mirrors Root.CloseAsync (D-6 shared guard, D-2 structural
-	// opt-in), emitted only when async-disposable services exist (D-8).
+	// opt-in), emitted only when async-disposable or form-B services exist (D-8).
 	if hasAsync {
 		fmt.Fprintf(buf, "func (s *scope) CloseAsync(ctx context.Context) error {\n")
 		emitGuardClose(buf, "s", disposables, "CloseAllAsync(ctx)")

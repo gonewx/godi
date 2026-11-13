@@ -31,7 +31,7 @@ godi 无这一整层（**AD-1**）：
 | **约束矩阵差异** | 运行时约束反射过滤 | per-helper 编译期物化（Go 约束种类 ≠ dotnet） | CSF-22 | adapted（可观测）+ 精确矩阵 N/A（本文档 §约束矩阵） |
 | **best-match 多构造** | `CallSiteFactory` 多构造选择/歧义检测 | activator 域（AD-9），容器路径单 `New{Impl}` | CSF-06/23/27/28/29 | best-match activator 域 |
 | **trimming/NativeAOT 回退** | `DynamicallyAccessedMembers` 注解 + 动态代码回退 | godi 全程无反射构造（AD-13），trim-safe/AOT-safe 是常态 | CSF-C3/C4 | trimming/NativeAOT 常态化 |
-| **并发 CallSite 唯一性** | 并发构建 CallSite 唯一性（内部锁） | NFR8 本期不保证并发 + 无 CallSite IR | CSF-C1/C2 | NFR8 concurrency + CallSite IR |
+| **并发 CallSite 唯一性** | 并发构建 CallSite 唯一性（内部锁） | 只有有限的并发契约（见 README「已知限制」并发条目）+ 无 CallSite IR | CSF-C1/C2 | NFR8 concurrency + CallSite IR |
 | **可选/默认 ctor 参数** | 可选参数默认值 CallSite | Go 无可选/默认 ctor 参数 | CSF-24, CST-09 | 无可选/默认参数 |
 | **dotnet 已知 bug（禁用）** | `[ActiveIssue #57333]` 禁用测试 | godi slot-order 确定性（Story 4.3），无此 bug | CST-10 | dotnet known-bug disabled |
 

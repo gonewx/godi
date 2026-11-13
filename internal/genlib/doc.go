@@ -2,9 +2,10 @@
 // internal: only cmd/godi-gen consumes it (AD-2). The sole code-emission path
 // is genlib.Generate(reg, pkgName), which runs reg.Validate() before emitting.
 //
-// Current state (Story 1.5): Generate emits a full godi.Provider implementation
-// — typed singleton fields on Root (AD-1), eager NewRoot wiring, the six-method
-// AD-16 contract, and a delegating scope (AD-12). reflect.Type is the dispatch
+// Generate emits a full godi.Provider implementation — typed singleton fields on
+// Root (AD-1) filled by lazy accessors that NewRoot triggers for every
+// singleton, the seven-method AD-16 contract, and a delegating scope whose
+// scoped services are built on first resolution (AD-12). reflect.Type is the dispatch
 // key only (Tier B, AD-13); construction is the direct Ctor call (no reflect.New).
 //
 // Inputs (GoType / Ctor / Imports) are stringly-typed this epoch (D3 caveat);

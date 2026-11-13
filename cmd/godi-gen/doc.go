@@ -40,18 +40,17 @@
 // is rejected at generation time with zero output and a non-zero exit (NFR2,
 // AD-3). The conformance/codegen package wires this behind //go:generate.
 //
-// # Form-B codegen: known limitation (deferred)
+// # Form-B codegen
 //
-// Form A (AddSingleton[I, Impl]) is the primary path and emits a fully
-// compilable, dependency-wired container. Form B (AddSingletonFactory[I]) is the
-// escape hatch: the generator inlines the factory ARGUMENT EXPRESSION verbatim
-// (D-2). It does NOT yet package-qualify identifiers the factory body references
-// from the registration package, nor extract the factory's own dependencies for
-// topo ordering. So a form-B factory that (a) names registration-package-local
-// types/constructors or (b) resolves another singleton through the provider emits
-// a container that does not compile or wires a nil dependency. Standard
-// fixtures/conformance use form A and do not hit this; full form-B codegen is a
-// deferred follow-up (see _bmad-output/implementation-artifacts/deferred-work.md).
-// The runtime provider has no such limitation — it executes the factory closure
-// directly.
+// Form A (AddSingleton[I, Impl]) is the primary path. Form B
+// (AddSingletonFactory[I]) is the escape hatch: the generator inlines the
+// factory ARGUMENT EXPRESSION (D-2), rewritten for the emitted package — helper
+// type parameters closed, package qualifiers remapped to the emitted imports,
+// and, when the container lives in another package, the registration package's
+// own identifiers qualified. The factory's godi.Get / GetRequired / GetServices
+// calls are read as dependencies for Validate only; construction needs no static
+// order, because each lazy accessor builds what the factory resolves on first
+// access. The emitted container is type-checked before it is written, so a
+// factory that does not compile in the emitted package produces no output.
+// Static checks still cover form B only partly; see README "Known Limitations".
 package main

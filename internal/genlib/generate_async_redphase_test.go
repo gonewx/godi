@@ -190,8 +190,8 @@ func TestEmitAsyncDispose_NoContextImportWhenNoAsyncDisposables(t *testing.T) {
 	testutil.True(t, !strings.Contains(code, "TrackAsync"),
 		"a purely-sync disposable container must NOT emit TrackAsync (D-8 hasAnyAsync guard)")
 
-	// Story 2.3's golden must stay byte-identical — adding the AsyncDisposable
-	// field/feature must NOT perturb pure-sync emit.
+	// The pure-sync golden pins that adding the AsyncDisposable feature emits
+	// nothing async (no context import, no CloseAsync) into a pure-sync container.
 	testutil.Golden(t, "disposable-container", src)
 }
 

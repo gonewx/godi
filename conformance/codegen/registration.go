@@ -172,7 +172,7 @@ func register() {
 	// Story 6-3 (AC5/AC6, AD-15 codegen coverage): async-disposable services on
 	// the codegen path. Registered by POINTER type so the service key matches the
 	// spec test's reflect.TypeFor[*fakes.FakeAsyncOnlyDisposable]() and the emitted
-	// field is concrete (TrackAsync passes it directly, no interface assertion).
+	// field is concrete (the emitted TrackAny call receives it directly).
 	//
 	// TRANSIENT — not scoped. The choice dates from when codegen eagerly
 	// materialized every scoped service in CreateScope, where a scoped async-only
@@ -181,8 +181,9 @@ func register() {
 	// built on first resolution, so that constraint is gone; the registration is
 	// kept as is. Transient is tracked only when the async tests explicitly
 	// resolve it, preserving Story 2.3 zero-regression (AC6) while still
-	// exercising scope-level async release: the async tests resolve these FROM a scope, so that scope's disposer
-	// tracks them and scope.CloseAsync releases them (AC2). The runtime spec oracle
+	// exercising scope-level async release: the async tests resolve these FROM
+	// a scope, so that scope's disposer tracks them and scope.CloseAsync releases
+	// them (AC2). The runtime spec oracle
 	// registers them scoped; the axis under test (async release / prefer-async /
 	// LIFO / sync-errors) is observably identical across both (AD-15).
 	//

@@ -15,8 +15,8 @@ godi/                          # Module root (github.com/gonewx/godi)
 ├── keyed.go                   # AnyKey sentinel + GetKeyed[T], GetRequiredKeyed[T], GetKeyedServices[T]
 ├── marked.go                  # MarkedConstructor + Marked() (activator best-match marker)
 ├── async.go                   # AsyncDisposable interface, AsyncScope, CreateAsyncScope
-├── plan/                      # Registration model + validation + topological sort
-│   ├── registry.go            # Registry, Service, Lifetime, *Topo()
+├── plan/                      # Registration model + validation
+│   ├── registry.go            # Registry, Service, Lifetime
 │   ├── validate.go            # Validate(): duplicate / reserved / missing / captive / circular
 │   └── doc.go                 # Package godoc
 ├── internal/
@@ -32,7 +32,7 @@ godi/                          # Module root (github.com/gonewx/godi)
 │   ├── main.go                # go/packages load → go/types → genlib.Generate
 │   ├── doc.go                 # Package godoc
 │   └── testdata/              # Test-case registration packages (deps, formb, keyed*, lifetimes, opengeneric, ...)
-├── runtime/                   # Reflect-based provider oracle + disposer
+├── runtime/                   # Closure-based provider oracle + disposer
 │   ├── provider.go            # Builder, root/scope, Build()
 │   ├── disposer.go            # Track, TrackAsync, CloseAll, CloseAllAsync (LIFO)
 │   ├── collection.go          # Collection / enumerable resolution operations
@@ -53,11 +53,11 @@ godi/                          # Module root (github.com/gonewx/godi)
 | Path | Responsibility |
 | --- | --- |
 | `godi` (root) | Public surface: DSL markers, `Provider`/`Scope`, free generic functions, `AnyKey`, async contracts |
-| `plan` | Canonical registration model + validation gate + topo sort |
+| `plan` | Canonical registration model + validation gate |
 | `internal/genlib` | Sole code-emission path — nothing else writes generated Go |
 | `internal/testutil` | Standard-library-only test helpers, importable across the module |
 | `cmd/godi-gen` | Static-analysis CLI turning a registration package into a container |
-| `runtime` | The reflect-based semantic oracle + LIFO disposer |
+| `runtime` | The closure-based semantic oracle + LIFO disposer |
 | `activator` | The single reflective-construction point (`reflect.Value.Call`) |
 | `conformance` | Dual-provider spec suite, ported fakes, pre-generated container, divergence notes |
 
@@ -73,7 +73,7 @@ from the .NET reference.
 | Golden files | Generator emission fixtures live in `internal/genlib/testdata/*.golden`, regenerated with `-update-golden` |
 | Sole code-emission path | All generated Go flows through `genlib.Generate` (AD-2) |
 | Sole reflective construction point | `reflect.Value.Call` appears only in `activator.CreateInstance[T]` (AD-13) |
-| One registration source | Runtime and codegen providers are never hand-forked; both derive from the same DSL source (AD-14) |
+| Equivalent registrations | The conformance suite builds the runtime provider from hand-written `runtime.Add*` closures and the codegen provider from `godi.Add*` markers; the two are kept equivalent by hand (AD-14) |
 
 ## Test File Naming
 

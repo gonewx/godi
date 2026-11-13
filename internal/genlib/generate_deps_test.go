@@ -1,14 +1,15 @@
-// Story 2.1 (AC1/AC3) — genlib emit: dependency wiring in topo order +
+// Story 2.1 (AC1/AC3) — genlib emit: dependency wiring +
 // trailing-error propagation + NewRoot signature evolution (Task 2).
 //
 // Epic 1's emit wired no-dep singletons as `r.f_X = Ctor()`. This story evolves
 // emitNewRoot to (a) wire dependencies as constructor arguments
 // (`r.f_X = Ctor(r.f_Dep)`), (b) build a dependency before its dependent (now by
-// lazy accessors, which build each dependency on first access), and (c) propagate a trailing constructor error up through the new
+// lazy accessors, which build each dependency on first access), and (c)
+// propagate a trailing constructor error up through the new
 // `NewRoot() (*Root, error)` signature (D-1). Form B is inlined as
 // `r.f_X = (factoryExpr)(r)` (D-2).
 //
-// The behavioral assertions (dependency args, topo order, error form, new
+// The behavioral assertions (dependency args, accessor order, error form, new
 // signature) are reinforced by committed golden files for the form-A-with-deps
 // and form-B containers (testdata/deps-container.golden, formb-container.golden).
 //

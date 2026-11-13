@@ -4,11 +4,6 @@ How the godi test framework is structured and how to run it. Go keeps tests
 beside the code they exercise (no dedicated `tests/` tree), so this document
 lives at the module root rather than in a test directory.
 
-> Status: **framework scaffold**. The conformance suite currently runs against an
-> in-test stub provider so the harness is green today. M1 replaces the stub with
-> the two real providers and ports the 116 specification cases — see
-> [Architecture alignment](#architecture-alignment).
-
 ## Setup
 
 The Go toolchain is pinned project-wide by [mise](https://mise.jdx.dev) via
@@ -59,10 +54,9 @@ internal/testutil/      stdlib-only test helpers (importable across the module)
   testdata/             committed golden fixtures
 conformance/            ported .NET DI specification suite (the test framework's core)
   harness.go            Provider contract, ProviderFactory seam, RunSuite, AssertEquivalent
-  spec_sample_test.go   in-test stub provider + dual-provider sample suite
-  (M1) spec_test.go     the 116 ported specification cases
-  (M1) fakes/           the 52 ported fakes
-  (M1) codegen/         pre-generated container + its tests (Path γ sensitive scenarios)
+  spec_test.go          the 116 ported specification cases
+  fakes/                the 52 ported fakes
+  codegen/              pre-generated container + its tests (Path γ sensitive scenarios)
 ```
 
 - **Assertions** are tiny stdlib wrappers, not testify. They take a `TB`
@@ -77,7 +71,7 @@ conformance/            ported .NET DI specification suite (the test framework's
   once against the `Provider` contract, is parameterized over a `ProviderFactory`
   (the Go equivalent of dotnet's `abstract CreateServiceProvider`) and run against
   every provider. `AssertEquivalent` is the cross-provider differential-equivalence
-  check: both providers, built from the same registration, must yield identical
+  check: both providers, built from equivalent registrations, must yield identical
   results.
 
 ## Best practices
@@ -86,9 +80,10 @@ conformance/            ported .NET DI specification suite (the test framework's
   `RunSuite` drive them as nested `t.Run` subtests (provider/case).
 - **Clean up with `t.Cleanup`.** `RunSuite` closes each built provider via
   `t.Cleanup`; follow the same pattern for any resource a case opens.
-- **One registration source, two providers.** Never hand-fork the runtime and
-  codegen registrations (AD-14). Both factories build from the same source; the
-  codegen output is the generator's deterministic transform of it.
+- **Equivalent registrations, two providers.** The runtime factory registers
+  hand-written `runtime.Add*` closures; the codegen factory uses the container
+  generated from the `godi.Add*` markers in `conformance/codegen`. Keep the two
+  registration sets equivalent by hand (AD-14).
 - **Resolve by `reflect.Type`.** Use `reflect.TypeFor[T]()` for type keys — it
   matches the Provider's Tier B `reflect.Type` dispatch (AD-13).
 - **Mind the nil-interface footgun.** A nil interface value must not read as a
@@ -116,7 +111,7 @@ godi is a library: there is no deploy step. Release = a semver tag; consumers ru
 | Symptom | Cause / fix |
 | --- | --- |
 | `go: command not found` or wrong Go version | mise isn't active in this shell. Run `mise install` then `eval "$(mise activate bash)"` (or use `mise exec -- go ...`). |
-| `go.work lists go 1.23.1, but ... requires go >= 1.26` | The parent `go.work` predates godi's go directive. Raise the `go` line in `/mnt/disk0/project/auth/go.work` to `1.26` (siblings stay valid). |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | A parent `go.work` predates godi's `go` directive. Run the command with `GOWORK=off`. |
 | `cannot find toolchain ... go1.27` / download fails | mise couldn't fetch the pinned toolchain for your platform. Confirm mise can pull that patch (`mise ls-remote go \| grep 1.27`), then re-run `mise install`; if a different patch was intended, adjust the pin in `mise.toml`. |
 | `golden: read testdata/...: no such file` | Fixture missing — create it with `go test ./... -update-golden`, then review the diff before committing. |
 | golden mismatch | The emitted bytes changed. If intended, run `make golden` and commit the new fixture; otherwise it's a real regression. |
@@ -128,7 +123,7 @@ The harness encodes the spine's testing invariants — see
 
 | Invariant | Where it shows up |
 | --- | --- |
-| **AD-14** dual provider, one registration source | `ProviderFactory` × 2, `RunSuite` |
+| **AD-14** dual provider, equivalent registrations | `ProviderFactory` × 2, `RunSuite` |
 | **AD-15** cross-provider differential equivalence | `AssertEquivalent` |
 | **AD-16** pinned Provider method set + unmet-lookup semantics | `Provider` interface in `harness.go` |
 | **AD-17** nil key routes to unkeyed; AnyKey semantics | `GetKeyedService` contract + sample case |

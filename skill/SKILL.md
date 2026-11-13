@@ -151,7 +151,7 @@ func AddOptions[T Entity[T]](r *godi.Registry) *godi.Registry {
 
 Guarantees:
 - Form-B factory text is rewritten on closure: `T` → the concrete type, package qualifiers remapped to the generated file's imports (two service packages sharing a name get numbered aliases automatically).
-- `godi.Get*` calls inside a factory body are read as **assembly-order dependencies** — a singleton factory may `GetRequired` a service registered later in the body (like the cache above); the generator assembles it first.
+- A singleton factory may `GetRequired` a service registered later in the body (like the cache above): singleton and scoped services are built by their own lazy accessors (transients by `New<Name>()` on each resolution), so the dependency is constructed when the factory first resolves it.
 
 Limits (generation-time warning, never a silent drop): helper must live in the analyzed package, single type parameter, unkeyed markers only, and every body statement must be a marker call (or a final `return r`).
 
@@ -259,13 +259,13 @@ defer scope.Close()
 The generator emits:
 
 - **`Root` struct** — holds singleton and scoped fields, a `Disposer` for lifecycle management
-- **`NewRoot() (*Root, error)`** — constructs and wires all singletons eagerly in dependency order
-- **Typed accessor methods** — `root.Logger()`, `root.Service()` — zero-overhead field returns
+- **`NewRoot() (*Root, error)`** — triggers every singleton's lazy accessor in registration order, unkeyed before keyed (a dependency is built on demand by its own accessor); a construction panic is returned as the error
+- **Typed accessor methods** — `root.Logger()`, `root.Service()` — lazy accessors that construct on first call and then return the stored field
 - **`Get[T]() (T, bool)` / `GetRequired[T]() T`** — generic methods on the container
 - **`GetService(reflect.Type) any`** — `reflect.TypeFor[T]()` switch dispatch (Tier B)
 - **`IsService` / `IsKeyedService`** — type-switch membership queries
 - **`GetKeyedService` / `GetKeyedServices`** — nested type+key switch dispatch
-- **`CreateScope() Scope`** — scope struct with scoped field re-instantiation
+- **`CreateScope() Scope`** — a fresh scope struct; its scoped services are constructed on first resolution within that scope
 - **`Close() error`** — idempotent LIFO disposal via `runtime.Disposer`
 - **`scope` struct** — holds scope-local fields, delegates singletons to `root`
 

@@ -40,7 +40,7 @@ func (r *Registry) Validate() []error {
 			// serviceBaseName/serviceTypeIdent) — this is the deliberate
 			// safety net for that collision, not a bug in the name choice.
 			errs = append(errs, fmt.Errorf(
-				"duplicate service name: %q registered more than once (%s and %s both produced this name; service names are not package-qualified — register one with an explicit distinct name or keep them keyed apart)",
+				"duplicate service name: %q registered more than once (%s and %s both produced this name; service names are not package-qualified — rename one implementation type or register them under distinct keys)",
 				s.Name, firstGoType, s.GoType,
 			))
 		}

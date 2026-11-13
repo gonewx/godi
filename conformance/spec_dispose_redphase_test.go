@@ -142,7 +142,7 @@ var disposeSpecCases = []SpecCase{
 	{
 		Name: "dispose: provider satisfies Close contract (ServiceProviderIsDisposable)",
 		Run: func(t *testing.T, p Provider) {
-			// Close is part of the Provider interface (AD-16 six-method face).
+			// Close is part of the Provider interface (AD-16 seven-method face).
 			// Calling Close must not panic and must return nil or an error.
 			err := p.Close()
 			testutil.NoError(t, err)

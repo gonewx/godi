@@ -26,13 +26,13 @@ dotnet：`IServiceScope : IDisposable`（同步 `Dispose` 在接口内），`IAs
 
 ### D-5 dispose-once 跨 `Close`/`CloseAsync` 共享守卫
 
-dotnet `BeginDispose` 单一 `_disposed` 让 `Dispose`/`DisposeAsync` **共享**一次性语义（#38）。godi 让 root/scope 的 `Close` 与 `CloseAsync` 共享同一 `closed` 守卫（**first-caller-wins**：先到者释放并缓存 err，另一个 no-op 返缓存 err）。runtime 从 `sync.Once` 收敛为共享 `closed` + `closeMu`（NFR8 许可的调整——`sync.Once` 绑定单一 func，无法让 `Close`/`CloseAsync` 共享；Story 2.3 的 `TestRT_CloseIdempotent_WithDisposables`/`TestRT_ScopeClose_SyncOnceGuard` 断言的是行为而非机制，仍绿）；codegen 用纯 `closed`（NFR8 单 goroutine），两 provider 趋同。
+dotnet `BeginDispose` 单一 `_disposed` 让 `Dispose`/`DisposeAsync` **共享**一次性语义（#38）。godi 让 root/scope 的 `Close` 与 `CloseAsync` 共享同一 `closed` 守卫（**first-caller-wins**：先到者释放并缓存 err，其他调用者不再释放）。runtime 与 codegen 的 root/scope 都用根包的 `godi.CloseGuard` 实现这一守卫（生成容器带 `guard godi.CloseGuard` 字段）：首个调用者以原子操作标记关闭、执行释放并缓存 err；其他调用者——包括并发调用和释放过程中的重入调用——不阻塞、不重复释放，返回缓存的 err，释放尚未完成时返回 nil。不用 `sync.Once`，因为它绑定单一 func，无法让 `Close`/`CloseAsync` 共享；Story 2.3 的 `TestRT_CloseIdempotent_WithDisposables`/`TestRT_ScopeClose_SyncOnceGuard` 断言的是行为而非机制，仍绿。
 
 ## 处置的 dotnet 方法（永久 N/A）
 
 ### SPCT-C1 `GetAsyncService_DisposeAsyncOnSameThread_...` — threading N/A（NFR8）
 
-`ConditionalFact`，测同线程 `DisposeAsync` 不 hang + `DisposeAsync` 被调。其**异步释放语义**已由 SPCT-24..38 的 6-3 移植覆盖（`threshold_spct_test.go` na→adapted）；剩余的**同线程 / 并发 threading 保证**属 NFR8（本期不保证并发安全），**永久 N/A（C-2）**。
+`ConditionalFact`，测同线程 `DisposeAsync` 不 hang + `DisposeAsync` 被调。其**异步释放语义**已由 SPCT-24..38 的 6-3 移植覆盖（`threshold_spct_test.go` na→adapted）；剩余的**同线程 / 并发 threading 保证**属 NFR8：godi 只提供 README「已知限制」并发条目所述的有限并发契约（`NewRoot()` 返回后，singleton、不依赖 scoped 服务的 transient 的解析以及 `CreateScope` 可在多个 goroutine 中进行；每个 `Scope` 同一时刻只能由一个 goroutine 使用；`Close` 须在所有解析结束后调用），该测试所测的线程语义不在此契约内，**永久 N/A（C-2）**。
 
 ### `SafelyDisposeNestedProviderReferences` / `SelfResolveThenDispose` — Go 差异永久 N/A
 

@@ -5,10 +5,11 @@
 godi's main resolution path is **B2 codegen with direct wiring**: a static
 analyzer reads registration type facts and emits a plain-Go container whose
 constructor calls are wired field to field, with no reflective construction. Two
-providers exist, both derived from the *same* registration source (AD-14):
+providers exist, both built from equivalent registrations (AD-14):
 
-- **Runtime provider** — a reflect-based oracle that resolves dynamically. It is
-  the semantic reference implementation the generated code is diffed against.
+- **Runtime provider** — a closure-based oracle that dispatches on `reflect.Type`
+  and performs no reflective construction. It is the semantic reference
+  implementation the generated code is diffed against.
 - **Codegen provider** — the emitted container. It is the production path and
   carries zero reflective construction on its main flow.
 
@@ -57,8 +58,11 @@ to emit formatted Go (AD-3).
 
 **Runtime provider** (`runtime/provider.go`): a `Builder` accumulates registrations
 into `reflect.Type`-keyed factory maps; `Build()` produces a root/scope pair.
-Instances are materialized lazily with cycle detection, and the disposer tracks
-what needs releasing.
+Singletons are materialized during `Build()`; scoped services are materialized on
+first resolution. Cycle detection covers singleton and root-scoped materialization
+during single-value resolution on the root and during `Build()`; scope resolution,
+transients, and collection resolution are not checked. The disposer tracks what
+needs releasing.
 
 **Codegen provider** (`internal/genlib`): consumes a `plan.Registry` and emits a
 `Root` struct with one field per service. Resolution is a `type switch` on
@@ -160,7 +164,7 @@ scope's async release.
 | AD-11 | Disposable auto-detection | Detected via `types.Implements` |
 | AD-12 | Disposable ownership | Transient tracked by scope; singleton only by root |
 | AD-13 | Zero-reflective construction | No `reflect.New` / `Value.Call` on main path |
-| AD-14 | Dual provider, one source | Both providers derived from the same DSL registration |
+| AD-14 | Dual provider | The runtime oracle and the codegen provider are built from registrations kept equivalent by hand in the conformance suite |
 | AD-15 | 116-green | Runtime green + codegen coverage + cross-provider diff equivalence |
 | AD-16 | Pinned Provider face | Seven-method interface (6 → 7 in Story 3.4) |
 | AD-17 | Key semantics | Key type = `any`; `AnyKey` three-state; `nil` key = unkeyed |

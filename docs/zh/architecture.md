@@ -8,9 +8,10 @@ godi 的主架构是 **B2 codegen + 直接装配**：generator 在构建期把 D
 
 围绕这条主路径有三个支柱：
 
-- **双 Provider**：同一份 DSL 注册源派生出「运行时反射 Provider」（`runtime` 包，
-  预言机/oracle）与「代码生成 Provider」（`internal/genlib` 产出），二者在同一
-  `Provider` 契约下产生逐位等价的可观察行为（AD-14 / AD-15）。
+- **双 Provider**：由等价的注册分别构建出「运行时 Provider」（`runtime` 包，
+  预言机/oracle，以闭包构造、按 `reflect.Type` 派发，不做反射式构造）与「代码生成
+  Provider」（`internal/genlib` 产出），二者在同一 `Provider` 契约下产生逐位等价的
+  可观察行为（AD-14 / AD-15）。
 - **三层反射策略**：Tier A 直接装配（主路径，零反射构造）；Tier B 用
   `reflect.Type` 仅作查询/派发键；Tier C `reflect.Value.Call` 仅存在于独立的
   `activator` 包（AD-13）。
@@ -54,11 +55,13 @@ generator 按包路径（`github.com/gonewx/godi`）+ 函数名双重匹配 DSL 
 
 ## 双 Provider 设计
 
-**运行时 Provider（`runtime`）**——预言机，反射驱动：
+**运行时 Provider（`runtime`）**——预言机，以闭包构造、按 `reflect.Type` 派发，不做反射式构造：
 
 - `Builder → Build() → root/scope`：注册被物化为一组以 `reflect.Type` 为键的工厂
   map（按生命周期分单例/作用域/瞬态映射）。
-- 延迟物化 + 循环检测：解析时按需构造，缓存到对应作用域，检出依赖环。
+- 物化与循环检测：单例在 `Build()` 期间物化；作用域服务在首次解析时物化，缓存到
+  对应作用域。循环检测只覆盖 root 上单值解析与 `Build()` 期间的单例 / root 作用域
+  物化；scope 内解析、瞬态与集合解析都不检测。
 - 键控注册用 `keyedEntry{t, key}` 为键，并以 `keyedReg` 记录跨键注册顺序，供
   `AnyKey` 查询按序返回。
 
@@ -163,7 +166,7 @@ Go 无 `MakeGenericType`，开放泛型以**显式封闭注册**替代（AD-4 / 
 | AD-11 | Disposable 自动判定 | `types.Implements` |
 | AD-12 | 释放归属 | 瞬态可释放由 scope track，单例仅随 root 释放 |
 | AD-13 | 零反射式构造 | 禁 `reflect.New`/`Value.Call` 出现在主路径 |
-| AD-14 | 双 Provider | 派生自同一 DSL 注册源 |
+| AD-14 | 双 Provider | runtime 预言机与 codegen provider 由 conformance 套件中人工保持等价的注册分别构建 |
 | AD-15 | 116 全绿 | runtime 上绿 + codegen 覆盖义务 + 差分等价 |
 | AD-16 | Provider 接口固定 | 7 方法面（6→7，Story 3.4 修订） |
 | AD-17 | key 类型 = any | AnyKey 三态，nil 键 = 无键 |

@@ -13,7 +13,7 @@ godi 的核心价值主张有三点：
    用类型化字段存放实例、用 `Ctor` 直接调用构造，主路径不出现任何 `reflect.New` /
    `reflect.Value.Call`（AD-13）。反射仅作为查询派发键（Tier B）或退化到独立的
    `activator` 包（Tier C）。
-2. **双 Provider 差分等价**——同一份 DSL 注册源同时派生出「运行时反射 Provider」
+2. **双 Provider 差分等价**——由人工保持等价的注册分别构建出「运行时 Provider」
    与「代码生成 Provider」，二者在同一契约下必须产生逐位等价的可观察行为（AD-14 /
    AD-15），互为验证。
 3. **静态标记 DSL**——注册用的 DSL 函数是纯静态标记（AD-7）。generator 通过
@@ -54,7 +54,7 @@ godi 的核心价值主张有三点：
 | `plan` | 注册计划模型（`Registry`/`Service`/`Lifetime`）与校验门禁 `Validate()` |
 | `internal/genlib` | 唯一产码路径 `Generate()`；输入 `plan.Registry`，输出格式化 Go 源码 |
 | `cmd/godi-gen` | generator CLI：`go/packages` 加载 → `go/types` 读类型 → 构建 registry → 产码 |
-| `runtime` | 运行时反射 Provider（Builder → Build → root/scope）、Disposer |
+| `runtime` | 运行时 Provider（Builder → Build → root/scope）、Disposer |
 | `activator` | 唯一反射构造点 `CreateInstance[T]`（Tier C，best-match 构造选择） |
 | `conformance` | 双 Provider 一致性测试套件、harness、差分等价断言 |
 

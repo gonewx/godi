@@ -56,7 +56,8 @@ go test ./... -update-golden  # 重写 golden 基准（审 diff 后再提交！�
   `make golden` 重生成并审 diff。
 - **双 Provider conformance**：一致性套件写一次、跑两个 Provider——`ProviderFactory`
   ×2 由 `RunSuite` 驱动，`AssertEquivalent` 做跨 Provider 差分等价（AD-14/AD-15）。
-  绝不手工分叉 runtime 与 codegen 的注册源，二者都从同一源构建。
+  runtime 侧注册手写的 `runtime.Add*` 闭包，codegen 侧使用由 `conformance/codegen`
+  中 `godi.Add*` 标记生成的容器，两边的注册须人工保持等价。
 
 ## CI
 
@@ -78,8 +79,8 @@ godi 是库，没有部署步骤：发布 = 打 semver tag，消费者把 `go ge
 
 ## 代码贡献准则
 
-- **单一注册源，双 Provider**：绝不手工分叉 runtime 与 codegen 注册（AD-14）；codegen
-  输出是 generator 对同一源的确定性变换。
+- **等价注册，双 Provider**：runtime 与 codegen 两侧的 conformance 注册须人工保持
+  等价（AD-14）。
 - **按 `reflect.Type` 解析**：类型键用 `reflect.TypeFor[T]()`，与 Provider 的 Tier B
   派发一致（AD-13）。
 - **主路径零反射构造**：不得让 `reflect.New` / `reflect.Value.Call` 进入主路径，
@@ -97,7 +98,7 @@ godi 是库，没有部署步骤：发布 = 打 semver tag，消费者把 `go ge
 | 症状 | 原因 / 修复 |
 | --- | --- |
 | `go: command not found` 或 Go 版本不对 | 当前 shell 未激活 mise。运行 `mise install` 后 `eval "$(mise activate bash)"`（或用 `mise exec -- go ...`） |
-| `go.work lists go 1.23.1, but ... requires go >= 1.26` | 父 `go.work` 早于 godi 的 go 指令。把 `/mnt/disk0/project/auth/go.work` 的 `go` 行提到相应版本（同级成员仍有效） |
+| `go.work lists go 1.23.1, but ... requires go >= 1.27` | 上级目录的 `go.work` 早于 godi 的 `go` 指令。命令前加 `GOWORK=off` 运行 |
 | `cannot find toolchain ... go1.27` / 下载失败 | mise 无法为当前平台拉取锁定的工具链。确认 mise 可拉取该 patch（`mise ls-remote go \| grep 1.27`）后重跑 `mise install`；如需换 patch，调整 `mise.toml` 的锁定项 |
 | `golden: read testdata/...: no such file` | golden 基准缺失。用 `go test ./... -update-golden` 创建，提交前审 diff |
 | golden mismatch | 产码字节变了。若属预期，跑 `make golden` 并提交新基准；否则是真实回归 |

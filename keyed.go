@@ -8,9 +8,9 @@ import (
 type keyedAnyKey struct{}
 
 // AnyKey is the sentinel value used to query all keyed registrations for a given
-// service type (AD-17). Story 3-3 implements the full AnyKey semantics
-// (GetKeyedService(AnyKey) panics, GetKeyedServices(AnyKey) returns all keyed);
-// this story only defines the sentinel.
+// service type (AD-17). It is three-state: GetKeyedService(AnyKey) panics,
+// GetKeyedServices(AnyKey) returns every keyed instance of the type, and
+// IsKeyedService(AnyKey) returns false.
 var AnyKey = keyedAnyKey{}
 
 // AnyKeySingleResolveError builds the error used when GetKeyedService is called

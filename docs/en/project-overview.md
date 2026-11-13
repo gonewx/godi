@@ -12,10 +12,10 @@ main resolution path**.
 The value proposition is that godi's primary architecture is **B2 codegen with
 direct wiring**: a static analyzer reads your registration file's type facts and
 emits a plain-Go container whose constructor calls are wired directly, field to
-field, with zero reflective construction. The runtime provider (a reflect-based
+field, with zero reflective construction. The runtime provider (a closure-based
 oracle) exists alongside it to prove — case by case — that the generated
-container behaves identically to a dynamically resolved one. You register
-services once; both providers are derived from that single source.
+container behaves identically to a dynamically resolved one. The conformance
+suite builds both providers from registrations kept equivalent by hand (AD-14).
 
 Because Go interface methods cannot declare type parameters, the ergonomic typed
 API (`Get[T]`, `GetRequired[T]`, ...) lives as **free generic functions** over a
@@ -53,10 +53,10 @@ deliberately non-generic `Provider` interface, rather than as methods on it.
 | Package | Responsibility |
 | --- | --- |
 | `godi` (root) | DSL markers, `Provider`/`Scope` interfaces, free generic resolution functions, `AnyKey`, async contracts |
-| `plan` | Registration model (`Registry`, `Service`, `Lifetime`), validation gate, topological sort |
+| `plan` | Registration model (`Registry`, `Service`, `Lifetime`), validation gate |
 | `internal/genlib` | Sole code-emission path — `Generate()` and all `emit*` helpers |
 | `cmd/godi-gen` | Static-analysis CLI: `go/packages` load → `go/types` read → `genlib.Generate` |
-| `runtime` | Reflect-based provider oracle + disposer (Builder, root/scope, LIFO release) |
+| `runtime` | Closure-based provider oracle + disposer (Builder, root/scope, LIFO release) |
 | `activator` | Tier C reflective construction (`CreateInstance[T]`, best-match selection) |
 | `conformance` | Dual-provider parameterized spec suite, ported fakes, pre-generated container |
 

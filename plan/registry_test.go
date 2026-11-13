@@ -166,6 +166,15 @@ func TestValidate_DuplicateServiceName_ReturnsError(t *testing.T) {
 		}
 	}
 	testutil.True(t, found, "error must describe the duplicate service name")
+
+	hinted := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "rename one implementation type or register them under distinct keys") {
+			hinted = true
+			break
+		}
+	}
+	testutil.True(t, hinted, "duplicate-name error must say how to resolve the collision")
 }
 
 // --- 2.5-REVIEW (F1) — reserved service name collides with Provider method ------

@@ -186,7 +186,7 @@ func TestProvider_SatisfiesGodiProviderContract(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	lt := reflect.TypeFor[*logger]()
-	// Exercise every method of the six-method face so the full contract is touched.
+	// Exercise the Provider face's resolution methods and CreateScope.
 	_ = p.GetService(lt)
 	_ = p.IsService(lt)
 	_ = p.GetKeyedService(lt, nil)

@@ -4,9 +4,8 @@
 // go/packages + go/types and never executes them (AD-7). The DSL body is a pure
 // static marker — it builds no runtime registry representation.
 //
-// Story 1.1 seeded the minimal DSL (Registry + AddSingleton) needed to prove the
-// AD-7 static-analysis path end to end. Story 1.2 added the shared Provider /
-// Scope contract (AD-16, see provider.go) and the free generic convenience layer
-// Get[T] / GetRequired[T] (AD-5, see get.go). The fuller DSL (AddScoped /
-// AddTransient / AddKeyed) lands in the capability epics.
+// The DSL (dsl.go) covers AddSingleton / AddScoped / AddTransient together with
+// their Factory (form B) and Keyed variants. The shared Provider / Scope contract
+// lives in provider.go (AD-16), and the typed convenience functions in get.go and
+// keyed.go (AD-5).
 package godi
