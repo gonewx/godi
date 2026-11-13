@@ -25,7 +25,7 @@ import (
 // would read an unresolvable type parameter and Validate would reject the graph
 // with a phantom missing-dependency error (AC1 skip rule).
 func TestGenerator_PerServiceHelper_RecognizedAndReduced(t *testing.T) {
-	src, err := generate("testdata/opengeneric", "opengenericfix")
+	src, err := generate("testdata/opengeneric", "opengenericfix", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -43,7 +43,7 @@ func TestGenerator_PerServiceHelper_RecognizedAndReduced(t *testing.T) {
 // registered service — NewBox[IDep](r.f_Dep), not NewBox[IDep]() with a phantom
 // type-param parameter.
 func TestGenerator_PerServiceHelper_InjectsClosedDependency(t *testing.T) {
-	src, err := generate("testdata/opengeneric", "opengenericfix")
+	src, err := generate("testdata/opengeneric", "opengenericfix", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -60,7 +60,7 @@ func TestGenerator_PerServiceHelper_InjectsClosedDependency(t *testing.T) {
 // a plan.Validate duplicate and an f_Box field collision. Distinct method names
 // prove the type args were folded (deferred-work.md:57).
 func TestGenerator_PerServiceHelper_DisambiguatesInstantiations(t *testing.T) {
-	src, err := generate("testdata/opengeneric", "opengenericfix")
+	src, err := generate("testdata/opengeneric", "opengenericfix", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -76,7 +76,7 @@ func TestGenerator_PerServiceHelper_DisambiguatesInstantiations(t *testing.T) {
 // (a bare type parameter) — that would mean the helper-body template marker
 // leaked into the registry instead of being skipped.
 func TestGenerator_PerServiceHelper_NoOpenTemplateLeak(t *testing.T) {
-	src, err := generate("testdata/opengeneric", "opengenericfix")
+	src, err := generate("testdata/opengeneric", "opengenericfix", "")
 	testutil.NoError(t, err)
 
 	code := string(src)

@@ -52,10 +52,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	src, err := generate(args[0], *pkgName)
+	src, err := generate(args[0], *pkgName, *out)
 	if err != nil {
 		// AD-3 / NFR2: a bad graph (missing New{Impl}, validation failure, load
-		// error) produces ZERO bytes and a non-zero exit. The //go:generate gate
+		// error, emitted container that does not type-check) produces ZERO bytes
+		// and a non-zero exit. The //go:generate gate
 		// fails the build rather than emitting half a container.
 		fmt.Fprintf(os.Stderr, "godi-gen: %v\n", err)
 		os.Exit(1)
@@ -73,9 +74,10 @@ func main() {
 
 // generate is the testable generator entry point. It loads the registration
 // package at srcDir, builds the plan.Registry from go/types facts, and emits the
-// container as package pkgName. On any error it returns nil output (NFR2: a
-// rejected graph emits zero bytes).
-func generate(srcDir, pkgName string) ([]byte, error) {
+// container as package pkgName, then type-checks the emitted source where it
+// will live (typeCheckOutput). outPath is the -out file; "" means stdout. On any
+// error it returns nil output (NFR2: a rejected graph emits zero bytes).
+func generate(srcDir, pkgName, outPath string) ([]byte, error) {
 	pkg, err := loadPackage(srcDir)
 	if err != nil {
 		return nil, err
@@ -84,7 +86,14 @@ func generate(srcDir, pkgName string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return genlib.Generate(reg, pkgName)
+	src, err := genlib.Generate(reg, pkgName)
+	if err != nil {
+		return nil, err
+	}
+	if err := typeCheckOutput(srcDir, pkgName, outPath, pkgName == pkg.Name, src); err != nil {
+		return nil, err
+	}
+	return src, nil
 }
 
 // loadPackage statically loads the single registration package at dir with full

@@ -9,7 +9,7 @@
 // genlib.Generate), and emits the container. A form-A service with no New{Impl}
 // is a gen-time error that hints form B and emits ZERO bytes (NFR2, AD-8).
 //
-// generate(srcDir, pkgName) ([]byte, error) is the testable entry point:
+// generate(srcDir, pkgName, outPath) ([]byte, error) is the testable entry point:
 //   - legal form-A graph  -> emitted container source, nil error
 //   - form-A with no New{Impl} -> nil output + error hinting form B
 //   - static analysis NEVER executes user code (AD-7)
@@ -36,7 +36,7 @@ import (
 // dependency parameter, and emit a container that passes that dependency as a
 // constructor argument.
 func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
-	src, err := generate("testdata/deps", "codegen")
+	src, err := generate("testdata/deps", "codegen", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -49,7 +49,7 @@ func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
 // When a discovered constructor has a trailing error return, the emitted NewRoot
 // must adopt the (*Root, error) signature so the error can propagate (AD-8/D-1).
 func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
-	src, err := generate("testdata/deps", "codegen")
+	src, err := generate("testdata/deps", "codegen", "")
 	testutil.NoError(t, err)
 	code := string(src)
 
@@ -72,7 +72,7 @@ func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
 // runtime counterpart (AD-15). A form-A service with no New{Impl} must fail
 // generation with a hint to use form B AND emit zero bytes (NFR2).
 func TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint(t *testing.T) {
-	src, err := generate("testdata/nonewimpl", "codegen")
+	src, err := generate("testdata/nonewimpl", "codegen", "")
 
 	testutil.Error(t, err)
 	testutil.Nil(t, src) // zero-byte code on a rejected graph (NFR2 hard gate)
@@ -91,7 +91,7 @@ func TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint(t *testing.T) {
 // generate result is positive evidence go/packages only parsed and type-checked
 // the registration — it never ran it (AD-7).
 func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
-	_, err := generate("testdata/deps", "codegen")
+	_, err := generate("testdata/deps", "codegen", "")
 	testutil.NoError(t, err) // a panic from the fixture tripwire would fail here
 }
 
@@ -108,7 +108,7 @@ func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
 // non-compilable. This test pins the exact qualified inline plus the emitted
 // import.
 func TestGenerator_FormB_InlinesFactoryExpression(t *testing.T) {
-	src, err := generate("testdata/formb", "codegen")
+	src, err := generate("testdata/formb", "codegen", "")
 	testutil.NoError(t, err)
 
 	code := string(src)
