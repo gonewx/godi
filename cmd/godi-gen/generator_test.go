@@ -36,7 +36,7 @@ import (
 // dependency parameter, and emit a container that passes that dependency as a
 // constructor argument.
 func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
-	src, err := generate("testdata/deps", "codegen", "")
+	src, err := generate("testdata/deps", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -50,7 +50,7 @@ func TestGenerator_FormA_DiscoversCtorAndWiresDeps(t *testing.T) {
 // accessor must use comma-err form and panic with the error, which NewRoot
 // recovers and returns (AD-8/D-1).
 func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
-	src, err := generate("testdata/deps", "codegen", "")
+	src, err := generate("testdata/deps", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 	code := string(src)
 
@@ -76,7 +76,7 @@ func TestGenerator_FormA_DetectsTrailingErrorCtor(t *testing.T) {
 // runtime counterpart (AD-15). A form-A service with no New{Impl} must fail
 // generation with a hint to use form B AND emit zero bytes (NFR2).
 func TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint(t *testing.T) {
-	src, err := generate("testdata/nonewimpl", "codegen", "")
+	src, err := generate("testdata/nonewimpl", "codegen", "", develVersion)
 
 	testutil.Error(t, err)
 	testutil.Nil(t, src) // zero-byte code on a rejected graph (NFR2 hard gate)
@@ -95,7 +95,7 @@ func TestGenerator_FormA_NoNewImpl_ErrorsWithFormBHint(t *testing.T) {
 // generate result is positive evidence go/packages only parsed and type-checked
 // the registration — it never ran it (AD-7).
 func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
-	_, err := generate("testdata/deps", "codegen", "")
+	_, err := generate("testdata/deps", "codegen", "", develVersion)
 	testutil.NoError(t, err) // a panic from the fixture tripwire would fail here
 }
 
@@ -113,7 +113,7 @@ func TestGenerator_StaticAnalysis_DoesNotExecuteUserCode(t *testing.T) {
 // non-compilable. This test pins the exact qualified inline plus the emitted
 // import.
 func TestGenerator_FormB_InlinesFactoryExpression(t *testing.T) {
-	src, err := generate("testdata/formb", "codegen", "")
+	src, err := generate("testdata/formb", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)

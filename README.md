@@ -94,7 +94,9 @@ repo := godi.GetRequired[Repo](scope)
 `container_gen.go` is a **build input** — commit it, so consumers can build
 without installing the generator. After changing a DSL declaration, re-run
 `go generate ./...` and make sure `git status --porcelain` stays empty
-(guards against assembly drift).
+(guards against assembly drift). The second line of the file records the
+generator version (`godi-gen -version` prints it), so upgrading the library
+without regenerating shows up as drift too.
 
 ## Known Limitations
 

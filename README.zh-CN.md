@@ -91,7 +91,8 @@ repo := godi.GetRequired[Repo](scope)
 
 `container_gen.go` 是**构建输入**——应当提交入库，消费方无需安装生成器即可构建。
 修改 DSL 声明后须重跑 `go generate ./...`，并确保 `git status --porcelain`
-保持为空（防装配漂移）。
+保持为空（防装配漂移）。文件第二行记录了生成器版本（`godi-gen -version` 可以打印它），
+所以升级库之后没有重新生成，同样会表现为漂移。
 
 ## 已知限制
 

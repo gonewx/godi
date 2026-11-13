@@ -15,7 +15,7 @@ import (
 // with no arguments, but NewFoo now takes an ILog. Regeneration must succeed
 // and wire the dependency into the new call.
 func TestGenerate_IgnoresStaleGeneratedOutput(t *testing.T) {
-	out, err := generate("testdata/staleoutput", "staleoutput", "")
+	out, err := generate("testdata/staleoutput", "staleoutput", "", develVersion)
 	if err != nil {
 		t.Fatalf("stale output must not block regeneration: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestGenerate_IgnoresSyntacticallyBrokenGeneratedOutput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			writeRuntimeFile(t, runtimeFileName(dir, "container_gen"), generatedHeader+"\n"+tc.body)
-			if _, err := generate(dir, "garbageoutput", ""); err != nil {
+			if _, err := generate(dir, "garbageoutput", "", develVersion); err != nil {
 				t.Fatal(err)
 			}
 		})

@@ -13,10 +13,12 @@
 // Usage:
 //
 //	godi-gen -pkg <name> [-out <file>] <srcDir>
+//	godi-gen -version
 //
 // <srcDir> is the directory of the registration package to analyze; -pkg is the
 // package name of the emitted container; -out is the output file (stdout when
-// omitted). The //go:generate consumer wires this as a build step + CI gate.
+// omitted). -version prints the generator version and exits; the same version
+// is written on the second line of every emitted container. The //go:generate consumer wires this as a build step + CI gate.
 package main
 
 import (
@@ -46,15 +48,22 @@ const godiPkgPath = "github.com/gonewx/godi"
 func main() {
 	pkgName := flag.String("pkg", "", "package name of the emitted container (required)")
 	out := flag.String("out", "", "output file path (default: stdout)")
+	showVersion := flag.Bool("version", false, "print the generator version and exit")
 	flag.Parse()
+
+	version := generatorVersion()
+	if *showVersion {
+		fmt.Printf("godi-gen %s\n", version)
+		return
+	}
 
 	args := flag.Args()
 	if len(args) != 1 || *pkgName == "" {
-		fmt.Fprintln(os.Stderr, "usage: godi-gen -pkg <name> [-out <file>] <srcDir>")
+		fmt.Fprintln(os.Stderr, "usage: godi-gen -pkg <name> [-out <file>] <srcDir>\n       godi-gen -version")
 		os.Exit(2)
 	}
 
-	src, err := generate(args[0], *pkgName, *out)
+	src, err := generate(args[0], *pkgName, *out, version)
 	if err != nil {
 		// AD-3 / NFR2: a bad graph (missing New{Impl}, validation failure, load
 		// error, emitted container that does not type-check) produces ZERO bytes
@@ -79,7 +88,9 @@ func main() {
 // container as package pkgName, then type-checks the emitted source where it
 // will live (typeCheckOutput). outPath is the -out file; "" means stdout. On any
 // error it returns nil output (NFR2: a rejected graph emits zero bytes).
-func generate(srcDir, pkgName, outPath string) ([]byte, error) {
+// version is the generator version stamped into the header; main resolves it
+// once so nothing below reads build info.
+func generate(srcDir, pkgName, outPath, version string) ([]byte, error) {
 	if outPath != "" {
 		if err := checkOutDir(outPath); err != nil {
 			return nil, err
@@ -93,7 +104,7 @@ func generate(srcDir, pkgName, outPath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := genlib.Generate(reg, pkgName)
+	src, err := genlib.Generate(reg, pkgName, genlib.WithGeneratorVersion(version))
 	if err != nil {
 		return nil, err
 	}

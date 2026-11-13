@@ -56,6 +56,9 @@ godi 所有值得注意的变更都记录在这里。格式遵循
 - `godi.CloseGuard`：可重入、只执行一次的关闭辅助类型，供生成的容器使用。
 - `runtime.Disposer.TrackAny`：按动态类型追踪一个值以便释放。
 - 两种语言的 README 都增加了“已知限制”一节。
+- `godi-gen -version` 打印生成器版本。每个生成的容器都在第二行记录这个版本
+  （`// godi-gen version: v0.2.0`），所以容器若不是由 `go.mod` 里那个库版本对应的生成器生成，
+  会表现为产物漂移。
 
 ### Fixed
 

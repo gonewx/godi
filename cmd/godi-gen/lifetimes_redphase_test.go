@@ -28,7 +28,7 @@ import (
 // produce a container that has scope-level fields and New{T}() methods for
 // transients (not just singleton Root fields).
 func TestGenerator_LifetimeIdentification_ScopedAndTransient(t *testing.T) {
-	src, err := generate("testdata/lifetimes", "codegen", "")
+	src, err := generate("testdata/lifetimes", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -49,7 +49,7 @@ func TestGenerator_LifetimeIdentification_ScopedAndTransient(t *testing.T) {
 // fixture's init() panics if executed (AD-7 tripwire). A clean generate()
 // result proves the generator only parsed and type-checked the fixture.
 func TestGenerator_LifetimeIdentification_StaticAnalysisOnly(t *testing.T) {
-	_, err := generate("testdata/lifetimes", "codegen", "")
+	_, err := generate("testdata/lifetimes", "codegen", "", develVersion)
 	testutil.NoError(t, err) // panic from fixture init() would fail here
 }
 
@@ -60,7 +60,7 @@ func TestGenerator_LifetimeIdentification_StaticAnalysisOnly(t *testing.T) {
 // discover this dependency and wire it — the scope's Request field must be
 // constructed with the root's Logger singleton.
 func TestGenerator_LifetimeIdentification_ScopedDependsOnSingleton(t *testing.T) {
-	src, err := generate("testdata/lifetimes", "codegen", "")
+	src, err := generate("testdata/lifetimes", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -74,7 +74,7 @@ func TestGenerator_LifetimeIdentification_ScopedDependsOnSingleton(t *testing.T)
 // singleton graph from 2.1) must still produce a valid container — regression
 // guard that lifetime identification does not break singleton-only recognition.
 func TestGenerator_ExistingDepsFixtureUnchanged(t *testing.T) {
-	src, err := generate("testdata/deps", "codegen", "")
+	src, err := generate("testdata/deps", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)

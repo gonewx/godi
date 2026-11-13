@@ -38,7 +38,7 @@ func captureStderr(t *testing.T, fn func()) string {
 func TestGenerate_InferredTypeArgumentMarkerIsRegistered(t *testing.T) {
 	var out []byte
 	var err error
-	stderr := captureStderr(t, func() { out, err = generate("testdata/inferred", "inferred", "") })
+	stderr := captureStderr(t, func() { out, err = generate("testdata/inferred", "inferred", "", develVersion) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestGenerate_InferredTypeArgumentMarkerIsRegistered(t *testing.T) {
 func TestGenerate_UnsupportedHelperShapeIsAnError(t *testing.T) {
 	var out []byte
 	var err error
-	stderr := captureStderr(t, func() { out, err = generate("testdata/unreadablehelper", "unreadablehelper", "") })
+	stderr := captureStderr(t, func() { out, err = generate("testdata/unreadablehelper", "unreadablehelper", "", develVersion) })
 	if err == nil || out != nil {
 		t.Fatalf("want rejection with zero bytes, got err=%v len=%d", err, len(out))
 	}
@@ -71,7 +71,7 @@ func TestGenerate_UnsupportedHelperShapeIsAnError(t *testing.T) {
 func TestGenerate_ForeignSameNamedFunctionIsNotAnError(t *testing.T) {
 	var out []byte
 	var err error
-	stderr := captureStderr(t, func() { out, err = generate("testdata/foreignsamename", "foreignsamename", "") })
+	stderr := captureStderr(t, func() { out, err = generate("testdata/foreignsamename", "foreignsamename", "", develVersion) })
 	if err != nil {
 		t.Fatalf("a same-named non-godi function must not reject generation: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestGenerate_ForeignSameNamedFunctionIsNotAnError(t *testing.T) {
 func TestGenerate_InferredMarkerInsideHelperBodyIsRegistered(t *testing.T) {
 	var out []byte
 	var err error
-	stderr := captureStderr(t, func() { out, err = generate("testdata/inferredhelper", "inferredhelper", "") })
+	stderr := captureStderr(t, func() { out, err = generate("testdata/inferredhelper", "inferredhelper", "", develVersion) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestGenerate_InferredMarkerInsideHelperBodyIsRegistered(t *testing.T) {
 func TestGenerate_DotImportedInferredMarkerIsRegistered(t *testing.T) {
 	var out []byte
 	var err error
-	stderr := captureStderr(t, func() { out, err = generate("testdata/dotimport", "dotimport", "") })
+	stderr := captureStderr(t, func() { out, err = generate("testdata/dotimport", "dotimport", "", develVersion) })
 	if err != nil {
 		t.Fatal(err)
 	}

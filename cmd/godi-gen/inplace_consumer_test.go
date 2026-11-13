@@ -63,7 +63,7 @@ func UseFoo() IFoo { return MustRoot().Foo() }
 // registration directory) and, on success, writes the container to out.
 func generateInPlace(t *testing.T, out string) []byte {
 	t.Helper()
-	src, err := generate(inplaceDir, "inplaceconsumer", out)
+	src, err := generate(inplaceDir, "inplaceconsumer", out, develVersion)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestInPlace_ValidContainerWithConsumer(t *testing.T) {
 	first := generateInPlace(t, out)
 	writeRuntimeFile(t, runtimeFileName(inplaceDir, "app"), consumerSrc)
 
-	again, err := generate(inplaceDir, "inplaceconsumer", out)
+	again, err := generate(inplaceDir, "inplaceconsumer", out, develVersion)
 	if err != nil {
 		t.Fatalf("regenerate with a same-package consumer: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestInPlace_StaleContainerWithConsumer(t *testing.T) {
 			writeRuntimeFile(t, out, stale)
 			writeRuntimeFile(t, runtimeFileName(inplaceDir, "app"), consumerSrc)
 
-			got, err := generate(dir, "inplaceconsumer", out)
+			got, err := generate(dir, "inplaceconsumer", out, develVersion)
 			if err != nil {
 				t.Fatalf("stale container with a consumer must not block regeneration: %v", err)
 			}
@@ -158,7 +158,7 @@ func TestInPlace_RegistrationTypeErrorIsReported(t *testing.T) {
 			bad := runtimeFileName(inplaceDir, "broken")
 			writeRuntimeFile(t, bad, brokenRegSrc)
 
-			out, err := generate(inplaceDir, "inplaceconsumer", "")
+			out, err := generate(inplaceDir, "inplaceconsumer", "", develVersion)
 			if err == nil {
 				t.Fatal("want a load/type-check error, got nil")
 			}
@@ -205,7 +205,7 @@ func registerBar() {
 func UseBar() IBar { return MustRoot().Bar() }
 `)
 
-	got, err := generate(inplaceDir, "inplaceconsumer", out)
+	got, err := generate(inplaceDir, "inplaceconsumer", out, develVersion)
 	if err == nil {
 		t.Fatal("want a type-check error for the dropped accessor, got nil")
 	}
@@ -235,7 +235,7 @@ func registerBarFactory() {
 }
 `)
 
-	got, err := generate(inplaceDir, "inplaceconsumer", out)
+	got, err := generate(inplaceDir, "inplaceconsumer", out, develVersion)
 	if err != nil {
 		t.Fatalf("factory mentioning *Root must regenerate: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestInPlace_ConsumerWithoutContainerReportsConsumer(t *testing.T) {
 	app := runtimeFileName(inplaceDir, "app")
 	writeRuntimeFile(t, app, consumerSrc)
 
-	out, err := generate(inplaceDir, "inplaceconsumer", "")
+	out, err := generate(inplaceDir, "inplaceconsumer", "", develVersion)
 	if err == nil {
 		t.Fatal("want a load error, got nil")
 	}
@@ -276,7 +276,7 @@ func registerGeneratedBar() {
 	godi.AddSingleton[IBar, Bar](&r)
 }
 `)
-	got, err := generate(inplaceDir, "inplaceconsumer", "")
+	got, err := generate(inplaceDir, "inplaceconsumer", "", develVersion)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -289,7 +289,7 @@ func registerGeneratedBar() {
 // the container as a file of that directory's package.
 func TestGenerate_OutIntoAnotherPackage(t *testing.T) {
 	out := filepath.Join("testdata", "crosspkgout", "container_gen.go")
-	src, err := generate(filepath.Join("testdata", "deps"), "crosspkgout", out)
+	src, err := generate(filepath.Join("testdata", "deps"), "crosspkgout", out, develVersion)
 	if err != nil {
 		t.Fatalf("cross-package -out: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestGenerate_OutIntoAnotherPackage(t *testing.T) {
 // bytes, as in the other layouts.
 func TestGenerate_OutIntoAnotherPackageRejectsUncompilable(t *testing.T) {
 	out := filepath.Join("testdata", "crosspkgout", "container_gen.go")
-	src, err := generate(filepath.Join("testdata", "tcnotimpl"), "crosspkgout", out)
+	src, err := generate(filepath.Join("testdata", "tcnotimpl"), "crosspkgout", out, develVersion)
 	if err == nil {
 		t.Fatal("want type-check error, got nil")
 	}
@@ -318,7 +318,7 @@ func TestGenerate_OutIntoAnotherPackageRejectsUncompilable(t *testing.T) {
 // type-checking, not as a type error.
 func TestGenerate_OutDirectoryMissing(t *testing.T) {
 	missing := filepath.Join("testdata", "no-such-output-dir")
-	src, err := generate(filepath.Join("testdata", "deps"), "depsfix", filepath.Join(missing, "container_gen.go"))
+	src, err := generate(filepath.Join("testdata", "deps"), "depsfix", filepath.Join(missing, "container_gen.go"), develVersion)
 	if err == nil {
 		t.Fatal("want an error for the missing output directory, got nil")
 	}

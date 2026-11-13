@@ -22,7 +22,7 @@ func runLazyFixture(t *testing.T, dir string) {
 	}
 	fixture := filepath.Join("testdata", dir)
 	out := filepath.Join(fixture, "container_gen.go")
-	src, err := generate(fixture, dir, out)
+	src, err := generate(fixture, dir, out, develVersion)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}

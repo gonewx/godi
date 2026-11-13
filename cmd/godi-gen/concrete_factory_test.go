@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerator_FormBConcretePointerServiceTypes(t *testing.T) {
-	src, err := generate("testdata/concretefactory", "codegen", "")
+	src, err := generate("testdata/concretefactory", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -31,7 +31,7 @@ func TestGenerator_FormBConcretePointerOutputCompiles(t *testing.T) {
 		t.Skip("skipping subprocess (go vet) compile check in -short mode")
 	}
 
-	src, err := generate("testdata/concretefactory", "compilecheck", "")
+	src, err := generate("testdata/concretefactory", "compilecheck", "", develVersion)
 	testutil.NoError(t, err)
 
 	dir := filepath.Join("testdata", "concretefactory", "zz_compile_check")

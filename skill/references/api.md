@@ -184,9 +184,13 @@ func (d *Disposer) TrackAny(v any)   // tracks v by its dynamic type: io.Closer 
 
 ```
 godi-gen -pkg <name> [-out <file>] <srcDir>
+godi-gen -version
 ```
+
+Run it as `go tool godi-gen` after `go get -tool github.com/gonewx/godi/cmd/godi-gen`.
 
 - `<srcDir>` — directory of the registration package
 - `-pkg` — package name for the emitted container (required)
 - `-out` — output file path (stdout if omitted)
+- `-version` — print the generator version and exit; the same version is written on the second line of every emitted container
 - Exit 0 + output on success; exit 1 + zero bytes on validation failure (NFR2)

@@ -25,7 +25,7 @@ import (
 // FOUR marker statements (ExprStmts + final return marker) reduces to four
 // closed registrations per call — none silently dropped (NFR2).
 func TestGenerator_MultiStatementHelper_ExpandsAllMarkers(t *testing.T) {
-	src, err := generate("testdata/optionshelper", "codegen", "")
+	src, err := generate("testdata/optionshelper", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -51,7 +51,7 @@ func TestGenerator_MultiStatementHelper_ExpandsAllMarkers(t *testing.T) {
 // expression is inlined with the helper type parameter CLOSED and — emitting
 // into a different package — registration-package identifiers QUALIFIED.
 func TestGenerator_HelperFormB_RewritesFactoryText(t *testing.T) {
-	src, err := generate("testdata/optionshelper", "codegen", "")
+	src, err := generate("testdata/optionshelper", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -71,7 +71,7 @@ func TestGenerator_HelperFormB_RewritesFactoryText(t *testing.T) {
 // package, the gois di/ case): bare registration-package identifiers must stay
 // bare — qualifying them would not compile.
 func TestGenerator_HelperFormB_SamePackageKeepsBareIdents(t *testing.T) {
-	src, err := generate("testdata/optionshelper", "optionsfix", "")
+	src, err := generate("testdata/optionshelper", "optionsfix", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -88,7 +88,7 @@ func TestGenerator_HelperFormB_SamePackageKeepsBareIdents(t *testing.T) {
 // accessor and builds it on demand, whatever order NewRoot triggers them in.
 // This is the ordering half of deferred-work.md "form-B codegen 完整支持依赖型/跨包工厂".
 func TestGenerator_FormBFactoryDeps_BuildSingletonOnDemand(t *testing.T) {
-	src, err := generate("testdata/optionshelper", "codegen", "")
+	src, err := generate("testdata/optionshelper", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -109,7 +109,7 @@ func TestGenerator_FormBFactoryDeps_BuildSingletonOnDemand(t *testing.T) {
 // cross-type (MyCfg's factory never mentions OtherCfg and vice versa) and no
 // open template leaks ([T] never appears).
 func TestGenerator_HelperExpansions_StayIndependent(t *testing.T) {
-	src, err := generate("testdata/optionshelper", "codegen", "")
+	src, err := generate("testdata/optionshelper", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -130,7 +130,7 @@ func TestGenerator_HelperExpansions_StayIndependent(t *testing.T) {
 }
 
 func TestGenerator_FormBMultiRegistration_GetsDistinctNamesAndCollectionOrder(t *testing.T) {
-	src, err := generate("testdata/formbmulti", "codegen", "")
+	src, err := generate("testdata/formbmulti", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -153,7 +153,7 @@ func TestGenerator_FormBMultiRegistration_GetsDistinctNamesAndCollectionOrder(t 
 func TestGenerator_SingletonBuildsTransientFactoryCollectionDepsOnDemand(t *testing.T) {
 	// Emitted into the fixture's own package: its factories reference unexported
 	// identifiers (setup, monitor, factory), which only type-check in-package.
-	src, err := generate("testdata/transientcollectiondeps", "transientcollectiondeps", "")
+	src, err := generate("testdata/transientcollectiondeps", "transientcollectiondeps", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)
@@ -178,7 +178,7 @@ func TestGenerator_RewrittenOutput_Compiles(t *testing.T) {
 		t.Skip("skipping subprocess (go vet) compile check in -short mode")
 	}
 	for _, fixture := range []string{"optionshelper", "aliascollide"} {
-		src, err := generate("testdata/"+fixture, "compilecheck", "")
+		src, err := generate("testdata/"+fixture, "compilecheck", "", develVersion)
 		testutil.NoError(t, err)
 
 		dir := filepath.Join("testdata", fixture, "zz_compile_check")
@@ -199,7 +199,7 @@ func TestGenerator_RewrittenOutput_Compiles(t *testing.T) {
 // distinct identifiers, and a factory body's own qualifier is remapped to the
 // emitted alias.
 func TestGenerator_ImportAliasCollision(t *testing.T) {
-	src, err := generate("testdata/aliascollide", "codegen", "")
+	src, err := generate("testdata/aliascollide", "codegen", "", develVersion)
 	testutil.NoError(t, err)
 
 	code := string(src)

@@ -23,7 +23,7 @@ import (
 // SPECIFIC message naming AnyKey as a query-only sentinel — replacing the generic
 // "not a compile-time constant" D-1 error — and emit zero bytes (NFR2 hard gate).
 func TestGenerator_AnyKeyAsRegistrationKey_Rejected(t *testing.T) {
-	src, err := generate("testdata/keyedanykey", "codegen", "")
+	src, err := generate("testdata/keyedanykey", "codegen", "", develVersion)
 
 	testutil.Error(t, err)
 	testutil.Nil(t, src) // zero-byte code on a rejected graph (NFR2)
@@ -47,7 +47,7 @@ func TestGenerator_AnyKeyAsRegistrationKey_Rejected(t *testing.T) {
 // constant value, so without the pre-normalization it would be wrongly rejected
 // by the D-1 constant check — this proves the normalization runs first (R3).
 func TestGenerator_NilKey_RoutesToUnkeyed(t *testing.T) {
-	src, err := generate("testdata/keyednil", "codegen", "")
+	src, err := generate("testdata/keyednil", "codegen", "", develVersion)
 	testutil.NoError(t, err) // nil key must NOT trip the D-1 non-constant gate
 	testutil.NotNil(t, src)
 

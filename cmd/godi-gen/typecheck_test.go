@@ -20,7 +20,7 @@ import (
 func TestGenerate_RejectsUncompilableOutput(t *testing.T) {
 	for _, dir := range []string{"tcconcreteparam", "tcnotimpl", "tckeyconst", "tcreserved"} {
 		t.Run(dir, func(t *testing.T) {
-			out, err := generate(filepath.Join("testdata", dir), dir, "")
+			out, err := generate(filepath.Join("testdata", dir), dir, "", develVersion)
 			if err == nil {
 				t.Fatalf("want type-check error, got nil")
 			}
@@ -42,7 +42,7 @@ func TestGenerate_RejectsUncompilableOutput(t *testing.T) {
 // (depsfix) so the stale file joins the registration package — the
 // same-package layout where the Root collision can actually occur.
 func TestGenerate_StdoutModeIgnoresExistingGeneratedFile(t *testing.T) {
-	src, err := generate("testdata/deps", "depsfix", "")
+	src, err := generate("testdata/deps", "depsfix", "", develVersion)
 	if err != nil {
 		t.Fatalf("first generate: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestGenerate_StdoutModeIgnoresExistingGeneratedFile(t *testing.T) {
 		t.Fatalf("write stale generated file: %v", err)
 	}
 
-	again, err := generate("testdata/deps", "depsfix", "")
+	again, err := generate("testdata/deps", "depsfix", "", develVersion)
 	if err != nil {
 		t.Fatalf("second generate with an existing generated file: %v", err)
 	}
