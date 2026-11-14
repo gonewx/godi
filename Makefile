@@ -18,7 +18,7 @@ export VERSION
 CHANGELOG    := CHANGELOG.md
 CHANGELOG_ZH := CHANGELOG.zh-CN.md
 
-# Flags for `git tag` in release-tag; set GIT_TAG_FLAGS=-s to sign the tag.
+# Flags for `git tag` in release; set GIT_TAG_FLAGS=-s to sign the tag.
 GIT_TAG_FLAGS ?= -a
 
 # awk program printing the body of the changelog section whose heading starts
@@ -47,8 +47,7 @@ CHANGELOG_CUT = $$0 == "\#\# [Unreleased]" && !cut { cut = 1; print; print ""; p
 	{ print } \
 	END { exit !(cut && linked) }
 
-# Targets with prerequisites (ci, release-check, release-tag) rely on their
-# order: cheap checks run before the full gate.
+# Targets with prerequisites (ci, release-check, release) rely on their order.
 .NOTPARALLEL:
 
 .DEFAULT_GOAL := help
@@ -146,18 +145,20 @@ version: ## Print the generator version of this checkout.
 
 # --- Release ------------------------------------------------------------------
 #
-#   1. make release-tag VERSION=vX.Y.Z    cut the changelogs, commit, verify
-#                                         everything, create the tag locally
-#   2. make release-push VERSION=vX.Y.Z   push $(MAIN_BRANCH) and the tag together
-#   3. The release workflow runs release-check and release-publish on the tag.
+#   make release VERSION=vX.Y.Z
+#
+# is the whole procedure: cut the changelogs and commit, run the full gate
+# locally, push $(MAIN_BRANCH), wait for the test workflow to pass on that
+# commit, and only then create and push the tag. The release workflow runs
+# release-check and release-publish on the tag; the command waits for it too.
 #
 # Day to day, entries only ever go under "## [Unreleased]"; nobody edits
-# version headings by hand.
+# version headings or pushes tags by hand.
 
 .PHONY: release-version
 release-version: # Validate the format of VERSION.
 	@if ! printf '%s\n' "$$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$$'; then \
-		echo "error: VERSION must be a semver tag such as v0.2.0 (got '$$VERSION'), for example 'make release-tag VERSION=v0.2.0'" >&2; \
+		echo "error: VERSION must be a semver tag such as v0.2.0 (got '$$VERSION'), for example 'make release VERSION=v0.2.0'" >&2; \
 		exit 1; \
 	fi
 
@@ -201,7 +202,7 @@ release-preflight: release-version # Validate both changelog sections and the wo
 	@num="$${VERSION#v}"; \
 	for f in $(CHANGELOG) $(CHANGELOG_ZH); do \
 		if ! awk -v h="## [$$num] - " 'index($$0, h) == 1 && substr($$0, length(h) + 1) ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$$/ { found = 1 } END { exit !found }' "$$f"; then \
-			echo "error: $$f has no '## [$$num] - YYYY-MM-DD' section; 'make release-tag VERSION=$$VERSION' cuts it from Unreleased" >&2; \
+			echo "error: $$f has no '## [$$num] - YYYY-MM-DD' section; 'make release VERSION=$$VERSION' cuts it from Unreleased" >&2; \
 			exit 1; \
 		fi; \
 		if [ -z "$$(awk -v h="## [$$num]" '$(CHANGELOG_SECTION)' "$$f")" ]; then \
@@ -229,31 +230,73 @@ release-notes: ## Print the release notes for VERSION=vX.Y.Z (its section of CHA
 	fi; \
 	printf '%s\n' "$$notes"
 
-.PHONY: release-tag-preflight
-release-tag-preflight: release-version # Cheap checks that run before anything changes: right branch, tag not taken.
+.PHONY: release-start
+release-start: release-version # Cheap checks that run before anything changes: right branch, version not taken.
 	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
 	if [ "$$branch" != "$(MAIN_BRANCH)" ]; then \
-		echo "error: releases are tagged on $(MAIN_BRANCH), not on $$branch" >&2; \
+		echo "error: releases are cut on $(MAIN_BRANCH), not on $$branch" >&2; \
 		exit 1; \
 	fi; \
-	if git rev-parse -q --verify "refs/tags/$$VERSION" >/dev/null; then \
-		echo "error: tag $$VERSION already exists" >&2; \
+	if [ -n "$$(git ls-remote --tags $(REMOTE) "refs/tags/$$VERSION")" ]; then \
+		echo "error: $$VERSION is already released (the tag exists on $(REMOTE))" >&2; \
+		exit 1; \
+	fi; \
+	if git rev-parse -q --verify "refs/tags/$$VERSION" >/dev/null && \
+		[ "$$(git rev-parse "refs/tags/$$VERSION^{commit}")" != "$$(git rev-parse HEAD)" ]; then \
+		echo "error: a local tag $$VERSION points at another commit; remove it with 'git tag -d $$VERSION'" >&2; \
 		exit 1; \
 	fi
 
-.PHONY: release-tag
-release-tag: release-tag-preflight release-prepare release-check ## Cut the changelogs, verify everything and create the annotated tag VERSION=vX.Y.Z locally.
-	@notes="$$($(MAKE) -s --no-print-directory release-notes)" || exit 1; \
-	printf '%s\n\n%s\n' "$$VERSION" "$$notes" | git tag $(GIT_TAG_FLAGS) "$$VERSION" --cleanup=whitespace -F - || exit 1; \
-	echo "tagged $$VERSION at $$(git rev-parse --short HEAD); publish it with 'make release-push VERSION=$$VERSION'"
+.PHONY: release-push-branch
+release-push-branch: # Push the release commit on the main branch, without any tag.
+	git push $(REMOTE) $(MAIN_BRANCH)
 
-.PHONY: release-push
-release-push: ## Push the main branch and the tag VERSION=vX.Y.Z to the remote in one atomic push.
-	@if ! git rev-parse -q --verify "refs/tags/$$VERSION" >/dev/null; then \
-		echo "error: tag '$$VERSION' does not exist; run 'make release-tag VERSION=vX.Y.Z' first" >&2; \
+# Wait for a workflow run on the HEAD commit and fail unless it succeeds.
+release-wait-ci: WORKFLOW := test.yml
+release-wait-publish: WORKFLOW := release.yml
+.PHONY: release-wait-ci release-wait-publish
+release-wait-ci release-wait-publish: # Wait for $(WORKFLOW) on the pushed HEAD commit; fail unless it passes.
+	@sha="$$(git rev-parse HEAD)"; \
+	echo "waiting for $(WORKFLOW) on $$(git rev-parse --short HEAD) ..."; \
+	id=""; tries=0; \
+	while [ -z "$$id" ] && [ "$$tries" -lt 36 ]; do \
+		id="$$(gh run list --workflow $(WORKFLOW) --commit "$$sha" --limit 1 --json databaseId --jq '.[0].databaseId // empty')" || exit 1; \
+		if [ -z "$$id" ]; then tries=$$((tries + 1)); sleep 5; fi; \
+	done; \
+	if [ -z "$$id" ]; then \
+		echo "error: no $(WORKFLOW) run appeared for $$sha within 3 minutes" >&2; \
 		exit 1; \
 	fi; \
-	git push --atomic $(REMOTE) $(MAIN_BRANCH) "refs/tags/$$VERSION"
+	url="$$(gh run view "$$id" --json url --jq .url)"; \
+	if ! gh run watch "$$id" --exit-status --interval 15 >/dev/null 2>&1; then \
+		echo "error: $(WORKFLOW) did not pass on $$sha: $$url" >&2; \
+		exit 1; \
+	fi; \
+	echo "$(WORKFLOW) passed: $$url"
+
+.PHONY: release-create-tag
+release-create-tag: # Create the annotated tag at HEAD with the release notes as its message.
+	@if git rev-parse -q --verify "refs/tags/$$VERSION" >/dev/null; then \
+		echo "tag $$VERSION already exists at HEAD"; \
+		exit 0; \
+	fi; \
+	notes="$$($(MAKE) -s --no-print-directory release-notes)" || exit 1; \
+	printf '%s\n\n%s\n' "$$VERSION" "$$notes" | git tag $(GIT_TAG_FLAGS) "$$VERSION" --cleanup=whitespace -F - || exit 1; \
+	echo "tagged $$VERSION at $$(git rev-parse --short HEAD)"
+
+.PHONY: release-push-tag
+release-push-tag: # Push the tag; this is the step that makes the release public.
+	git push $(REMOTE) "refs/tags/$$VERSION"
+
+.PHONY: release-report
+release-report: # Print where the published release lives.
+	@echo "released $$VERSION: $$(gh release view "$$VERSION" --json url --jq .url)"
+
+# The order is the release procedure. Nothing is tagged until the test
+# workflow has passed on the pushed release commit, and the command can be
+# re-run after any failure: steps that are already done are skipped.
+.PHONY: release
+release: release-start release-prepare release-check release-push-branch release-wait-ci release-create-tag release-push-tag release-wait-publish release-report ## Release VERSION=vX.Y.Z end to end: cut the changelogs, verify, push, wait for CI, tag, publish.
 
 .PHONY: release-publish
 release-publish: ## Create the GitHub Release for the pushed tag VERSION=vX.Y.Z (run by the release workflow).

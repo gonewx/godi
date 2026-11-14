@@ -110,27 +110,37 @@ godi is a library: a release is a semver tag plus a GitHub Release. The
 versioning policy is in the README; the steps below are all Makefile targets.
 
 Day to day, changelog entries only ever go under `## [Unreleased]` in both
-files. Nobody edits version headings by hand: a release is two commands.
+files. Nobody edits version headings or pushes tags by hand: a release is one
+command, run on `main`.
 
-1. `make release-tag VERSION=vX.Y.Z`, on `main`. Everything it does is local
-   and nothing is pushed:
-   - `release-prepare` moves the Unreleased entries of both changelog files
-     under `## [X.Y.Z] - <today>`, leaves a fresh empty `## [Unreleased]`,
-     rewrites the link references at the bottom, and commits the two files as
-     `docs: release vX.Y.Z`. It refuses to run when Unreleased is empty or
-     tracked files have uncommitted changes, and does nothing when the section
-     already exists, so the command can be re-run after fixing a failure.
-   - `release-check` verifies the version format, the dated non-empty section
-     in both changelogs and a clean tree, then runs the whole `ci` target.
-   - It then creates an annotated tag whose message is that changelog section.
-     Set `GIT_TAG_FLAGS=-s` to sign the tag.
-2. `make release-push VERSION=vX.Y.Z` — pushes `main` and the tag in one atomic
-   push.
+```bash
+make release VERSION=vX.Y.Z
+```
 
-The release workflow then re-runs `make release-check` on the tagged commit and
-runs `make release-publish`, which creates the GitHub Release from the same
-changelog section. A version with a pre-release suffix (`v0.3.0-rc.1`) is
-published as a pre-release.
+It runs these steps in order and stops at the first failure:
+
+1. **Start checks** — on `main`, and the version is not already released.
+2. **Cut the changelogs** (`release-prepare`) — moves the Unreleased entries of
+   both files under `## [X.Y.Z] - <today>`, leaves a fresh empty
+   `## [Unreleased]`, rewrites the link references at the bottom, and commits
+   the two files as `docs: release vX.Y.Z`. It refuses to run when Unreleased
+   is empty or tracked files have uncommitted changes.
+3. **Local gate** (`release-check`) — version format, a dated non-empty section
+   in both changelogs, a clean tree, then the whole `ci` target.
+4. **Push `main`**, without any tag.
+5. **Wait for CI** — waits for the test workflow on that exact commit and stops
+   unless it passes. Nothing has been tagged at this point.
+6. **Tag and push the tag** — an annotated tag whose message is the changelog
+   section (set `GIT_TAG_FLAGS=-s` to sign it). Pushing it is the step that
+   makes the release public.
+7. **Wait for the release workflow** — it re-runs `make release-check` on the
+   tagged commit and then `make release-publish`, which creates the GitHub
+   Release from the same changelog section. A version with a pre-release
+   suffix (`v0.3.0-rc.1`) is published as a pre-release.
+
+The command can be re-run after any failure: steps that are already done (the
+changelog cut, the push, the tag) are skipped. If CI fails in step 5, fix it on
+`main` and run the same command again.
 
 `make release-notes VERSION=vX.Y.Z` prints the notes for any released version.
 

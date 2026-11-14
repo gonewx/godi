@@ -108,7 +108,7 @@ what `.github/workflows/test.yml` runs on push/PR:
 6. Coverage is uploaded as a build artifact.
 
 godi is a library: there is no deploy step. A release is a semver tag plus a
-GitHub Release, cut with `make release-tag` / `make release-push`; see
+GitHub Release, cut with `make release VERSION=vX.Y.Z`; see
 "Releasing" in the [development guide](./docs/en/development-guide.md#releasing).
 
 ## Troubleshooting

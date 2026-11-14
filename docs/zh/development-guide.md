@@ -94,22 +94,32 @@ CI 运行的每条命令都是 Makefile 目标，工具链和环境变量由 `mi
 godi 是库：一次发布 = 一个 semver tag 加一个 GitHub Release。版本策略写在 README 里；
 下面的每一步都是 Makefile 目标。
 
-平时变更日志的条目只写在两份文件的 `## [Unreleased]` 下面。没有人手工改版本标题：
-一次发布就是两条命令。
+平时变更日志的条目只写在两份文件的 `## [Unreleased]` 下面。没有人手工改版本标题或推送 tag：
+一次发布就是在 `main` 上运行一条命令。
 
-1. 在 `main` 上运行 `make release-tag VERSION=vX.Y.Z`。它做的事全部在本地，不推送任何东西：
-   - `release-prepare` 把两份变更日志里 Unreleased 下的条目移到 `## [X.Y.Z] - <今天>` 之下，
-     留下一个新的空 `## [Unreleased]`，改写文件末尾的链接引用，并把这两个文件提交为
-     `docs: release vX.Y.Z`。Unreleased 为空、或已跟踪文件有未提交改动时它拒绝执行；
-     该小节已存在时它什么都不做，所以修好失败后可以直接重跑同一条命令。
-   - `release-check` 校验版本号格式、两份变更日志里带日期且非空的小节、工作区干净，
-     然后运行整个 `ci` 目标。
-   - 最后创建带注释的 tag，tag 消息就是该变更日志小节。需要签名时设置 `GIT_TAG_FLAGS=-s`。
-2. `make release-push VERSION=vX.Y.Z`：在一次原子推送里推送 `main` 和这个 tag。
+```bash
+make release VERSION=vX.Y.Z
+```
 
-之后发布工作流在打了 tag 的提交上重新运行 `make release-check`，再运行
-`make release-publish`，用同一个变更日志小节创建 GitHub Release。带预发布后缀的版本
-（`v0.3.0-rc.1`）会发布为预发布。
+它按顺序执行下面的步骤，任何一步失败就停下：
+
+1. **起始检查**：当前在 `main` 上，并且这个版本还没有发布过。
+2. **切版**（`release-prepare`）：把两份变更日志里 Unreleased 下的条目移到
+   `## [X.Y.Z] - <今天>` 之下，留下一个新的空 `## [Unreleased]`，改写文件末尾的链接引用，
+   并把这两个文件提交为 `docs: release vX.Y.Z`。Unreleased 为空、或已跟踪文件有未提交改动时
+   它拒绝执行。
+3. **本地门禁**（`release-check`）：版本号格式、两份变更日志里带日期且非空的小节、工作区干净，
+   然后是整个 `ci` 目标。
+4. **推送 `main`**，不带任何 tag。
+5. **等待 CI**：等待测试工作流在这个提交上跑完，不通过就停下。此时还没有打任何 tag。
+6. **打 tag 并推送 tag**：带注释的 tag，消息就是该变更日志小节（需要签名时设置
+   `GIT_TAG_FLAGS=-s`）。推送 tag 这一步才让发布对外可见。
+7. **等待发布工作流**：它在打了 tag 的提交上重新运行 `make release-check`，再运行
+   `make release-publish`，用同一个变更日志小节创建 GitHub Release。带预发布后缀的版本
+   （`v0.3.0-rc.1`）会发布为预发布。
+
+任何一步失败后都可以重跑同一条命令：已经完成的步骤（切版、推送、打 tag）会被跳过。
+第 5 步 CI 失败时，在 `main` 上修好，再运行同一条命令。
 
 `make release-notes VERSION=vX.Y.Z` 可以打印任意已发布版本的说明。
 

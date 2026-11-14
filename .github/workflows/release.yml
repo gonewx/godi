@@ -1,6 +1,6 @@
 name: release
 
-# Runs when a version tag is pushed (`make release-push VERSION=vX.Y.Z`). It
+# Runs when a version tag is pushed (the last step of `make release`). It
 # re-runs the full gate on the tagged commit and, only when that passes,
 # creates the GitHub Release from the tag's CHANGELOG.md section.
 
