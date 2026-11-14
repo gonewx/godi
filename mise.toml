@@ -6,7 +6,7 @@
 # enabling the `provider.Get[T]()` generic-method API (Story 6-6).
 # GA released 2026-08-19; pinned to the then-current stable patch (re-pin as patches ship).
 [tools]
-go = "1.27.0"
+go = "1.27"
 # Used only by `make release-publish` to create the GitHub Release.
 gh = "2.100.0"
 
