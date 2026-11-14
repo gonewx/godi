@@ -49,7 +49,9 @@ commit.
 - Tools a target needs are pinned in `mise.toml` `[tools]`; environment a
   target needs goes in `mise.toml` `[env]` (`GOWORK=off` lives there).
 - Releases are cut only through `make release-tag` / `make release-push`; see
-  "Releasing" in `docs/{en,zh}/development-guide.md`.
+  "Releasing" in `docs/{en,zh}/development-guide.md`. `make release-tag` moves
+  the Unreleased changelog entries under the version heading itself — never
+  add or edit a `## [X.Y.Z]` heading by hand.
 
 ## Verified facts for doc examples (do not regress)
 

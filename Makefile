@@ -29,6 +29,24 @@ CHANGELOG_SECTION = index($$0, h) == 1 { p = 1; next } \
 	p && !s && /^[[:space:]]*$$/ { next } \
 	p { s = 1; print }
 
+# awk program cutting a release in a changelog file: it turns the Unreleased
+# section into "## [num] - date" under a fresh, empty Unreleased heading, and
+# rewrites the "[Unreleased]: .../compare/<previous>...HEAD" link reference
+# into one for Unreleased and one for the new version. It takes num, tag and
+# date, and exits non-zero when the heading or the link reference is missing.
+CHANGELOG_CUT = $$0 == "\#\# [Unreleased]" && !cut { cut = 1; print; print ""; print "\#\# [" num "] - " date; next } \
+	index($$0, "[Unreleased]: ") == 1 && !linked { \
+		i = index($$0, "/compare/"); j = index($$0, "...HEAD"); \
+		if (i && j > i) { \
+			base = substr($$0, 15, i - 15); prev = substr($$0, i + 9, j - i - 9); \
+			print "[Unreleased]: " base "/compare/" tag "...HEAD"; \
+			print "[" num "]: " base "/compare/" prev "..." tag; \
+			linked = 1; next \
+		} \
+	} \
+	{ print } \
+	END { exit !(cut && linked) }
+
 # Targets with prerequisites (ci, release-check, release-tag) rely on their
 # order: cheap checks run before the full gate.
 .NOTPARALLEL:
@@ -128,22 +146,62 @@ version: ## Print the generator version of this checkout.
 
 # --- Release ------------------------------------------------------------------
 #
-#   1. Rename "## [Unreleased]" to "## [X.Y.Z] - YYYY-MM-DD" in both changelog
-#      files, add a fresh empty Unreleased section, commit on $(MAIN_BRANCH).
-#   2. make release-tag VERSION=vX.Y.Z    verify everything, create the tag locally
-#   3. make release-push VERSION=vX.Y.Z   push $(MAIN_BRANCH) and the tag together
-#   4. The release workflow runs release-check and release-publish on the tag.
+#   1. make release-tag VERSION=vX.Y.Z    cut the changelogs, commit, verify
+#                                         everything, create the tag locally
+#   2. make release-push VERSION=vX.Y.Z   push $(MAIN_BRANCH) and the tag together
+#   3. The release workflow runs release-check and release-publish on the tag.
+#
+# Day to day, entries only ever go under "## [Unreleased]"; nobody edits
+# version headings by hand.
 
-.PHONY: release-preflight
-release-preflight: # Validate VERSION, both changelog sections and the working tree.
+.PHONY: release-version
+release-version: # Validate the format of VERSION.
 	@if ! printf '%s\n' "$$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$$'; then \
-		echo "error: VERSION must be a semver tag such as v0.2.0 (got '$$VERSION'), for example 'make release-check VERSION=v0.2.0'" >&2; \
+		echo "error: VERSION must be a semver tag such as v0.2.0 (got '$$VERSION'), for example 'make release-tag VERSION=v0.2.0'" >&2; \
+		exit 1; \
+	fi
+
+.PHONY: release-prepare
+release-prepare: release-version ## Move the Unreleased entries of both changelogs under VERSION=vX.Y.Z with today's date, and commit.
+	@num="$${VERSION#v}"; \
+	dated() { awk -v h="## [$$num] - " 'index($$0, h) == 1 { found = 1 } END { exit !found }' "$$1"; }; \
+	if dated $(CHANGELOG) && dated $(CHANGELOG_ZH); then \
+		echo "changelogs already have a [$$num] section; nothing to cut"; \
+		exit 0; \
+	fi; \
+	if dated $(CHANGELOG) || dated $(CHANGELOG_ZH); then \
+		echo "error: only one of $(CHANGELOG) and $(CHANGELOG_ZH) has a [$$num] section; make them match by hand" >&2; \
 		exit 1; \
 	fi; \
-	num="$${VERSION#v}"; \
+	if ! git diff --quiet HEAD --; then \
+		echo "error: tracked files have uncommitted changes; commit them before releasing" >&2; \
+		exit 1; \
+	fi; \
+	for f in $(CHANGELOG) $(CHANGELOG_ZH); do \
+		if [ -z "$$(awk -v h="## [Unreleased]" '$(CHANGELOG_SECTION)' "$$f")" ]; then \
+			echo "error: the Unreleased section of $$f is empty; there is nothing to release" >&2; \
+			exit 1; \
+		fi; \
+	done; \
+	date="$$(date +%Y-%m-%d)"; \
+	for f in $(CHANGELOG) $(CHANGELOG_ZH); do \
+		if ! awk -v num="$$num" -v tag="$$VERSION" -v date="$$date" '$(CHANGELOG_CUT)' "$$f" > "$$f.tmp"; then \
+			rm -f "$$f.tmp"; \
+			git checkout -q -- $(CHANGELOG) $(CHANGELOG_ZH); \
+			echo "error: $$f needs a '## [Unreleased]' heading and an '[Unreleased]: .../compare/<previous tag>...HEAD' link reference" >&2; \
+			exit 1; \
+		fi; \
+		mv "$$f.tmp" "$$f"; \
+	done; \
+	git add $(CHANGELOG) $(CHANGELOG_ZH) && git commit -q -m "docs: release $$VERSION" || exit 1; \
+	echo "cut $$VERSION ($$date) in $(CHANGELOG) and $(CHANGELOG_ZH); committed as $$(git rev-parse --short HEAD)"
+
+.PHONY: release-preflight
+release-preflight: release-version # Validate both changelog sections and the working tree.
+	@num="$${VERSION#v}"; \
 	for f in $(CHANGELOG) $(CHANGELOG_ZH); do \
 		if ! awk -v h="## [$$num] - " 'index($$0, h) == 1 && substr($$0, length(h) + 1) ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$$/ { found = 1 } END { exit !found }' "$$f"; then \
-			echo "error: $$f has no '## [$$num] - YYYY-MM-DD' section; move the Unreleased entries under that heading first" >&2; \
+			echo "error: $$f has no '## [$$num] - YYYY-MM-DD' section; 'make release-tag VERSION=$$VERSION' cuts it from Unreleased" >&2; \
 			exit 1; \
 		fi; \
 		if [ -z "$$(awk -v h="## [$$num]" '$(CHANGELOG_SECTION)' "$$f")" ]; then \
@@ -172,7 +230,7 @@ release-notes: ## Print the release notes for VERSION=vX.Y.Z (its section of CHA
 	printf '%s\n' "$$notes"
 
 .PHONY: release-tag-preflight
-release-tag-preflight: # Cheap checks that run before the full gate: right branch, tag not taken.
+release-tag-preflight: release-version # Cheap checks that run before anything changes: right branch, tag not taken.
 	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
 	if [ "$$branch" != "$(MAIN_BRANCH)" ]; then \
 		echo "error: releases are tagged on $(MAIN_BRANCH), not on $$branch" >&2; \
@@ -184,7 +242,7 @@ release-tag-preflight: # Cheap checks that run before the full gate: right branc
 	fi
 
 .PHONY: release-tag
-release-tag: release-tag-preflight release-check ## Create the annotated tag VERSION=vX.Y.Z locally, with the release notes as its message.
+release-tag: release-tag-preflight release-prepare release-check ## Cut the changelogs, verify everything and create the annotated tag VERSION=vX.Y.Z locally.
 	@notes="$$($(MAKE) -s --no-print-directory release-notes)" || exit 1; \
 	printf '%s\n\n%s\n' "$$VERSION" "$$notes" | git tag $(GIT_TAG_FLAGS) "$$VERSION" --cleanup=whitespace -F - || exit 1; \
 	echo "tagged $$VERSION at $$(git rev-parse --short HEAD); publish it with 'make release-push VERSION=$$VERSION'"

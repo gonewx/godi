@@ -94,16 +94,22 @@ CI 运行的每条命令都是 Makefile 目标，工具链和环境变量由 `mi
 godi 是库：一次发布 = 一个 semver tag 加一个 GitHub Release。版本策略写在 README 里；
 下面的每一步都是 Makefile 目标。
 
-1. 在 `CHANGELOG.md` 和 `CHANGELOG.zh-CN.md` 里，把 `## [Unreleased]` 改名为
-   `## [X.Y.Z] - YYYY-MM-DD`，在它上面新增一个空的 `## [Unreleased]`，更新文件末尾的链接引用，
-   然后在 `main` 上提交。
-2. `make release-tag VERSION=vX.Y.Z`：先运行 `release-check`（版本号格式、两份变更日志里都有带日期
-   且非空的小节、已跟踪文件没有未提交的改动，然后是整个 `ci` 目标），再创建带注释的 tag，
-   tag 消息就是该变更日志小节。这一步不推送任何东西。
-   需要签名时设置 `GIT_TAG_FLAGS=-s`。
-3. `make release-push VERSION=vX.Y.Z`：在一次原子推送里推送 `main` 和这个 tag。
-4. 发布工作流在打了 tag 的提交上重新运行 `make release-check`，然后运行 `make release-publish`，
-   用同一个变更日志小节创建 GitHub Release。带预发布后缀的版本（`v0.3.0-rc.1`）会发布为预发布。
+平时变更日志的条目只写在两份文件的 `## [Unreleased]` 下面。没有人手工改版本标题：
+一次发布就是两条命令。
+
+1. 在 `main` 上运行 `make release-tag VERSION=vX.Y.Z`。它做的事全部在本地，不推送任何东西：
+   - `release-prepare` 把两份变更日志里 Unreleased 下的条目移到 `## [X.Y.Z] - <今天>` 之下，
+     留下一个新的空 `## [Unreleased]`，改写文件末尾的链接引用，并把这两个文件提交为
+     `docs: release vX.Y.Z`。Unreleased 为空、或已跟踪文件有未提交改动时它拒绝执行；
+     该小节已存在时它什么都不做，所以修好失败后可以直接重跑同一条命令。
+   - `release-check` 校验版本号格式、两份变更日志里带日期且非空的小节、工作区干净，
+     然后运行整个 `ci` 目标。
+   - 最后创建带注释的 tag，tag 消息就是该变更日志小节。需要签名时设置 `GIT_TAG_FLAGS=-s`。
+2. `make release-push VERSION=vX.Y.Z`：在一次原子推送里推送 `main` 和这个 tag。
+
+之后发布工作流在打了 tag 的提交上重新运行 `make release-check`，再运行
+`make release-publish`，用同一个变更日志小节创建 GitHub Release。带预发布后缀的版本
+（`v0.3.0-rc.1`）会发布为预发布。
 
 `make release-notes VERSION=vX.Y.Z` 可以打印任意已发布版本的说明。
 

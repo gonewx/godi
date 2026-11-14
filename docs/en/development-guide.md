@@ -109,20 +109,28 @@ exactly what CI runs.
 godi is a library: a release is a semver tag plus a GitHub Release. The
 versioning policy is in the README; the steps below are all Makefile targets.
 
-1. In both `CHANGELOG.md` and `CHANGELOG.zh-CN.md`, rename `## [Unreleased]` to
-   `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty `## [Unreleased]` above it,
-   update the link references at the bottom, and commit on `main`.
-2. `make release-tag VERSION=vX.Y.Z` — runs `release-check` (version format,
-   a dated non-empty section in both changelogs, no uncommitted changes to
-   tracked files, then the whole `ci` target) and creates an annotated tag whose
-   message is that changelog section. Nothing is pushed.
-   Set `GIT_TAG_FLAGS=-s` to sign the tag.
-3. `make release-push VERSION=vX.Y.Z` — pushes `main` and the tag in one atomic
+Day to day, changelog entries only ever go under `## [Unreleased]` in both
+files. Nobody edits version headings by hand: a release is two commands.
+
+1. `make release-tag VERSION=vX.Y.Z`, on `main`. Everything it does is local
+   and nothing is pushed:
+   - `release-prepare` moves the Unreleased entries of both changelog files
+     under `## [X.Y.Z] - <today>`, leaves a fresh empty `## [Unreleased]`,
+     rewrites the link references at the bottom, and commits the two files as
+     `docs: release vX.Y.Z`. It refuses to run when Unreleased is empty or
+     tracked files have uncommitted changes, and does nothing when the section
+     already exists, so the command can be re-run after fixing a failure.
+   - `release-check` verifies the version format, the dated non-empty section
+     in both changelogs and a clean tree, then runs the whole `ci` target.
+   - It then creates an annotated tag whose message is that changelog section.
+     Set `GIT_TAG_FLAGS=-s` to sign the tag.
+2. `make release-push VERSION=vX.Y.Z` — pushes `main` and the tag in one atomic
    push.
-4. The release workflow re-runs `make release-check` on the tagged commit and
-   then `make release-publish`, which creates the GitHub Release from the same
-   changelog section. A version with a pre-release suffix (`v0.3.0-rc.1`) is
-   published as a pre-release.
+
+The release workflow then re-runs `make release-check` on the tagged commit and
+runs `make release-publish`, which creates the GitHub Release from the same
+changelog section. A version with a pre-release suffix (`v0.3.0-rc.1`) is
+published as a pre-release.
 
 `make release-notes VERSION=vX.Y.Z` prints the notes for any released version.
 
