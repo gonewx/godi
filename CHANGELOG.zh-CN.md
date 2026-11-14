@@ -10,6 +10,8 @@ godi 所有值得注意的变更都记录在这里。格式遵循
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-13
+
 这个版本改变了生成容器的形态和若干运行期行为。已有的容器都必须重新生成，见下面的“升级”。
 
 ### 升级
@@ -95,7 +97,8 @@ godi 所有值得注意的变更都记录在这里。格式遵循
   作用域内 LIFO 释放、图非法则不产码。
 - 要求 Go 1.27 或更高版本。
 
-[Unreleased]: https://github.com/gonewx/godi/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/gonewx/godi/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gonewx/godi/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/gonewx/godi/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gonewx/godi/releases/tag/v0.1.0
 
