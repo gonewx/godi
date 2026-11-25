@@ -10,6 +10,13 @@ godi 所有值得注意的变更都记录在这里。格式遵循
 
 ## [Unreleased]
 
+### Changed
+
+- `Get`、`GetRequired`、`GetServices` 与 `Provider.GetService` 的 godoc 写明：
+  `Close` 之后解析会 panic `ErrProviderClosed`，不会按未命中处理。行为不变。
+- `Get` 与各 `Add*Factory` 标记的 godoc 写明：工厂必须返回非 nil 实例。nil 接口值会被
+  当作未注册，typed-nil 会被当作命中。行为不变。
+
 ## [0.2.0] - 2026-11-13
 
 这个版本改变了生成容器的形态和若干运行期行为。已有的容器都必须重新生成，见下面的“升级”。

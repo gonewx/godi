@@ -35,6 +35,11 @@ func AddSingleton[I any, Impl any](r *Registry) *Registry { return r }
 // distinct name AddSingletonFactory is what the generator dispatches on to tell
 // the two forms apart. The factory's godi.Provider parameter is the seam the
 // inlined expression resolves dependencies through at runtime.
+//
+// The factory must return a non-nil instance. A nil interface value makes the
+// service resolve as if it were unregistered, and a typed nil (a nil pointer
+// returned as I) resolves as a hit that fails only when a method is called; see
+// Get. The same rule applies to every Add*Factory marker.
 func AddSingletonFactory[I any](r *Registry, factory func(Provider) I) *Registry {
 	return r
 }
@@ -49,7 +54,8 @@ func AddScoped[I any, Impl any](r *Registry) *Registry { return r }
 // AddScopedFactory records a scoped service of interface I built by factory
 // (form B — AD-8 escape hatch). Like AddScoped it is a PURE static marker (AD-7).
 // Naming (D-6): Go forbids generic-function overloading; the distinct name
-// AddScopedFactory is what the generator dispatches on.
+// AddScopedFactory is what the generator dispatches on. The factory must return
+// a non-nil instance (see AddSingletonFactory).
 func AddScopedFactory[I any](r *Registry, factory func(Provider) I) *Registry {
 	return r
 }
@@ -62,7 +68,8 @@ func AddTransient[I any, Impl any](r *Registry) *Registry { return r }
 
 // AddTransientFactory records a transient service of interface I built by factory
 // (form B — AD-8 escape hatch). Like AddTransient it is a PURE static marker
-// (AD-7). Naming (D-6): distinct name for generator dispatch.
+// (AD-7). Naming (D-6): distinct name for generator dispatch. The factory must
+// return a non-nil instance (see AddSingletonFactory).
 func AddTransientFactory[I any](r *Registry, factory func(Provider) I) *Registry {
 	return r
 }
@@ -71,7 +78,8 @@ func AddTransientFactory[I any](r *Registry, factory func(Provider) I) *Registry
 //
 // Each is a PURE static marker (AD-7): the generator reads the type arguments
 // and key parameter from go/types and go/ast at generation time, never executes
-// these functions. key type = any (AD-17, not string).
+// these functions. key type = any (AD-17, not string). Keyed factories must
+// return a non-nil instance, as AddSingletonFactory describes.
 
 func AddKeyedSingleton[I any, Impl any](r *Registry, key any) *Registry { return r }
 

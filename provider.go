@@ -40,7 +40,8 @@ import (
 // resolution has finished.
 type Provider interface {
 	// GetService returns the service registered for t, or nil if none is
-	// registered. A miss is nil, never a panic (AD-16).
+	// registered. A miss is nil, never a panic (AD-16). Resolving after Close
+	// is not a miss: it panics with ErrProviderClosed.
 	GetService(t reflect.Type) any
 	// IsService reports whether t can be resolved by this provider (CAP-6).
 	IsService(t reflect.Type) bool

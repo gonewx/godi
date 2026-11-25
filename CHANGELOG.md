@@ -11,6 +11,15 @@ version number.
 
 ## [Unreleased]
 
+### Changed
+
+- Godoc for `Get`, `GetRequired`, `GetServices` and `Provider.GetService` now
+  states that resolving after `Close` panics with `ErrProviderClosed` instead of
+  reporting a miss. Behavior is unchanged.
+- Godoc for `Get` and the `Add*Factory` markers now states that factories must
+  return a non-nil instance: a nil interface value resolves as unregistered, and
+  a typed nil resolves as a hit. Behavior is unchanged.
+
 ## [0.2.0] - 2026-11-13
 
 This release changes the shape of generated containers and several run-time

@@ -10,6 +10,18 @@ import (
 // "try" resolution and the AD-16 unmet-lookup contract (an unregistered type
 // resolves to nil, not an error).
 //
+// A closed provider is not a miss: after Close on the provider, or on the root
+// of a scope, Get panics with ErrProviderClosed (resolve-after-dispose, AD-16),
+// like every other resolution call. A recover site can match the panic value
+// with errors.Is(v, godi.ErrProviderClosed).
+//
+// Nil instances: Get tests the stored value against nil, so what a factory or
+// constructor returns decides the result. A nil interface value reads as a
+// miss, exactly as if the type were unregistered; a typed nil (an interface
+// holding a nil pointer) reads as a hit and comes back as (typed-nil, true).
+// Registered factories and constructors must therefore return a usable,
+// non-nil instance.
+//
 // Get is a free generic FUNCTION, not a Provider method: an interface method may
 // not declare type parameters (AD-5), so the typed ergonomics live here over the
 // non-generic Provider face.
@@ -34,7 +46,9 @@ func Get[T any](p Provider) (T, bool) {
 
 // GetRequired resolves the service of type T from p, returning the instance on a
 // hit and PANICKING on a miss. The panic value is an error naming the missing
-// type, so a recover site can type-assert and inspect it.
+// type, so a recover site can type-assert and inspect it. Like Get, it treats a
+// nil interface value as a miss and a typed nil as a hit, and it panics with
+// ErrProviderClosed (not the miss error) when the provider has been closed.
 //
 // Design decision D1 — panic, not (T, error): the convenience-layer signature is
 // pinned to return only T (epics.md Story 1.2), mirroring dotnet's
@@ -51,7 +65,8 @@ func GetRequired[T any](p Provider) T {
 // typed slice in registration order. An unregistered type returns an empty
 // non-nil slice (never nil), mirroring dotnet GetServices<T>(). Underneath it
 // calls p.GetKeyedServices(t, nil) — nil key routes to the unkeyed namespace
-// (AD-17) — and asserts each element to T.
+// (AD-17) — and asserts each element to T. After Close it panics with
+// ErrProviderClosed, like Get.
 func GetServices[T any](p Provider) []T {
 	all := p.GetKeyedServices(reflect.TypeFor[T](), nil)
 	if all == nil {
